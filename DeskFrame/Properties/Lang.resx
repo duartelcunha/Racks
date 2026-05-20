@@ -1,0 +1,539 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- 
+    Microsoft ResX Schema 
+    
+    Version 2.0
+    
+    The primary goals of this format is to allow a simple XML format 
+    that is mostly human readable. The generation and parsing of the 
+    various data types are done through the TypeConverter classes 
+    associated with the data types.
+    
+    Example:
+    
+    ... ado.net/XML headers & schema ...
+    <resheader name="resmimetype">text/microsoft-resx</resheader>
+    <resheader name="version">2.0</resheader>
+    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+    <data name="Name1"><value>this is my long string</value><comment>this is a comment</comment></data>
+    <data name="Color1" type="System.Drawing.Color, System.Drawing">Blue</data>
+    <data name="Bitmap1" mimetype="application/x-microsoft.net.object.binary.base64">
+        <value>[base64 mime encoded serialized .NET Framework object]</value>
+    </data>
+    <data name="Icon1" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+        <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
+        <comment>This is a comment</comment>
+    </data>
+                
+    There are any number of "resheader" rows that contain simple 
+    name/value pairs.
+    
+    Each data row contains a name, and value. The row also contains a 
+    type or mimetype. Type corresponds to a .NET class that support 
+    text/value conversion through the TypeConverter architecture. 
+    Classes that don't support this are serialized and stored with the 
+    mimetype set.
+    
+    The mimetype is used for serialized objects, and tells the 
+    ResXResourceReader how to depersist the object. This is currently not 
+    extensible. For a given mimetype the value must be set accordingly:
+    
+    Note - application/x-microsoft.net.object.binary.base64 is the format 
+    that the ResXResourceWriter will generate, however the reader can 
+    read any of the formats listed below.
+    
+    mimetype: application/x-microsoft.net.object.binary.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
+            : and then encoded with base64 encoding.
+    
+    mimetype: application/x-microsoft.net.object.soap.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
+            : and then encoded with base64 encoding.
+
+    mimetype: application/x-microsoft.net.object.bytearray.base64
+    value   : The object must be serialized into a byte array 
+            : using a System.ComponentModel.TypeConverter
+            : and then encoded with base64 encoding.
+    -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FrameSettings.AutoExpandonCursor" xml:space="preserve">
+    <value>Expand on cursor over</value>
+    <comment>CHK_TB: Open "frame" on cursor over (unroll)</comment>
+  </data>
+  <data name="FrameSettings.CheckFolderSize" xml:space="preserve">
+    <value>Show folder size in menu</value>
+    <comment>CHK_TB: Show the folder size of the folder that is shown in the frame in the menu accessed with right-click on the titlebar</comment>
+  </data>
+  <data name="FrameSettings.ShowLastAccessedItem" xml:space="preserve">
+    <value>Show last accessed items first</value>
+    <comment>CHK_TB: Show last accessed items in the first row</comment>
+  </data>
+  <data name="FrameSettings.ShowShortcutArrow" xml:space="preserve">
+    <value>Show shortcut arrow</value>
+    <comment>CHK_TB: Show the shortcut arrow on the bottom left of icons</comment>
+  </data>
+  <data name="FrameSettings.IdleOpacityLabel" xml:space="preserve">
+    <value>Idle opacity:</value>
+  </data>
+  <data name="FrameSettings.AnimationSpeed" xml:space="preserve">
+    <value>Animation speed:</value>
+  </data>
+  <data name="FrameSettings.ShowOnVirtualDesktopLabel" xml:space="preserve">
+    <value>Visible on virtual desktop:</value>
+    <comment>Label: Show the frame on the 1,2,3.. virtual desktop.</comment>
+  </data>
+  <data name="FrameSettings.ShowFileExtensionIcon" xml:space="preserve">
+    <value>File extensions</value>
+    <comment>CHK: Add show "file extensions" icon in the titlebar for quick toggling</comment>
+  </data>
+  <data name="FrameSettings.ShowHiddenFilesIcon" xml:space="preserve">
+    <value>Hidden files</value>
+    <comment>CHK: Add show "hidden files" icon in the titlebar for quick toggling</comment>
+  </data>
+  <data name="FrameSettings.ShowOnVirtualDesktopPlaceHolder" xml:space="preserve">
+    <value>All (or e.g. 1,2,3)</value>
+    <comment>Placeholder text in textbox for choosing which virtual desktops the frame should appear on</comment>
+  </data>
+  <data name="FrameSettings.TitleBarIcons" xml:space="preserve">
+    <value>Title bar icons:</value>
+    <comment>Label: Icons appearing in the titlebar</comment>
+  </data>
+  <data name="FrameSettings.BorderColor" xml:space="preserve">
+    <value>Border color (hex):</value>
+  </data>
+  <data name="FrameSettings.CategoryMiscellaneous" xml:space="preserve">
+    <value>Miscellaneous</value>
+    <comment>Label for the category</comment>
+  </data>
+  <data name="FrameSettings.CategoryTitleBar" xml:space="preserve">
+    <value>Title bar</value>
+    <comment>Label for the category</comment>
+  </data>
+  <data name="FrameSettings.CategoryFileItems" xml:space="preserve">
+    <value>File items</value>
+    <comment>Label for the category</comment>
+  </data>
+  <data name="FrameSettings.BackgroundColor" xml:space="preserve">
+    <value>Background color (hex): </value>
+  </data>
+  <data name="FrameSettings.TextColor" xml:space="preserve">
+    <value>Text color (hex):</value>
+  </data>
+  <data name="FrameSettings.TextShadowColor" xml:space="preserve">
+    <value>Text shadow color (hex):</value>
+  </data>
+  <data name="FrameSettings.TitleBarTextText" xml:space="preserve">
+    <value>Title bar text:</value>
+    <comment>Title of the window</comment>
+  </data>
+  <data name="FrameSettings.Font" xml:space="preserve">
+    <value>Font:</value>
+  </data>
+  <data name="FrameSettings.TextSize" xml:space="preserve">
+    <value>Text size:</value>
+  </data>
+  <data name="FrameSettings.TextAlignment" xml:space="preserve">
+    <value>Text alignment:</value>
+  </data>
+  <data name="FrameSettings.ShowFilesRegex" xml:space="preserve">
+    <value>Show files (regex):</value>
+  </data>
+  <data name="FrameSettings.HideFilesRegex" xml:space="preserve">
+    <value>Hide files (regex):</value>
+  </data>
+  <data name="FrameSettings.Searchdot" xml:space="preserve">
+    <value>Search...</value>
+  </data>
+  <data name="FrameSettings.IconSize" xml:space="preserve">
+    <value>Icon size:</value>
+  </data>
+  <data name="FrameSettings.ShowIconText" xml:space="preserve">
+    <value>Show icon text</value>
+  </data>
+  <data name="FrameSettings.RevertButton" xml:space="preserve">
+    <value>Revert</value>
+    <comment>Button: revert settings</comment>
+  </data>
+  <data name="FrameSettings.ChangeStyle" xml:space="preserve">
+    <value>Change style</value>
+    <comment>Button</comment>
+  </data>
+  <data name="FrameSettings.ChangeFolder" xml:space="preserve">
+    <value>Change folder</value>
+    <comment>Button</comment>
+  </data>
+  <data name="DeskFrameFrameSettings.TitleBarText" xml:space="preserve">
+    <value>Racks settings</value>
+    <comment>Title of the window</comment>
+  </data>
+  <data name="DeskFrameFrameSettings.DefaultFrameStyle" xml:space="preserve">
+    <value>Default frame style</value>
+  </data>
+  <data name="DeskFrameFrameSettings.ResetDefaultStyle" xml:space="preserve">
+    <value>Reset default style</value>
+  </data>
+  <data name="DeskFrameFrameSettings.AutoUpdate" xml:space="preserve">
+    <value>Auto update. Check for update on start and every 6 hours</value>
+  </data>
+  <data name="DeskFrameFrameSettings.DoubleClickHide" xml:space="preserve">
+    <value>Double click on desktop to toggle hide every frame</value>
+  </data>
+  <data name="DeskFrameFrameSettings.MadewithSpace" xml:space="preserve">
+    <value>Made with </value>
+    <comment>Made with + a whitespace</comment>
+  </data>
+  <data name="DeskFrameFrameSettings.ExportSettings" xml:space="preserve">
+    <value>Export settings</value>
+  </data>
+  <data name="TitleBarContextMenu.Sortby" xml:space="preserve">
+    <value>Sort by</value>
+  </data>
+  <data name="TitleBarContextMenu.LockFrame" xml:space="preserve">
+    <value>Lock frame</value>
+  </data>
+  <data name="TitleBarContextMenu.Reload" xml:space="preserve">
+    <value>Reload</value>
+  </data>
+  <data name="TitleBarContextMenu.OpenFolder" xml:space="preserve">
+    <value>Open folder</value>
+  </data>
+  <data name="TitleBarContextMenu.GridView" xml:space="preserve">
+    <value>Grid view</value>
+  </data>
+  <data name="TitleBarContextMenu.HiddenFiles" xml:space="preserve">
+    <value>Hidden files</value>
+    <comment>Toggle</comment>
+  </data>
+  <data name="TitleBarContextMenu.FileExtensions" xml:space="preserve">
+    <value>File extensions</value>
+    <comment>Toggle</comment>
+  </data>
+  <data name="TitleBarContextMenu.FrameSettings" xml:space="preserve">
+    <value>Frame Settings</value>
+  </data>
+  <data name="TitleBarContextMenu.Info.Files" xml:space="preserve">
+    <value>Files: </value>
+    <comment>whitespace at the end</comment>
+  </data>
+  <data name="TitleBarContextMenu.Info.Folders" xml:space="preserve">
+    <value>Folders: </value>
+    <comment>whitespace at the end</comment>
+  </data>
+  <data name="TitleBarContextMenu.Info.HiddenFiles" xml:space="preserve">
+    <value>(hidden)</value>
+    <comment>hidden files</comment>
+  </data>
+  <data name="TitleBarContextMenu.Info.LastUpdated" xml:space="preserve">
+    <value>Last Updated: </value>
+    <comment>whitespace at the end</comment>
+  </data>
+  <data name="TitleBarContextMenu.Remove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="TitleBarContextMenu.Sortby.FolderOrder" xml:space="preserve">
+    <value>Folder order</value>
+  </data>
+  <data name="TitleBarContextMenu.Sortby.Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="TitleBarContextMenu.Sortby.DateModified" xml:space="preserve">
+    <value>Date modified</value>
+  </data>
+  <data name="TitleBarContextMenu.Sortby.DateCreated" xml:space="preserve">
+    <value>Date created</value>
+  </data>
+  <data name="TitleBarContextMenu.Sortby.FileType" xml:space="preserve">
+    <value>File type</value>
+  </data>
+  <data name="TitleBarContextMenu.Sortby.FileSize" xml:space="preserve">
+    <value>File size</value>
+  </data>
+  <data name="TitleBarContextMenu.Sortby.Ascending" xml:space="preserve">
+    <value>Ascending</value>
+  </data>
+  <data name="TitleBarContextMenu.Sortby.Descending" xml:space="preserve">
+    <value>Descending</value>
+  </data>
+  <data name="TitleBarContextMenu.Sortby.FolderIder.None" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="TitleBarContextMenu.Sortby.FolderIder.First" xml:space="preserve">
+    <value>First</value>
+  </data>
+  <data name="TitleBarContextMenu.Sortby.FolderIder.Last" xml:space="preserve">
+    <value>Last</value>
+  </data>
+  <data name="TitleBarContextMenu.UnlockFrame" xml:space="preserve">
+    <value>Unlock frame</value>
+  </data>
+  <data name="TitleBarContextMenu.RemoveMessageBox.Title" xml:space="preserve">
+    <value>Confirm</value>
+  </data>
+  <data name="TitleBarContextMenu.RemoveMessageBox.Content" xml:space="preserve">
+    <value>Are you sure you want to remove it?</value>
+  </data>
+  <data name="TitleBarContextMenu.RemoveMessageBox.Yes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="TitleBarContextMenu.RemoveMessageBox.No" xml:space="preserve">
+    <value>No</value>
+  </data>
+  <data name="TitleBarContextMenu.Info.FolderSize" xml:space="preserve">
+    <value>Folder Size: </value>
+    <comment>whitespace at the end</comment>
+  </data>
+  <data name="TitleBarContextMenu.ChangeView" xml:space="preserve">
+    <value>Change view</value>
+  </data>
+  <data name="TitleBarContextMenu.DetailsView" xml:space="preserve">
+    <value>Details view</value>
+  </data>
+  <data name="TrayContextMenu.CheckUpdateButton" xml:space="preserve">
+    <value>Check for updates</value>
+  </data>
+  <data name="TrayContextMenu.VisitGithub" xml:space="preserve">
+    <value>Visit github</value>
+  </data>
+  <data name="TrayContextMenu.StartOnLogin" xml:space="preserve">
+    <value>Start on login</value>
+  </data>
+  <data name="TrayContextMenu.Settings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="TrayContextMenu.AddFrame" xml:space="preserve">
+    <value>Add frame</value>
+  </data>
+  <data name="TrayContextMenu.Exit" xml:space="preserve">
+    <value>Exit</value>
+    <comment>Button to close the application</comment>
+  </data>
+  <data name="FrameGridView.DateModified" xml:space="preserve">
+    <value>Date modified</value>
+  </data>
+  <data name="FrameGridView.Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="FrameGridView.Size" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="showFolderInGrid.DropFolder" xml:space="preserve">
+    <value>Drop a folder</value>
+  </data>
+  <data name="FrameSettings.TitleBarText" xml:space="preserve">
+    <value>Frame settings</value>
+    <comment>Title of the window</comment>
+  </data>
+  <data name="FrameSettings.FolderOpenInsideFrame" xml:space="preserve">
+    <value>Open folder inside window</value>
+  </data>
+  <data name="FrameTypeFlyout.Description" xml:space="preserve">
+    <value>The first folder or file you drag in decides the frame type. There are two types:</value>
+  </data>
+  <data name="FrameTypeFlyout.Description.FileTypeDescription" xml:space="preserve">
+    <value>Creates shortcuts from anywhere to access files and folders. When you drag another file or folder into it, it creates a shortcut of the item.</value>
+  </data>
+  <data name="FrameTypeFlyout.Description.FolderTypeDescription" xml:space="preserve">
+    <value>Shows the contents of a folder. When you drag another file or folder into it, it moves the item inside that folder.</value>
+  </data>
+  <data name="FrameTypeFlyout.Folder" xml:space="preserve">
+    <value>Folder:</value>
+  </data>
+  <data name="FrameTypeFlyout.File" xml:space="preserve">
+    <value>File:</value>
+  </data>
+  <data name="FrameSettings.CategoryWindow" xml:space="preserve">
+    <value>Window</value>
+  </data>
+  <data name="FrameSettings.SnapWidthToIconWidth" xml:space="preserve">
+    <value>Resize width to fit icon size</value>
+    <comment>TextBlock</comment>
+  </data>
+  <data name="FrameSettings.SnapWidthToIconWidth_PlusScrollbarWidth" xml:space="preserve">
+    <value>Reserve space for scrollbar</value>
+    <comment>TextBlock</comment>
+  </data>
+  <data name="FrameSettings.PositionX" xml:space="preserve">
+    <value>Position X:</value>
+    <comment>TextBlock</comment>
+  </data>
+  <data name="FrameSettings.PositionY" xml:space="preserve">
+    <value>Position Y: </value>
+    <comment>TextBlock</comment>
+  </data>
+  <data name="DeskFrame.AlreadyRunning" xml:space="preserve">
+    <value>Racks is already running</value>
+  </data>
+  <data name="FrameSettings.ActiveColor" xml:space="preserve">
+    <value>Active color (hex)</value>
+  </data>
+  <data name="Deskframe.Update.DialogContent" xml:space="preserve">
+    <value>Updating requires administrator privileges</value>
+    <comment>Content of dialog</comment>
+  </data>
+  <data name="FrameSettings.HideTitleBarIconsWhenInactive" xml:space="preserve">
+    <value>Hide icons on inactive window</value>
+  </data>
+  <data name="DeskFrameFrameSettings.Drag" xml:space="preserve">
+    <value>DRAG</value>
+    <comment>Drag button</comment>
+  </data>
+  <data name="DeskFrameFrameSettings.SnapDescription" xml:space="preserve">
+    <value>[Frame] Snap frame with 10 pixel distance</value>
+  </data>
+  <data name="DeskFrameFrameSettings.Scroll" xml:space="preserve">
+    <value>SCROLL</value>
+    <comment>Button</comment>
+  </data>
+  <data name="DeskFrameFrameSettings.ChangeIconSizeDescription" xml:space="preserve">
+    <value>Change icon size</value>
+    <comment>Button</comment>
+  </data>
+  <data name="FrameSettings.GrayscaleEnable" xml:space="preserve">
+    <value>Enable grayscale</value>
+    <comment>CheckBox</comment>
+  </data>
+  <data name="FrameSettings.GrayScaleEnabledInactiveOnly" xml:space="preserve">
+    <value>Grayscale only when frame is inactive</value>
+    <comment>CheckBox</comment>
+  </data>
+  <data name="FrameSettings.GrayScaleMaxLevel" xml:space="preserve">
+    <value>Gray level:</value>
+  </data>
+  <data name="TitleBarContextMenu.CustomItemOrder" xml:space="preserve">
+    <value>Custom</value>
+  </data>
+  <data name="TitleBarContextMenu.CustomItemOrder.DeleteOrder" xml:space="preserve">
+    <value>Delete</value>
+    <comment>Delete button</comment>
+  </data>
+  <data name="TitleBarContextMenu_CustomItemOrder_ToggleSwitch_Enable" xml:space="preserve">
+    <value>Enabled</value>
+    <comment>Enable/Disable ToggleSwitch</comment>
+  </data>
+  <data name="TitleBarContextMenu_CustomItemOrder_ToggleSwitch_Disable" xml:space="preserve">
+    <value>Disabled</value>
+    <comment>Enable/Disable ToggleSwitch</comment>
+  </data>
+  <data name="DeskFrameFrameSettings.RenameFilesDescription" xml:space="preserve">
+    <value>Rename items, ENTER to confirm</value>
+  </data>
+  <data name="DeskFrameFrameSettings_ReorderDescription" xml:space="preserve">
+    <value>[File] Change the order of the file</value>
+  </data>
+  <data name="DeskFrameFrameSettings_SearchDescription" xml:space="preserve">
+    <value>To search move the cursor over the frame you want to search in and start typing</value>
+  </data>
+  <data name="Deskframe.DropaFileOrFolder" xml:space="preserve">
+    <value>Drop a file or folder</value>
+    <comment>Text above the + sign when the frame folder isn't set</comment>
+  </data>
+  <data name="DeskFrameFrameSettings.ReloadAllFramesButton" xml:space="preserve">
+    <value>Reload all frames</value>
+  </data>
+  <data name="DeskFrameFrameSettings.ManageFrameButton" xml:space="preserve">
+    <value>Manage frame</value>
+  </data>
+  <data name="DeskFrameFrameSettings.DragWinToolTip.MainFeatures" xml:space="preserve">
+    <value>Main features:</value>
+  </data>
+  <data name="DeskFrameFrameSettings.DragWinToolTip.Feature1" xml:space="preserve">
+    <value>• Move any window with right‑click drag</value>
+  </data>
+  <data name="DeskFrameFrameSettings.DragWinToolTip.Feature2" xml:space="preserve">
+    <value>• Resize any window from edges and corners</value>
+  </data>
+  <data name="DeskFrameFrameSettings.DragWinToolTip.Feature3" xml:space="preserve">
+    <value>• Scroll between virtual desktops with gestures</value>
+  </data>
+  <data name="DeskFrameFrameSettings.DragWinToolTip.Feature4" xml:space="preserve">
+    <value>• Change window opacity (Alt + mouse wheel)</value>
+  </data>
+  <data name="DeskFrameFrameSettings.DragWinToolTip.Feature5" xml:space="preserve">
+    <value>• Scroll through windows with mouse wheel</value>
+  </data>
+  <data name="DeskFrameFrameSettings.DragWinToolTip.DoubleClickToGithub" xml:space="preserve">
+    <value>Double-click to visit GitHub page</value>
+  </data>
+  <data name="FrameSettings.FrameHeight" xml:space="preserve">
+    <value>Height:</value>
+  </data>
+  <data name="FrameSettings.FrameWidth" xml:space="preserve">
+    <value>Width:</value>
+  </data>
+  <data name="DeskFrameFrameSettings.ScrollDownDescription" xml:space="preserve">
+    <value>[DOWN] on title bar: send window back</value>
+  </data>
+  <data name="DeskFrameFrameSettings.ScrollUpDescription" xml:space="preserve">
+    <value>[UP] on title bar: bring window forward</value>
+  </data>
+  <data name="DeskFrameFrameSettings_EQSToolTip_Feature1" xml:space="preserve">
+    <value>Replaces Windows search with Everything search</value>
+  </data>
+  <data name="DeskFrameFrameSettings_EQSToolTip_Feature2" xml:space="preserve">
+    <value>Preview images and videos</value>
+  </data>
+  <data name="DeskFrameFrameSettings_EQSToolTip_Feature3" xml:space="preserve">
+    <value>Calculator in search bar</value>
+  </data>
+</root>
