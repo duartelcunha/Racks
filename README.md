@@ -18,8 +18,8 @@ You only need the **.NET 10 SDK** — no Visual Studio.
 
 ```powershell
 # clone, then from the repo root:
-dotnet build DeskFrame.sln -c Debug
-.\DeskFrame\bin\x64\Debug\net10.0-windows10.0.26100.0\Racks.exe
+dotnet build Racks.sln -c Debug
+.\Racks\bin\x64\Debug\net10.0-windows10.0.26100.0\Racks.exe
 ```
 
 Or for a portable release build:

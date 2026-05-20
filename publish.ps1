@@ -18,7 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$projectPath = Join-Path $PSScriptRoot "DeskFrame\DeskFrame.csproj"
+$projectPath = Join-Path $PSScriptRoot "Racks\Racks.csproj"
 $outFull = Join-Path $PSScriptRoot $OutDir
 
 if (Test-Path $outFull) {

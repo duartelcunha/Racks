@@ -1,0 +1,56 @@
+<Window x:Class="Racks.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:tray="http://schemas.lepo.co/wpfui/2022/xaml/tray"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:local="clr-namespace:Racks" xmlns:ui1="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:properties="clr-namespace:Racks.Properties;assembly=Racks"
+        xmlns:prop="clr-namespace:Racks.Properties"
+        mc:Ignorable="d"
+        Title="Racks" Height="450" Width="800" Initialized="Window_Initialized" Loaded="Window_Loaded">
+    <tray:NotifyIcon Grid.Row="0" FocusOnLeftClick="True"  
+                  
+                   Name="TrayIcon" MenuOnRightClick="True"
+                   TooltipText="Racks" >
+        <tray:NotifyIcon.Menu>
+            <ContextMenu MinWidth="65">
+                <MenuItem Name="versionHeader" Header="Racks" FontSize="14" FontWeight="SemiBold" IsEnabled="False" HorizontalAlignment="Center" Background="{x:Null}" FontFamily="Segoe UI Variable Display, Segoe UI"/>
+
+                <ui:MenuItem x:Name="visitGithub_Buton" Header="{x:Static prop:Lang.TrayContextMenu_VisitGithub}" Click="visitGithub_Buton_Click" Icon="{ui:SymbolIcon Symbol=Link20}" />
+                <Separator Margin="0,3,0,3"/>
+
+                <ui:ToggleSwitch x:Name="AutorunToggle" Content="{x:Static prop:Lang.TrayContextMenu_StartOnLogin}"
+                             Checked="AutorunToggle_CheckChanged"  Unchecked="AutorunToggle_CheckChanged"  />
+                <ui:ToggleSwitch x:Name="HideDesktopIconsToggle" Content="Hide desktop icons"
+                             Checked="HideDesktopIconsToggle_CheckChanged" Unchecked="HideDesktopIconsToggle_CheckChanged" />
+                <ui:ToggleSwitch x:Name="HotCornerHideToggle" Content="Hide racks on top-right corner"
+                             ToolTip="Move your cursor to the top-right of the primary monitor to peek the desktop. Move away to show racks again."
+                             Checked="HotCornerHideToggle_CheckChanged" Unchecked="HotCornerHideToggle_CheckChanged" />
+                <ui:ToggleSwitch x:Name="LockAllToggle" Content="Lock all racks"
+                             ToolTip="Prevents accidentally moving or resizing any rack. Per-rack lock is still available from the title-bar menu."
+                             Checked="LockAllToggle_CheckChanged" Unchecked="LockAllToggle_CheckChanged" />
+                <!--<ui:ToggleSwitch x:Name="BlurToggle" Content="Enable blur"
+                Checked="BlurToggle_CheckChanged"  Unchecked="BlurToggle_CheckChanged" />-->
+                
+                <Separator Margin="0,3,0,3"/>
+
+                <ui:MenuItem x:Name="Settings_Button" Header="{x:Static prop:Lang.TrayContextMenu_Settings}"
+                             Icon="{ui:SymbolIcon Symbol=Settings20}" Click="Settings_Button_Click" />
+
+                <MenuItem Name="addDesktopFrame" Height="34" Header="New rack" ToolTip="Empty rack — drag any shortcut, file, or folder into it (creates a shortcut, never moves your file)." Click="addDesktopFrame_Click" Icon="{ui:SymbolIcon Symbol=Add20}"/>
+                <MenuItem Name="addFolderFrame" Height="34" Header="New folder rack" ToolTip="Rack bound to a folder you pick by dragging it in. Shows that folder's contents." Click="addFolderFrame_Click" Icon="{ui:SymbolIcon Symbol=FolderAdd20}"/>
+                <Separator Margin="0,3,0,3"/>
+                <MenuItem Name="exportLayout" Height="34" Header="Export racks…" ToolTip="Save the entire rack layout to a single JSON file (backup or transfer)." Click="ExportLayout_Click" Icon="{ui:SymbolIcon Symbol=ArrowUpload20}"/>
+                <MenuItem Name="importLayout" Height="34" Header="Import racks…" ToolTip="Load a rack layout from JSON. Replaces all current racks. Restart required." Click="ImportLayout_Click" Icon="{ui:SymbolIcon Symbol=ArrowDownload20}"/>
+                <Separator Margin="0,3,0,3"/>
+                <MenuItem Name="helpMenuItem" Height="34" Header="Help / cheatsheet…" ToolTip="Keybindings, gestures, and feature overview." Click="HelpMenuItem_Click" Icon="{ui:SymbolIcon Symbol=QuestionCircle20}"/>
+                <MenuItem x:Name="Exit_Button" Height="34" 
+                          Header="{x:Static prop:Lang.TrayContextMenu_Exit}" Click="ExitApp" Icon="{ui:SymbolIcon Symbol=ArrowExit20}" />
+
+            </ContextMenu>
+        </tray:NotifyIcon.Menu>
+    </tray:NotifyIcon>
+
+</Window>
