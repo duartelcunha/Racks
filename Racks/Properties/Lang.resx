@@ -381,7 +381,7 @@
     <value>Drop a folder</value>
   </data>
   <data name="FrameSettings.TitleBarText" xml:space="preserve">
-    <value>Frame settings</value>
+    <value>Rack settings</value>
     <comment>Title of the window</comment>
   </data>
   <data name="FrameSettings.FolderOpenInsideFrame" xml:space="preserve">
