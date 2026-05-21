@@ -5,6 +5,7 @@
          xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
          xmlns:local="clr-namespace:Racks"
           xmlns:shader="clr-namespace:Racks.Shaders"
+         xmlns:util="clr-namespace:Racks.Util"
          xmlns:tray="http://schemas.lepo.co/wpfui/2022/xaml/tray"
          xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:properties="clr-namespace:Racks.Properties;assembly=Racks"
@@ -240,14 +241,14 @@
                             <ItemsControl Margin="6,5,0,5" Focusable="False" x:Name="FileWrapPanel" IsTabStop="False" ItemsSource="{Binding FileItems}" ItemTemplate="{StaticResource FileItemTemplate}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <WrapPanel HorizontalAlignment="Left" VerticalAlignment="Top" ClipToBounds="True">
-                                            <WrapPanel.ItemWidth>
+                                        <util:AnimatedTilePanel x:Name="TilePanel" HorizontalAlignment="Left" VerticalAlignment="Top" ClipToBounds="True">
+                                            <util:AnimatedTilePanel.ItemWidth>
                                                 <MultiBinding Converter="{StaticResource ShowDisplayNameToItemWidthConverter}">
                                                     <Binding Path="DataContext.Instance.ShowDisplayName" RelativeSource="{RelativeSource AncestorType=Window}" />
                                                     <Binding Path="DataContext.Instance.IconSize" RelativeSource="{RelativeSource AncestorType=Window}" />
                                                 </MultiBinding>
-                                            </WrapPanel.ItemWidth>
-                                        </WrapPanel>
+                                            </util:AnimatedTilePanel.ItemWidth>
+                                        </util:AnimatedTilePanel>
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                             </ItemsControl>
@@ -557,7 +558,6 @@
                        Opacity="0"
                     />
                     <TextBlock x:Name="title" MouseRightButtonDown="titleBar_MouseRightButtonDown"
-                           MouseLeftButtonDown="title_MouseLeftButtonDown"
                            Foreground="White"
                            FontSize="13">
                     </TextBlock>

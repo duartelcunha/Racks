@@ -2,6 +2,7 @@ using Racks;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Windows.Interop;
 
 public class InstanceController
@@ -35,6 +36,28 @@ public class InstanceController
                 || string.Equals(full, root, StringComparison.OrdinalIgnoreCase);
         }
         catch { return false; }
+    }
+
+    // Rebuild the %USERPROFILE%\Racks mirror (one junction per virtual rack,
+    // named after the rack's title, pointing at the sandbox). Called from
+    // InitInstances, Add*, Remove*, and from Instance.TitleText setter. Safe
+    // to call any time — Rebuild is idempotent and tolerant of missing state.
+    public static void RefreshMirror()
+    {
+        try
+        {
+            var ctrl = MainWindow._controller;
+            if (ctrl == null || ctrl.isInitializingInstances) return;
+            var virtualRacks = ctrl.Instances
+                .Where(i => IsInsideVirtualFramesRoot(i.Folder))
+                .Select(i => (i.TitleText ?? "Rack", i.Folder))
+                .ToList();
+            Racks.Util.RackMirror.Rebuild(virtualRacks);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"RefreshMirror failed: {ex.Message}");
+        }
     }
 
     // Copy HKCU\SOFTWARE\DeskFrame tree to HKCU\SOFTWARE\Racks once, so users who
@@ -269,6 +292,7 @@ public class InstanceController
         subWindow.Show();
         _subWindowsPtr.Add(new WindowInteropHelper(subWindow).Handle);
         InitDetails();
+        RefreshMirror();
     }
 
     // Create a new virtual rack pre-filled with style/behavior settings copied from
@@ -323,6 +347,7 @@ public class InstanceController
         subWindow.Show();
         _subWindowsPtr.Add(new WindowInteropHelper(subWindow).Handle);
         InitDetails();
+        RefreshMirror();
     }
 
     // Same as AddInstance, but pre-configures the new rack as a virtual frame:
@@ -344,6 +369,10 @@ public class InstanceController
             TitleText = "New rack",
             IsShortcutsOnly = true,
             ShowShortcutArrow = false,
+            // Default to move-on-drop: drops physically move the source into
+            // the sandbox, so there's exactly one copy and it lives in the rack.
+            // Users who want a shortcut/hardlink instead can right-click the
+            // rack title → "Create shortcuts instead of moving".
             LinkOnDrop = false,
         };
         Instances.Add(inst);
@@ -355,11 +384,13 @@ public class InstanceController
         subWindow.Show();
         _subWindowsPtr.Add(new WindowInteropHelper(subWindow).Handle);
         InitDetails();
+        RefreshMirror();
     }
     public void RemoveInstance(Instance instance, RackWindow window)
     {
         Instances.Remove(instance);
         _subWindows.Remove(window);
+        RefreshMirror();
     }
     public void ChangeBlur(bool toBlur)
     {
@@ -424,10 +455,25 @@ public class InstanceController
             Visible = true;
         }
     }
+    // One-shot migration marker: an earlier build briefly defaulted virtual
+    // racks to LinkOnDrop=true, which left .lnk shortcuts in the rack while
+    // the original stayed on the Desktop — users perceived this as duplication.
+    // We revert those racks back to move-on-drop here. Marker so we don't fight
+    // a user who deliberately re-enables link mode after this runs.
+    private const string LinkOnDropRevertedKey = "VirtualRackLinkOnDropRevertedToMove";
+
+    // One-shot: flip FolderOpenInsideFrame to false for every rack. The
+    // upstream default was inside-rack navigation; users find the OS-native
+    // "double-click opens Explorer" behavior more intuitive. Marker prevents
+    // overriding a user-driven toggle on subsequent launches.
+    private const string FolderOpenInsideFrameDefaultFlippedKey = "FolderOpenInsideFrameDefaultedToExplorer";
+
     public void InitInstances()
     {
         isInitializingInstances = true;
         Debug.WriteLine("Init...");
+        bool needsRevertMigration = !reg.KeyExistsRoot(LinkOnDropRevertedKey);
+        bool needsFolderOpenMigration = !reg.KeyExistsRoot(FolderOpenInsideFrameDefaultFlippedKey);
         try
         {
             using (RegistryKey instancesKey = Registry.CurrentUser.OpenSubKey(@$"SOFTWARE\{appName}\Instances")!)
@@ -792,6 +838,32 @@ public class InstanceController
                                     }
 
                                 }
+                                // Revert virtual racks that picked up the bad
+                                // LinkOnDrop=true default from a prior build. Runs once,
+                                // gated by LinkOnDropRevertedKey. Property setter
+                                // persists the change to the registry.
+                                //
+                                // Identify virtual racks by folder path, not by
+                                // temp.IsShortcutsOnly — that field isn't persisted to
+                                // registry (only set in code when a virtual rack is
+                                // created; reconstructed by RackWindow's constructor
+                                // from the folder path AFTER this loop runs). Checking
+                                // IsShortcutsOnly here would always be false.
+                                if (needsRevertMigration && temp.LinkOnDrop
+                                    && IsInsideVirtualFramesRoot(temp.Folder))
+                                {
+                                    temp.LinkOnDrop = false;
+                                }
+
+                                // Flip the inside-rack-folder-navigation default to
+                                // OFF for every rack on first launch under this build.
+                                // Users who actually want inside-rack nav can re-enable
+                                // it per-rack via Settings or the title-bar menu.
+                                if (needsFolderOpenMigration && temp.FolderOpenInsideFrame)
+                                {
+                                    temp.FolderOpenInsideFrame = false;
+                                }
+
                                 if (temp.Name != "empty")
                                 {
                                     if (Path.Exists(temp.Folder))
@@ -853,6 +925,18 @@ public class InstanceController
                 // user can immediately drag a shortcut without picking a folder.
                 AddVirtualInstance();
             }
+            // Mark the LinkOnDrop revert migration as done so a later user-driven
+            // LinkOnDrop=true toggle isn't undone next launch.
+            if (needsRevertMigration)
+            {
+                try { reg.WriteToRegistryRoot(LinkOnDropRevertedKey, true); }
+                catch (Exception ex) { Debug.WriteLine($"Marking LinkOnDrop revert failed: {ex.Message}"); }
+            }
+            if (needsFolderOpenMigration)
+            {
+                try { reg.WriteToRegistryRoot(FolderOpenInsideFrameDefaultFlippedKey, true); }
+                catch (Exception ex) { Debug.WriteLine($"Marking FolderOpen flip failed: {ex.Message}"); }
+            }
             Debug.WriteLine("Showing windows DONE");
         }
         catch (Exception ex)
@@ -860,5 +944,6 @@ public class InstanceController
             Debug.WriteLine($"ERROR reading key: {ex.Message}");
         }
         isInitializingInstances = false;
+        RefreshMirror();
     }
 }

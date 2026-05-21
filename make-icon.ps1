@@ -1,6 +1,13 @@
-# Generates DeskFrame\Icon\ico.ico (multi-res) and DeskFrame\ico.png from scratch.
-# Design: deep slate rounded square with three stacked white "shelf" bars inside.
-# Works on dark and light wallpapers; reads cleanly at 16x16.
+# Generates Racks\Icon\ico.ico (multi-res) and Racks\ico.png from scratch.
+# Design: neutral mid-charcoal rounded square with three stacked white "shelf"
+# bars of progressively increasing width (top shortest, bottom widest).
+# Palette evolution:
+#   #232936 (deep slate)   — disappeared into the Windows 11 dark taskbar.
+#   #6E56CF (Radix violet) — too vibrant for the app's understated aesthetic.
+#   #44474D (mid-charcoal) — current. Light enough to read against a near-black
+#                            taskbar; neutral enough not to clash with the
+#                            translucent-glass look of the racks themselves.
+# The "interest" is carried by the shelf-width variation, not by colour.
 
 Add-Type -AssemblyName System.Drawing
 
@@ -35,7 +42,7 @@ foreach ($Size in $sizes) {
     $outerPath.AddArc($rectX, $rectY + $rectH - $od, $od, $od, 90, 90)
     $outerPath.CloseFigure()
 
-    $bgColor = [System.Drawing.Color]::FromArgb(255, 35, 41, 54)
+    $bgColor = [System.Drawing.Color]::FromArgb(255, 68, 71, 77)
     $bgBrush = New-Object System.Drawing.SolidBrush $bgColor
     $g.FillPath($bgBrush, $outerPath)
     $bgBrush.Dispose()
@@ -106,13 +113,13 @@ $bw.Flush()
 $icoBytes = $out.ToArray()
 $bw.Close(); $out.Close()
 
-$icoPath = Join-Path $PSScriptRoot "DeskFrame\Icon\ico.ico"
+$icoPath = Join-Path $PSScriptRoot "Racks\Icon\ico.ico"
 [System.IO.File]::WriteAllBytes($icoPath, $icoBytes)
 Write-Host "wrote $icoPath ($($icoBytes.Length) bytes, $($sizes.Count) sizes)"
 
 # Save the 256 PNG (last in list) standalone for PackageIcon + Resource refs.
-$pngPath = Join-Path $PSScriptRoot "DeskFrame\ico.png"
+$pngPath = Join-Path $PSScriptRoot "Racks\ico.png"
 [System.IO.File]::WriteAllBytes($pngPath, $pngs[$pngs.Count - 1])
-$pngPath2 = Join-Path $PSScriptRoot "DeskFrame\Icon\ico.png"
+$pngPath2 = Join-Path $PSScriptRoot "Racks\Icon\ico.png"
 [System.IO.File]::WriteAllBytes($pngPath2, $pngs[$pngs.Count - 1])
 Write-Host "wrote $pngPath and $pngPath2"

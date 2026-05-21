@@ -484,7 +484,7 @@ namespace Racks
         }
         public void FirstRowByLastAccessed(ObservableCollection<FileItem> items, List<string> lastAccessedFiles, int topN)
         {
-            var wrapPanel = FindParentOrChild<WrapPanel>(FileWrapPanel);
+            var wrapPanel = FindParentOrChild<AnimatedTilePanel>(FileWrapPanel);
             if (wrapPanel != null)
             {
                 double itemWidth = wrapPanel.ItemWidth;
@@ -741,7 +741,7 @@ namespace Racks
 
                 if (Instance.LastAccesedToFirstRow)
                 {
-                    var wrapPanel = FindParentOrChild<WrapPanel>(FileWrapPanel);
+                    var wrapPanel = FindParentOrChild<AnimatedTilePanel>(FileWrapPanel);
                     if (wrapPanel != null)
                     {
                         double width = rect.Right - rect.Left;
@@ -773,7 +773,7 @@ namespace Racks
                 if (Instance.SnapWidthToIconWidth)
                 {
                     double width = rect.Right - rect.Left;
-                    var item = FindParentOrChild<WrapPanel>(FileWrapPanel);
+                    var item = FindParentOrChild<AnimatedTilePanel>(FileWrapPanel);
                     double newWidth = Math.Round(width / item.ItemWidth) * item.ItemWidth + 4; // +4 margin
 
                     if (Instance.SnapWidthToIconWidth_PlusScrollbarWidth)
@@ -1593,7 +1593,78 @@ namespace Racks
             source.AddHook(WndProc);
             MouseLeaveWindow(false);
             FileListView.ItemContainerGenerator.StatusChanged += ItemContainerGenerator_StatusChanged;
+            FileWrapPanel.ItemContainerGenerator.StatusChanged += FileWrapPanel_GeneratorStatusChanged;
         }
+
+        // Find the AnimatedTilePanel once it's materialized and wire up its drag
+        // events. Idempotent — multiple StatusChanged fires won't double-subscribe.
+        private bool _tilePanelWired;
+        private void FileWrapPanel_GeneratorStatusChanged(object sender, EventArgs e)
+        {
+            if (_tilePanelWired) return;
+            if (FileWrapPanel.ItemContainerGenerator.Status != GeneratorStatus.ContainersGenerated) return;
+            var panel = FindParentOrChild<AnimatedTilePanel>(FileWrapPanel);
+            if (panel == null) return;
+            panel.ItemMoveRequested += OnTilePanelItemMoveRequested;
+            panel.DragCompleted += OnTilePanelDragCompleted;
+            panel.OutgoingDragRequested += OnTilePanelOutgoingDragRequested;
+            _tilePanelWired = true;
+        }
+
+        // Quick-drag (no long-press) on a tile → start an OLE outgoing drag so
+        // the user can drop the file onto Explorer, another rack, etc. Mirrors
+        // what FileItem_LeftMouseButtonDown used to do inline.
+        private void OnTilePanelOutgoingDragRequested(UIElement child)
+        {
+            if (child == null) return;
+            if (child is not ContentPresenter cp) return;
+            var fileItem = cp.Content as FileItem ?? cp.DataContext as FileItem;
+            if (fileItem?.FullPath == null) return;
+            try
+            {
+                _isDragging = true;
+                var data = new DataObject(DataFormats.FileDrop, new[] { fileItem.FullPath });
+                DragDrop.DoDragDrop(child, data, DragDropEffects.Copy | DragDropEffects.Move);
+            }
+            catch (Exception ex) { Debug.WriteLine($"Outgoing drag failed: {ex.Message}"); }
+            finally { _isDragging = false; }
+        }
+
+        // Called synchronously by the panel as the dragged tile crosses into a new
+        // slot. Mutate FileItems (the source ObservableCollection) so the items
+        // generator shuffles the visual containers to match — no manual children
+        // mutation in the panel.
+        private void OnTilePanelItemMoveRequested(int from, int to)
+        {
+            if (from < 0 || to < 0) return;
+            if (from >= FileItems.Count || to >= FileItems.Count) return;
+            if (from == to) return;
+            try { FileItems.Move(from, to); }
+            catch (Exception ex) { Debug.WriteLine($"Tile drag move failed: {ex.Message}"); }
+        }
+
+        // Called once when the drag drops. Persist the full visual order as the
+        // new custom order so it survives a relaunch. We renumber every item
+        // (not just the dragged one) because indexes after the drop point have
+        // all shifted; AddToCustomOrder's one-at-a-time approach would lose them.
+        private void OnTilePanelDragCompleted()
+        {
+            if (!Instance.EnableCustomItemsOrder) return;
+            try
+            {
+                var newOrder = new List<Tuple<string, string>>(FileItems.Count);
+                for (int i = 0; i < FileItems.Count; i++)
+                {
+                    var fi = FileItems[i];
+                    if (fi?.FullPath == null) continue;
+                    string id = GetFileId(fi.FullPath).ToString();
+                    newOrder.Add(new Tuple<string, string>(id, i.ToString()));
+                }
+                Instance.CustomOrderFiles = newOrder;
+            }
+            catch (Exception ex) { Debug.WriteLine($"Persist custom order failed: {ex.Message}"); }
+        }
+
         private void ItemContainerGenerator_StatusChanged(object sender, EventArgs e)
         {
             if (FileListView.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
@@ -1753,15 +1824,21 @@ namespace Racks
         }
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            double clickY = e.GetPosition(this).Y;
+            // Only the title-bar strip acts as a drag handle. Clicks inside the
+            // items area used to call DragMove() unconditionally, which meant a
+            // missed long-press on a tile dragged the whole rack instead of
+            // letting AnimatedTilePanel handle it. Cap drag to titleBar.Height.
+            bool inTitleBar = clickY <= titleBar.Height;
             if (e.ClickCount == 2)
             {
-                if (e.GetPosition(this).Y <= titleBar.Height)
+                if (inTitleBar)
                 {
                     Minimize_MouseLeftButtonDown(null, null);
                     return;
                 }
             }
-            else if (e.ButtonState == MouseButtonState.Pressed)
+            else if (e.ButtonState == MouseButtonState.Pressed && inTitleBar)
             {
                 KeepWindowBehind();
                 if (!_isLocked)
@@ -2375,7 +2452,7 @@ namespace Racks
                 }
                 if (Instance.LastAccesedToFirstRow)
                 {
-                    var wrapPanel = FindParentOrChild<WrapPanel>(FileWrapPanel);
+                    var wrapPanel = FindParentOrChild<AnimatedTilePanel>(FileWrapPanel);
                     if (wrapPanel != null)
                     {
                         double itemWidth = wrapPanel.ItemWidth;
@@ -2710,16 +2787,21 @@ namespace Racks
                 }
                 string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
 
-                // Fences-tier drop semantics. The rule (single source of truth):
-                //   DEFAULT  → MOVE the dropped item into the rack. No duplicate, ever.
-                //              The rack becomes the home for that item.
-                //   Hold Ctrl → create a .lnk shortcut instead, leave source where it was.
-                //   Per-rack LinkOnDrop toggle → same as holding Ctrl, persistent.
-                //   Hold Shift → forces move even when LinkOnDrop is on (override-override).
+                // Drop semantics:
+                //   DEFAULT  → MOVE the dropped item into the rack. Desktop is
+                //              visually cleared; the file lives in the sandbox.
+                //              File pickers reach it via %USERPROFILE%\Racks\
+                //              (mirror folder pinned to Quick Access).
+                //   LinkOnDrop toggle (per rack) → LINK instead (hardlink for
+                //              files, junction for folders, .lnk fallback).
+                //              Original stays on Desktop.
+                //   Hold Ctrl  → LINK for this drop only.
+                //   Hold Shift → MOVE for this drop (overrides LinkOnDrop=true).
                 //
-                // Safety: virtual racks move into the AppData sandbox; folder-backed racks
-                // move into the user-chosen folder. Rack removal still only deletes inside
-                // the sandbox, so removing a folder-backed rack never touches user data.
+                // Safety: rack removal only ever recurses into VirtualFramesRoot.
+                // SafeDelete is used so junctions inside the sandbox (created by
+                // an explicit LinkOnDrop toggle) are unlinked without descending
+                // into their Desktop targets.
                 bool ctrlDown  = Keyboard.IsKeyDown(Key.LeftCtrl)  || Keyboard.IsKeyDown(Key.RightCtrl);
                 bool shiftDown = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
                 bool wantsLinkInsteadOfMove = (Instance.LinkOnDrop || ctrlDown) && !shiftDown;
@@ -2728,6 +2810,10 @@ namespace Racks
                 // end and force the Desktop view (and any other open Explorer windows
                 // pointing at the same folder) to redraw without F5.
                 var sourceParents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                // Aggregate any SafeMove rejection/skip reasons across this batch
+                // and show them once at the end — one toast for "you dropped 3
+                // weird things" beats three modals.
+                var dropMessages = new List<string>();
 
                 foreach (var file in files)
                 {
@@ -2790,40 +2876,23 @@ namespace Racks
                         string parent = Path.GetDirectoryName(file);
                         if (!string.IsNullOrEmpty(parent)) sourceParents.Add(parent);
 
-                        if (Directory.Exists(file))
+                        bool srcIsDir = Directory.Exists(file);
+                        if (wantsLinkInsteadOfMove)
                         {
-                            Debug.WriteLine("Folder detected: " + file);
-                            if (wantsLinkInsteadOfMove)
-                            {
-                                CreateShortcut(file, _currentFolderPath);
-                            }
-                            else
-                            {
-                                if (Directory.Exists(destinationPath))
-                                {
-                                    Debug.WriteLine($"Destination folder exists, skipping: {destinationPath}");
-                                    continue;
-                                }
-                                Directory.Move(file, destinationPath);
-                                Util.Interop.NotifyShellMove(file, destinationPath, isDirectory: true);
-                            }
+                            CreateShortcut(file, _currentFolderPath);
                         }
                         else
                         {
-                            Debug.WriteLine("File detected: " + file);
-                            if (wantsLinkInsteadOfMove)
+                            var moveResult = SafeMove.TryMove(file, destinationPath, out string moveReason);
+                            if (moveResult == SafeMove.Result.Moved)
                             {
-                                CreateShortcut(file, _currentFolderPath);
+                                Util.Interop.NotifyShellMove(file, destinationPath, isDirectory: srcIsDir);
                             }
                             else
                             {
-                                if (File.Exists(destinationPath))
-                                {
-                                    Debug.WriteLine($"Destination file exists, skipping: {destinationPath}");
-                                    continue;
-                                }
-                                File.Move(file, destinationPath);
-                                Util.Interop.NotifyShellMove(file, destinationPath, isDirectory: false);
+                                Debug.WriteLine($"SafeMove {moveResult}: {moveReason}");
+                                if (!string.IsNullOrEmpty(moveReason)) dropMessages.Add(moveReason);
+                                continue;
                             }
                         }
                     }
@@ -2849,13 +2918,34 @@ namespace Racks
                 {
                     Util.Interop.NotifyShellUpdateDir(parent);
                 }
+
+                // Surface any guard-rail messages from SafeMove in a single dialog
+                // so the user knows why a drop didn't take. Marshalled to the UI
+                // thread because Window_Drop runs continuation work via Task.Run.
+                if (dropMessages.Count > 0)
+                {
+                    var combined = string.Join("\n", dropMessages);
+                    Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try
+                        {
+                            new Wpf.Ui.Controls.MessageBox
+                            {
+                                Title = "Drop blocked",
+                                Content = combined,
+                                CloseButtonText = "OK",
+                            }.ShowDialogAsync();
+                        }
+                        catch (Exception ex) { Debug.WriteLine($"Drop-message dialog failed: {ex.Message}"); }
+                    }));
+                }
             }
         }
 
-        // Promote an un-initialized "empty" rack into a virtual rack by creating a
-        // sandbox folder under AppData and MOVING the first dropped file into it. No
-        // duplicate left on the source — Fences-style. If the user wanted a shortcut,
-        // they should have held Ctrl (handled by caller before reaching this path).
+        // Promote an un-initialized "empty" rack into a virtual rack by creating
+        // a sandbox folder under AppData and MOVING the first dropped item into
+        // it (default semantics). If the user held Ctrl, the caller already set
+        // wantsLinkInsteadOfMove=true to create a hardlink/junction/.lnk instead.
         private void BootstrapAsVirtualRack(string firstDroppedFile, bool wantsLinkInsteadOfMove)
         {
             Directory.CreateDirectory(InstanceController.VirtualFramesRoot);
@@ -2880,24 +2970,39 @@ namespace Racks
                 {
                     CreateShortcut(firstDroppedFile, sandbox);
                 }
-                else if (Directory.Exists(firstDroppedFile))
+                else
                 {
                     string dest = Path.Combine(sandbox, Path.GetFileName(firstDroppedFile));
-                    if (!Directory.Exists(dest))
+                    bool srcIsDir = Directory.Exists(firstDroppedFile);
+                    var moveResult = SafeMove.TryMove(firstDroppedFile, dest, out string moveReason);
+                    if (moveResult == SafeMove.Result.Moved)
                     {
-                        Directory.Move(firstDroppedFile, dest);
-                        Util.Interop.NotifyShellMove(firstDroppedFile, dest, isDirectory: true);
+                        Util.Interop.NotifyShellMove(firstDroppedFile, dest, isDirectory: srcIsDir);
                         Util.Interop.NotifyShellUpdateDir(Path.GetDirectoryName(firstDroppedFile)!);
                     }
-                }
-                else if (File.Exists(firstDroppedFile))
-                {
-                    string dest = Path.Combine(sandbox, Path.GetFileName(firstDroppedFile));
-                    if (!File.Exists(dest))
+                    else
                     {
-                        File.Move(firstDroppedFile, dest);
-                        Util.Interop.NotifyShellMove(firstDroppedFile, dest, isDirectory: false);
-                        Util.Interop.NotifyShellUpdateDir(Path.GetDirectoryName(firstDroppedFile)!);
+                        // SafeMove blocked the move (special folder, collision, etc.).
+                        // Fall back to a shortcut so the user's gesture still produced
+                        // *something* useful in the new rack, and surface the reason.
+                        Debug.WriteLine($"Bootstrap SafeMove {moveResult}: {moveReason}");
+                        CreateShortcut(firstDroppedFile, sandbox);
+                        if (!string.IsNullOrEmpty(moveReason))
+                        {
+                            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                try
+                                {
+                                    new Wpf.Ui.Controls.MessageBox
+                                    {
+                                        Title = "Dropped as shortcut",
+                                        Content = moveReason + "\n\nCreated a shortcut in the rack instead.",
+                                        CloseButtonText = "OK",
+                                    }.ShowDialogAsync();
+                                }
+                                catch (Exception ex2) { Debug.WriteLine($"Bootstrap dialog failed: {ex2.Message}"); }
+                            }));
+                        }
                     }
                 }
             }
@@ -2916,16 +3021,49 @@ namespace Racks
         }
 
 
+        // Create a "reference" to filePath inside shortcutFolder that the user
+        // perceives as the file/folder itself, not a shortcut. Strategies, in
+        // order:
+        //   1. .url      → copy as-is (already a reference file).
+        //   2. File + same NTFS volume   → NTFS hardlink. Same inode, no .lnk,
+        //      no shortcut-arrow overlay, no .lnk extension. Visible to file
+        //      pickers under both names.
+        //   3. Folder + same NTFS volume → directory junction. Looks like a
+        //      real folder, no .lnk extension; file pickers can traverse it.
+        //   4. Cross-volume / special filesystem → .lnk shortcut fallback.
+        // In all cases the SOURCE on Desktop is left in place, so the user can
+        // still find the file via any "browse to Desktop" file picker.
         void CreateShortcut(string filePath, string shortcutFolder = null)
         {
-            if (Path.GetExtension(filePath) == ".url")
+            string folder = !string.IsNullOrEmpty(shortcutFolder) ? shortcutFolder : Path.GetDirectoryName(filePath);
+
+            if (Path.GetExtension(filePath).Equals(".url", StringComparison.OrdinalIgnoreCase))
             {
-                File.Copy(filePath, Path.Combine(shortcutFolder, Path.GetFileName(filePath)));
+                File.Copy(filePath, Path.Combine(folder, Path.GetFileName(filePath)));
                 return;
             }
-            string folder = !string.IsNullOrEmpty(shortcutFolder) ? shortcutFolder : Path.GetDirectoryName(filePath);
-            string shortcutPath = Path.Combine(folder, Path.GetFileNameWithoutExtension(filePath) + ".lnk");
 
+            string sameNameDest = Path.Combine(folder, Path.GetFileName(filePath));
+            bool destExists = File.Exists(sameNameDest) || Directory.Exists(sameNameDest);
+
+            if (File.Exists(filePath))
+            {
+                if (!destExists && HardlinkHelper.TryCreate(filePath, sameNameDest))
+                    return;
+                // Hardlink failed (cross-volume, special filesystem, race) — fall
+                // through to .lnk so the gesture still produces something useful.
+            }
+            else if (Directory.Exists(filePath))
+            {
+                if (!destExists && JunctionHelper.TryCreate(filePath, sameNameDest))
+                    return;
+                // Junction failed (cross-volume, ACL, race) — fall through to
+                // a folder .lnk. Note a .lnk to a directory is openable but
+                // not traversable by Win32 file pickers, so this is a worse
+                // experience; hopefully rare in practice.
+            }
+
+            string shortcutPath = Path.Combine(folder, Path.GetFileNameWithoutExtension(filePath) + ".lnk");
             ShellLinkHelper.Create(
                 shortcutPath: shortcutPath,
                 targetPath: filePath,
@@ -2994,7 +3132,7 @@ namespace Racks
                         newList.Remove(fileId);
                         newList.Insert(0, fileId);
                         Instance.LastAccessedFiles = newList;
-                        var wrapPanel = FindParentOrChild<WrapPanel>(FileWrapPanel);
+                        var wrapPanel = FindParentOrChild<AnimatedTilePanel>(FileWrapPanel);
                         if (wrapPanel != null)
                         {
                             double itemWidth = wrapPanel.ItemWidth;
@@ -3008,19 +3146,13 @@ namespace Racks
                     //  MessageBox.Show($"Error opening file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
-            else if (!(Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl)) && e.LeftButton == MouseButtonState.Pressed && sender is Border dragBorder)
-            {
-                if (dragBorder.DataContext is FileItem fileItem)
-                {
-                    if (((GetAsyncKeyState(0xA4) & 0x8000) != 0 || (GetAsyncKeyState(0xA5) & 0x8000) != 0))
-                    {
-                        _draggedItem = fileItem;
-                    }
-                    _isDragging = true;
-                    DataObject data = new DataObject(DataFormats.FileDrop, new string[] { fileItem.FullPath! });
-                    DragDrop.DoDragDrop(dragBorder, data, DragDropEffects.Copy | DragDropEffects.Move);
-                }
-            }
+            // Outgoing OLE drag for the grid (WrapPanel/AnimatedTilePanel) layout
+            // moved out of here. The panel decides between long-press (in-rack
+            // reorder) and immediate drag (outgoing). When it picks outgoing it
+            // fires OutgoingDragRequested → OnTilePanelOutgoingDragRequested,
+            // which starts DragDrop.DoDragDrop. Keeping DoDragDrop here would
+            // capture the mouse on every mousedown and starve both the long-press
+            // timer and the in-panel reorder gesture.
             if (clickedFileItem != null && (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl)))
             {
                 if (!_selectedItems.Contains(clickedFileItem))
@@ -4075,12 +4207,12 @@ namespace Racks
                     : new SymbolIcon { Symbol = SymbolRegular.CircleSmall20, Foreground = Brushes.Transparent };
             }
         }
-        // Double-click the rack title to rename in-place. Single click is intentionally
-        // ignored so the title still drags the window. Enter commits, Esc cancels.
-        private void title_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        // Rename is invoked from the title-bar context menu only. Clicks on the
+        // title text now bubble to Window_MouseLeftButtonDown (DragMove) — the
+        // old double-click-to-rename was unreliable because DragMove's modal
+        // pump ate the second click.
+        private void BeginTitleRename()
         {
-            if (e.ClickCount != 2) return;
-            e.Handled = true;
             titleRenameBox.Text = Instance.TitleText ?? title.Text ?? "";
             title.Visibility = Visibility.Collapsed;
             titleRenameBox.Visibility = Visibility.Visible;
@@ -4114,7 +4246,7 @@ namespace Racks
             title.Visibility = Visibility.Visible;
         }
 
-        private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             contextMenu = new ContextMenu();
             if (_itemCurrentlyRenaming != null)
@@ -4130,12 +4262,41 @@ namespace Racks
             toggleHiddenFiles.IsChecked = Instance.ShowHiddenFiles;
             toggleFileExtension.IsChecked = Instance.ShowFileExtension;
 
-            // Per-rack drop semantic. Default = MOVE (Fences-like, no duplicate on
-            // desktop). Toggle ON to create shortcuts instead (source kept in place).
+            // Per-rack drop semantic toggle. Default = MOVE (Desktop visually
+            // clean; file lives in sandbox, findable via the Racks mirror in
+            // Quick access). Toggle ON to LINK instead (keeps original on
+            // Desktop; uses hardlinks for files, junctions for folders).
             ToggleSwitch linkOnDropToggle = new ToggleSwitch
             {
-                Content = "Create shortcuts instead of moving (Ctrl for per-drop)",
+                Content = "Link on drop",
+                ToolTip = "Keep originals on Desktop. Ctrl per-drop, Shift forces move.",
                 IsChecked = Instance.LinkOnDrop,
+            };
+
+            // What clicking a sub-folder inside the rack should do.
+            //   OFF (default) → open the folder in Windows Explorer (normal).
+            //   ON            → navigate into it inside the rack window.
+            ToggleSwitch openInsideToggle = new ToggleSwitch
+            {
+                Content = "Open sub-folders in rack",
+                ToolTip = "When off, sub-folder clicks open in Windows Explorer.",
+                IsChecked = Instance.FolderOpenInsideFrame,
+            };
+
+            ToggleSwitch lockToggle = new ToggleSwitch
+            {
+                Content = "Lock rack",
+                ToolTip = "Prevent moving and resizing.",
+                IsChecked = Instance.IsLocked,
+            };
+            lockToggle.Click += (_, _) =>
+            {
+                if ((lockToggle.IsChecked == true) != Instance.IsLocked)
+                    ToggleIsLocked();
+            };
+            openInsideToggle.Click += (_, _) =>
+            {
+                Instance.FolderOpenInsideFrame = openInsideToggle.IsChecked == true;
             };
             linkOnDropToggle.Click += (_, _) =>
             {
@@ -4201,7 +4362,7 @@ namespace Racks
 
             MenuItem resetPositionItem = new MenuItem
             {
-                Header = "Reset position (recenter)",
+                Header = "Reset position",
                 Height = 34,
                 Icon = new SymbolIcon(SymbolRegular.Target20),
             };
@@ -4242,7 +4403,7 @@ namespace Racks
 
             MenuItem duplicateItem = new MenuItem
             {
-                Header = "Duplicate rack (settings only)",
+                Header = "Duplicate",
                 Height = 34,
                 Icon = new SymbolIcon(SymbolRegular.Copy20),
             };
@@ -4325,7 +4486,7 @@ namespace Racks
 
             MenuItem frameSettings = new MenuItem
             {
-                Header = Lang.TitleBarContextMenu_FrameSettings,
+                Header = "Settings…",
                 Height = 34,
                 Icon = new SymbolIcon(SymbolRegular.Settings20)
             };
@@ -4460,12 +4621,15 @@ namespace Racks
                     // VirtualFrames sandbox in AppData. Otherwise we'd delete
                     // whatever real folder the rack happens to be pointing at —
                     // that's how users were losing data on the old build.
+                    // SafeDelete walks reparse points (junctions to Desktop
+                    // folders) WITHOUT descending — a plain Directory.Delete
+                    // recursive would obliterate the junction targets.
                     if (Instance.IsShortcutsOnly
                         && !string.IsNullOrEmpty(Instance.Folder)
                         && InstanceController.IsInsideVirtualFramesRoot(Instance.Folder)
                         && Directory.Exists(Instance.Folder))
                     {
-                        try { Directory.Delete(Instance.Folder, true); }
+                        try { Util.SafeDelete.DeleteDirectoryRecursive(Instance.Folder); }
                         catch (Exception ex) { Debug.WriteLine($"Sandbox delete failed: {ex.Message}"); }
                     }
                     this.Close();
@@ -4700,29 +4864,42 @@ namespace Racks
             sortByMenuItem.Items.Add(ascendingMenuItem);
             sortByMenuItem.Items.Add(descendingMenuItem);
 
+            MenuItem renameItem = new MenuItem
+            {
+                Header = "Rename rack",
+                Height = 34,
+                Icon = new SymbolIcon(SymbolRegular.Edit20),
+            };
+            renameItem.Click += (_, _) =>
+            {
+                contextMenu.IsOpen = false;
+                Dispatcher.BeginInvoke(new Action(BeginTitleRename), DispatcherPriority.Background);
+            };
+
+            // Slim, two-tier rack menu. Frequently used at the top; per-rack
+            // toggles in the middle; one-shot actions next; everything advanced
+            // (lock, snap, auto-route, theme, background image, refresh
+            // thumbnails) lives inside Frame Settings — not exposed here so the
+            // menu doesn't drown the user. Labels avoid parenthetical hints —
+            // tooltips/Settings are the place for those.
+            contextMenu.Items.Add(renameItem);
             contextMenu.Items.Add(sortByMenuItem);
-            contextMenu.Items.Add(new Separator());
-            contextMenu.Items.Add(lockFrame);
-            contextMenu.Items.Add(reloadItems);
-            contextMenu.Items.Add(openInExplorerMenuItem);
-            contextMenu.Items.Add(changeItemView);
             contextMenu.Items.Add(new Separator());
             contextMenu.Items.Add(toggleHiddenFiles);
             contextMenu.Items.Add(toggleFileExtension);
-            contextMenu.Items.Add(linkOnDropToggle);
-            contextMenu.Items.Add(snapToGridToggle);
+            contextMenu.Items.Add(changeItemView);
             contextMenu.Items.Add(pinToTopToggle);
-            contextMenu.Items.Add(autoRouteItem);
-            contextMenu.Items.Add(backgroundImageItem);
-            contextMenu.Items.Add(themeMenu);
-            contextMenu.Items.Add(refreshThumbsItem);
-            contextMenu.Items.Add(showInExplorerItem);
-            contextMenu.Items.Add(resetPositionItem);
+            contextMenu.Items.Add(lockToggle);
+            contextMenu.Items.Add(new Separator());
+            contextMenu.Items.Add(linkOnDropToggle);
+            contextMenu.Items.Add(openInsideToggle);
+            contextMenu.Items.Add(new Separator());
+            contextMenu.Items.Add(reloadItems);
+            contextMenu.Items.Add(openInExplorerMenuItem);
             contextMenu.Items.Add(duplicateItem);
+            contextMenu.Items.Add(resetPositionItem);
             contextMenu.Items.Add(new Separator());
             contextMenu.Items.Add(frameSettings);
-            contextMenu.Items.Add(new Separator());
-            contextMenu.Items.Add(FrameInfoItem);
             contextMenu.Items.Add(new Separator());
             contextMenu.Items.Add(exitItem);
 

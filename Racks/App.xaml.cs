@@ -27,6 +27,9 @@ namespace Racks
             // One-time migration of HKCU\SOFTWARE\DeskFrame → HKCU\SOFTWARE\Racks so
             // users upgrading from the original DeskFrame build keep their frames.
             InstanceController.MigrateLegacyRegistry();
+            // Tell Windows we'd like dark mode for native popups (shell context
+            // menu). Has to run before any menu is shown.
+            Racks.Util.DarkModeHelper.EnableForApp();
 #if !DEBUG
             bool createdNew;
             _singleInstanceMutex = new Mutex(true, @"Global\Racks-SingleInstance-2C9D", out createdNew);
@@ -41,6 +44,20 @@ namespace Racks
             base.OnStartup(e);
             ToastNotificationManagerCompat.OnActivated += ToastActivatedHandler;
             StartUpdateCheckTimer();
+            // Once-only: pin %USERPROFILE%\Racks to the Explorer / file-picker
+            // Quick Access list so that the user can reach rack contents from
+            // any picker without manually navigating. Gated by a registry
+            // marker so we don't re-pin if the user manually unpins.
+            try
+            {
+                const string PinnedMarker = "QuickAccessMirrorPinned";
+                if (!reg.KeyExistsRoot(PinnedMarker))
+                {
+                    Racks.Util.RackMirror.PinToQuickAccess();
+                    reg.WriteToRegistryRoot(PinnedMarker, true);
+                }
+            }
+            catch (Exception ex) { Debug.WriteLine($"Quick Access pin failed: {ex.Message}"); }
         }
         private void ToastActivatedHandler(ToastNotificationActivatedEventArgsCompat toastArgs)
         {

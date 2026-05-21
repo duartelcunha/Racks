@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Installer build output (Inno Setup .exe) and portable publish output
+installer/Output/
+publish/

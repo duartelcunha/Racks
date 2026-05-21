@@ -36,7 +36,10 @@ public class Instance : INotifyPropertyChanged
     private bool _showInGrid = true;
     private bool _autoExpandonCursor = false;
     private bool _showShortcutArrow = true;
-    private bool _folderOpenInsideFrame = true;
+    // Default = false: clicking a sub-folder opens it in Windows Explorer
+    // (the normal Windows behaviour). Users can flip to inside-rack nav via
+    // the title-bar context menu or Settings.
+    private bool _folderOpenInsideFrame = false;
     private string _titleBarColor = "#0C000000";
     private string _titleTextColor = "#FFFFFF";
     private string _borderColor = "#FFFFFF";
@@ -723,6 +726,10 @@ public class Instance : INotifyPropertyChanged
             {
                 _titleText = value;
                 OnPropertyChanged(nameof(TitleText), value);
+                // The user-profile Racks mirror uses TitleText as the junction
+                // name, so a rename has to rebuild the mirror entry. Cheap and
+                // safe to call here — Rebuild is a no-op when nothing changes.
+                if (!_settingDefault) InstanceController.RefreshMirror();
             }
         }
     }

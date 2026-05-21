@@ -73,24 +73,21 @@ namespace Racks
                     (sourcePath, destFolder) =>
                     {
                         // Auto-route MOVES matching files into the rack (no duplicate on Desktop).
-                        // If a name collision exists in the destination, the source is left alone.
-                        // SHChangeNotify is called after each successful move so the Desktop
-                        // view drops the icon without F5.
+                        // Routed through SafeMove so a too-greedy regex (e.g., ".*") can't
+                        // vacuum shell-special folders into the rack, name collisions are
+                        // skipped cleanly, and cross-volume moves fall back to copy+delete.
+                        // Failures are silent here (auto-route is background, not user-
+                        // initiated) — logged to Debug only.
                         try
                         {
                             string dest = System.IO.Path.Combine(destFolder, System.IO.Path.GetFileName(sourcePath));
                             bool isDir = System.IO.Directory.Exists(sourcePath);
-                            if (isDir)
+                            var result = Racks.Util.SafeMove.TryMove(sourcePath, dest, out string reason);
+                            if (result != Racks.Util.SafeMove.Result.Moved)
                             {
-                                if (System.IO.Directory.Exists(dest)) return;
-                                System.IO.Directory.Move(sourcePath, dest);
+                                Debug.WriteLine($"Auto-route {result}: {reason}");
+                                return;
                             }
-                            else if (System.IO.File.Exists(sourcePath))
-                            {
-                                if (System.IO.File.Exists(dest)) return;
-                                System.IO.File.Move(sourcePath, dest);
-                            }
-                            else return;
                             Util.Interop.NotifyShellMove(sourcePath, dest, isDir);
                             Util.Interop.NotifyShellUpdateDir(System.IO.Path.GetDirectoryName(sourcePath)!);
                         }
