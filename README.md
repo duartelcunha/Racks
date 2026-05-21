@@ -1,102 +1,114 @@
 <div align="center">
 
+<img src="Racks/ico.png" width="96" height="96" alt="Racks icon" />
+
 # Racks
+
+**A fast, lightweight desktop organizer for Windows.**
+
+<sub>Always at hand. Doesn't touch your files. Built on .NET 10.</sub>
+
+[Download](https://github.com/duartelcunha/Racks/releases/latest) · [Report a bug](https://github.com/duartelcunha/Racks/issues) · [Suggest a feature](https://github.com/duartelcunha/Racks/issues)
 
 </div>
 
-<p align="center">
-   <i align="center">A fast, lightweight desktop organizer that beats Stardock Fences at its own game.<br><b>Always at hand. Doesn't touch your files.</b></i>
-</p>
-
-Racks is a heavily rewritten desktop organizer for Windows 10 / 11. It started from an MIT-licensed codebase (see `LICENSE.txt`) but has been rebuilt: data-loss bugs fixed at the root, build pipeline modernized to .NET 10 with no Visual Studio requirement, ~20 new features stacked on top.
-
 ---
 
-## Build & run
+<div align="center">
+  <img src="docs/screenshots/hero.png" alt="Racks on the desktop" width="900" />
+</div>
+
+## What it does
+
+Racks lives in the system tray and gives you floating "racks" — small, transparent windows that group files, shortcuts, and folders right on top of your wallpaper. Drag something from the Desktop into a rack and it moves into a clean sandbox; the Desktop stays uncluttered. Open any file picker and your racks appear in the Quick Access sidebar, named exactly the way you named them.
+
+## Features
+
+- **Move on drop, no clutter.** Drag a file or folder onto a rack — it lands in a clean sandbox in AppData, and your Desktop stays visually empty. Hold `Ctrl` to keep the original instead (hardlink for files, junction for folders).
+- **File pickers stay smart.** Every rack is mirrored to `%USERPROFILE%\Racks\<RackName>` and pinned to **Explorer Quick Access** on first launch. Uploading a file from your browser? Click "Racks" in the sidebar, click the rack, done.
+- **Auto-route from Desktop.** Set a regex per rack and matching files dropped onto the Desktop are routed in automatically. First match wins.
+- **Quick Finder.** `Ctrl+Shift+Space` opens a Spotlight-style search across every rack. `↑↓` to walk, `Enter` to open.
+- **Snap, lock, pin, theme.** Snap-to-grid (hold `Alt` to bypass), lock a rack from moving, pin one above other windows, pick from seven coordinated theme presets.
+- **Phone-style reorder.** Drag tiles inside a rack to reorder with a smooth animation. Shift-drag to drag items *out* of the rack into other apps.
+- **Hide the desktop on demand.** Double-click the wallpaper to hide every rack; a top-right peek hotzone brings them back.
+- **Safe by design.** Removing a rack only ever deletes its sandbox in AppData — pointing a rack at `Documents` and removing it leaves `Documents` exactly as it was.
+- **Multi-monitor aware.** Disconnect a screen and racks snap back to the primary instead of being stranded.
+- **Round-trip your layout.** Export every rack to a single JSON file; import it on another machine and the layout is rebuilt.
+
+<div align="center">
+  <img src="docs/screenshots/quick-access.png" alt="Racks mirror in Quick Access" width="46%" />
+  &nbsp;
+  <img src="docs/screenshots/quick-finder.png" alt="Quick Finder overlay" width="46%" />
+</div>
+
+## Install
+
+### Installer (recommended)
+
+Grab the latest `Racks-Setup-x.y.z.exe` from [Releases](https://github.com/duartelcunha/Racks/releases/latest) and double-click it. Installs per-user under `%LocalAppData%\Programs\Racks` — no admin prompt, no choices, ~5 seconds.
+
+### Build from source
 
 You only need the **.NET 10 SDK** — no Visual Studio.
 
 ```powershell
-# clone, then from the repo root:
+git clone https://github.com/duartelcunha/Racks.git
+cd Racks
 dotnet build Racks.sln -c Debug
 .\Racks\bin\x64\Debug\net10.0-windows10.0.26100.0\Racks.exe
 ```
 
-Or for a portable release build:
+Portable release builds:
 
 ```powershell
 .\publish.ps1                 # framework-dependent (small, needs .NET 10 runtime)
 .\publish.ps1 -SelfContained  # bundles the runtime (~70 MB, no install needed)
 .\publish.ps1 -SingleFile     # everything in one .exe
-.\publish\Racks.exe
 ```
 
----
+## Usage
 
-## What's different from upstream DeskFrame
+Right-click an empty area of the tray icon for the global menu (new rack, quick finder, hide desktop, export/import, etc.). Right-click any rack's title bar for per-rack options.
 
-### Safety (this is why the fork exists)
+### Shortcuts
 
-- **Drops never silently move your files.** The old default was `File.Move` from source → rack folder, which is how files seemed to "vanish" after a drop. New default: a `.lnk` is created in the rack and the source is untouched. Hold `Shift` while dropping if you actually want to move.
-- **"Remove rack" can never delete a real folder.** The recursive `Directory.Delete` is now sandboxed to `%AppData%\Racks\VirtualFrames\…`. Pointing a rack at `Documents` and removing it leaves `Documents` exactly as it was.
-- **Fixed a broken drop-path guard** that always evaluated false (impossible AND-chain) and let drops fall through to unsafe code paths on un-initialized frames.
-- **Empty-rack drops handle bootstrapping properly** instead of producing self-pointing shortcuts or shortcuts in the working directory.
+| Shortcut              | Action                                            |
+| --------------------- | ------------------------------------------------- |
+| `Ctrl+Shift+N`        | New empty rack                                    |
+| `Ctrl+Shift+Space`    | Quick Finder (cross-rack search)                  |
+| `Ctrl`-drop           | Link on this drop (keep original on Desktop)      |
+| `Shift`-drop          | Move on this drop (override Link-on-drop toggle)  |
+| `Shift`-drag from rack| Drag an item *out* of the rack to another app    |
+| `Alt`+drag rack       | Bypass snap-to-grid                               |
+| `Ctrl`+scroll         | Resize icons inside a rack                        |
+| Double-click wallpaper| Hide / show all racks                             |
 
-### Build / tech
+## Screenshots
 
-- **.NET 8 → .NET 10** with bumped NuGet packages.
-- **No more `<COMReference>` items.** The original needed Visual Studio for Shell32 + IWshRuntimeLibrary COM imports; both are gone. Shell32 wasn't used at all; the `.lnk` writer is now a pure-C# `[ComImport]` wrapper around `IShellLink`. `dotnet build` works on a fresh box.
-- **Registry migration.** First launch copies `HKCU\SOFTWARE\DeskFrame` → `HKCU\SOFTWARE\Racks` so existing setups carry over.
-- **Single-instance Mutex** instead of the racy `Process.GetProcessesByName` check (which popped a stuck modal dialog).
-
-### New per-rack features (right-click the rack title)
-
-- **Move files on drop** toggle — flip the safe default if you want move semantics on this rack.
-- **Snap to grid** — 16px grid; hold `Alt` while dragging the rack to bypass.
-- **Pin to top** — rack stays above all other windows.
-- **Auto-route from Desktop** — regex matched against new files on the Desktop; matches auto-create a `.lnk` in this rack. First-match-wins, 600ms debounce.
-- **Set background image** — PNG/JPG/etc. fills the rack (Stretch=UniformToFill).
-- **Theme presets** — Dark, Light, Glass, Neon, Solarized Dark, Solarized Light. One click sets 7 coordinated color fields.
-- **Refresh thumbnails** — re-fetches every icon (fix stale/blank icons).
-- **Show in Explorer** — opens the rack's backing folder.
-- **Reset position** — recenter the rack on the primary monitor.
-- **Duplicate rack** — copies colors/fonts/regex/snap into a new empty rack.
-- **Inline rename** — double-click the rack title, Enter saves, Esc cancels.
-
-### New global / tray features
-
-- **New rack** (Ctrl+Shift+N) — empty virtual rack, drag any shortcut/file/folder in.
-- **New folder rack** — bind to a folder you pick by dragging it in.
-- **Cross-rack quick finder** (Ctrl+Shift+Space) — Spotlight-style search across every rack's items. ↑↓ navigate, Enter opens, Esc dismisses.
-- **Export racks / Import racks** — round-trip your entire layout to/from a single JSON file.
-- **Hide desktop icons** — toggle the Windows desktop icons for a clean racks-only desktop.
-- **Hide racks on top-right corner** — Fences-style peek hotzone.
-- **Lock all racks** — freeze every rack in one click.
-- **Help / cheatsheet** — searchable summary of every binding and feature.
-
-### Smarter UX
-
-- **Search-as-you-type** with `↑↓` to walk filtered items and `Enter` to open the highlighted one.
-- **Offscreen-rack rescue** — when a monitor disappears, racks snap back to the primary instead of being stranded.
-- **First-launch experience** — opens a virtual rack ready to receive a drop instead of an unbound empty folder picker.
-
----
-
-## Original features kept
-
-- Instant search, fully customizable colors, transparent backgrounds, hidden files / file extensions toggles, Alt-drag to rearrange items, sticky+lockable racks, `Ctrl`+scroll icon resize, scroll-on-titlebar to bring forward/back, sorting (name/date/type/size), first-row last-accessed, regex filter, per-virtual-desktop visibility, double-click-desktop hide, grayscale.
-
----
+<div align="center">
+  <table>
+    <tr>
+      <td><img src="docs/screenshots/themes.png" alt="Theme presets" /></td>
+      <td><img src="docs/screenshots/settings.png" alt="Per-rack menu" /></td>
+    </tr>
+    <tr>
+      <td align="center"><sub>Seven coordinated theme presets</sub></td>
+      <td align="center"><sub>Slim per-rack context menu</sub></td>
+    </tr>
+  </table>
+</div>
 
 ## License
 
-MIT. See `LICENSE.txt`. The original DeskFrame copyright line is retained as required by the MIT terms; everywhere else (UI, README, assembly metadata) is rebranded.
+MIT. See [`LICENSE.txt`](LICENSE.txt).
 
 ## Credits
 
-- [WPF UI](https://github.com/lepoco/wpfui) — MIT
-- [WindowsCommunityToolkit](https://github.com/CommunityToolkit/WindowsCommunityToolkit) — MIT
-- [SVG.NET](https://github.com/svg-net/SVG) — MS-PL
-- [VirtualDesktop](https://github.com/Slion/VirtualDesktop) — MIT
-- [H.Hooks](https://github.com/HavenDV/H.Hooks) — MIT
+Built on the shoulders of:
+
+- [WPF UI](https://github.com/lepoco/wpfui)
+- [WindowsCommunityToolkit](https://github.com/CommunityToolkit/WindowsCommunityToolkit)
+- [SVG.NET](https://github.com/svg-net/SVG)
+- [VirtualDesktop](https://github.com/Slion/VirtualDesktop)
+- [H.Hooks](https://github.com/HavenDV/H.Hooks)
 - [Microsoft.WindowsAPICodePack.Shell](https://github.com/contre/Windows-API-Code-Pack-1.1)

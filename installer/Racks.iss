@@ -50,8 +50,15 @@ DisableFinishedPage=no
 ShowLanguageDialog=no
 WizardStyle=modern
 WizardResizable=no
-Compression=lzma2/ultra64
+; Faster install vs. smaller setup .exe — pick speed. lzma2/normal decompresses
+; ~3× faster than ultra64 for a ~10% larger .exe. For a ~5s install that the
+; user perceives as "instant" this is the right trade.
+Compression=lzma2/normal
 SolidCompression=yes
+; Block a second installer from starting on top of a running one. Without this
+; you can end up with half-extracted .exes on disk if the user double-clicks
+; the setup twice.
+SetupMutex=Racks-Setup-{#AppVersion}
 OutputBaseFilename=Racks-Setup-{#AppVersion}
 OutputDir=Output
 SetupIconFile=..\Racks\Icon\ico.ico
@@ -60,8 +67,10 @@ UninstallDisplayName={#AppName}
 ; Single-arch — Racks targets x64 only (see csproj <Platforms>x64</Platforms>).
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; Don't let two Racks installers stomp each other.
-CloseApplications=yes
+; Auto-close a running Racks instance so we can replace the .exe on upgrade.
+; No "please close the app" modal — just take care of it.
+CloseApplications=force
+CloseApplicationsFilter=*.exe
 RestartApplications=no
 
 [Languages]
