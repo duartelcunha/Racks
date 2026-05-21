@@ -2378,6 +2378,11 @@ namespace Racks
         private void ToggleIsLocked()
         {
             Instance.IsLocked = !Instance.IsLocked;
+            // Keep the local _isLocked field in sync. Window_MouseLeftButtonDown
+            // gates DragMove on _isLocked; if we leave it stale the user clicks
+            // Unlock, the registry flips, the visible toggle flips, but DragMove
+            // still refuses because _isLocked is the old value.
+            _isLocked = Instance.IsLocked;
             var interopHelper = new WindowInteropHelper(this);
             interopHelper.EnsureHandle();
             IntPtr hwnd = interopHelper.Handle;

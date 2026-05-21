@@ -36,15 +36,20 @@
             </ui:TitleBar.TrailingContent>
         </ui:TitleBar>
         <ScrollViewer HorizontalScrollBarVisibility="Auto" Margin="0,30,0,0" >
+            <!--
+                Columns are Star so the four category panels grow with the window,
+                with MinWidth=260 so they never collapse below the original layout.
+                Gap columns are fixed at 30px.
+            -->
             <Grid Margin="0,0,0,0">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="260"/>
+                    <ColumnDefinition Width="*" MinWidth="260"/>
                     <ColumnDefinition Width="30"/>
-                    <ColumnDefinition Width="260"/>
+                    <ColumnDefinition Width="*" MinWidth="260"/>
                     <ColumnDefinition Width="30"/>
-                    <ColumnDefinition Width="260"/>
+                    <ColumnDefinition Width="*" MinWidth="260"/>
                     <ColumnDefinition Width="30"/>
-                    <ColumnDefinition Width="260"/>
+                    <ColumnDefinition Width="*" MinWidth="260"/>
                 </Grid.ColumnDefinitions>
                 <ui:Flyout x:Name="uiFlyout"  Padding="13" IsTabStop="True" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <StackPanel  x:Name="ColorCard" />
