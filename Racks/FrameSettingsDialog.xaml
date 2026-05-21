@@ -9,12 +9,14 @@
         xmlns:properties="clr-namespace:Racks.Properties;assembly=Racks"
         xmlns:prop="clr-namespace:Racks.Properties"
         ExtendsContentIntoTitleBar="True"
-        mc:Ignorable="d"    
-        Background="#66232323" 
-        WindowStyle="None" 
+        mc:Ignorable="d"
+        Background="#66232323"
+        WindowStyle="None"
         ResizeMode="CanResize"
-        Height="920" 
-        Width="1147">
+        Height="920"
+        Width="1147"
+        MinHeight="600"
+        MinWidth="1180">
     <Grid>
         <ui:TitleBar Name="Titlebar" Padding="8,0,0,0" Height="30" CanMaximize="False" ShowMinimize="False" ApplicationTheme="Dark" ShowMaximize="False" CloseClicked="Titlebar_CloseClicked">
             <ui:TitleBar.Title>
