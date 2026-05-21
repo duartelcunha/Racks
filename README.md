@@ -22,6 +22,12 @@
 
 Racks lives in the system tray and gives you floating "racks" — small, transparent windows that group files, shortcuts, and folders right on top of your wallpaper. Drag something from the Desktop into a rack and it moves into a clean sandbox; the Desktop stays uncluttered. Open any file picker and your racks appear in the Quick Access sidebar, named exactly the way you named them.
 
+<div align="center">
+  <img src="docs/screenshots/drop-to-clean.gif" alt="Drag a file from the desktop into a rack" width="720" />
+  <br />
+  <sub><i>Drop a file from the Desktop into a rack — the Desktop stays clean.</i></sub>
+</div>
+
 ## Features
 
 - **Move on drop, no clutter.** Drag a file or folder onto a rack — it lands in a clean sandbox in AppData, and your Desktop stays visually empty. Hold `Ctrl` to keep the original instead (hardlink for files, junction for folders).
@@ -34,6 +40,12 @@ Racks lives in the system tray and gives you floating "racks" — small, transpa
 - **Safe by design.** Removing a rack only ever deletes its sandbox in AppData — pointing a rack at `Documents` and removing it leaves `Documents` exactly as it was.
 - **Multi-monitor aware.** Disconnect a screen and racks snap back to the primary instead of being stranded.
 - **Round-trip your layout.** Export every rack to a single JSON file; import it on another machine and the layout is rebuilt.
+
+<div align="center">
+  <img src="docs/screenshots/find-anywhere.gif" alt="Open a rack file from a browser file picker" width="720" />
+  <br />
+  <sub><i>Every rack is reachable from any file picker via the Quick Access sidebar.</i></sub>
+</div>
 
 <div align="center">
   <img src="docs/screenshots/quick-access.png" alt="Racks mirror in Quick Access" width="46%" />
