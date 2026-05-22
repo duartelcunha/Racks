@@ -8,10 +8,13 @@ using System.Windows.Media.Imaging;
 using Microsoft.Toolkit.Uwp.Notifications;
 // The Racks project pulls in both WPF and WinForms namespaces. Alias to the
 // WPF types so the unqualified names below resolve unambiguously.
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using Application = System.Windows.Application;
 using Image = System.Windows.Controls.Image;
 using Brushes = System.Windows.Media.Brushes;
 using Point = System.Windows.Point;
+using Color = System.Windows.Media.Color;
 
 namespace Racks.Util
 {
@@ -27,132 +30,247 @@ namespace Racks.Util
     {
         private const string MarkerKey = "FirstRunWelcomeShownV1";
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+            int X, int Y, int cx, int cy, uint uFlags);
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint SWP_SHOWWINDOW = 0x0040;
+
+        // Force a window to the very top of the Z-order, above everything
+        // including topmost windows of other apps. Bypasses WPF's polite
+        // "Topmost = true" which Windows 11 sometimes ignores when another
+        // foreground app is active (anti-focus-steal heuristic).
+        private static void ForceTopmost(Window w)
+        {
+            try
+            {
+                var hwnd = new WindowInteropHelper(w).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                }
+            }
+            catch { }
+        }
+
         public static void ShowIfFirstRun(RegistryHelper reg)
         {
             try
             {
-                if (reg.KeyExistsRoot(MarkerKey)) return;
+                if (reg.KeyExistsRoot(MarkerKey)) { Log("marker present — skipping"); return; }
                 reg.WriteToRegistryRoot(MarkerKey, true);
+                Log("marker set, will play welcome");
             }
-            catch { return; }
+            catch (Exception ex) { Log($"marker check failed: {ex.Message}"); return; }
 
-            try
+            // Wait until everything (MainWindow, tray icon, rack windows) is
+            // painted before showing the overlay. DispatcherPriority.Loaded
+            // alone fires before some HWND paints complete, leaving the
+            // transparent welcome window invisible against the desktop.
+            Task.Delay(600).ContinueWith(_ =>
             {
                 Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    try { RunDropAnimation(); } catch { }
-                }), System.Windows.Threading.DispatcherPriority.Loaded);
+                    try { RunDropAnimation(); Log("animation kicked off"); }
+                    catch (Exception ex) { Log($"animation failed: {ex}"); }
+                }), System.Windows.Threading.DispatcherPriority.Background);
+            });
+        }
+
+        // Lightweight debug log so we can confirm whether the welcome flow
+        // actually ran on a given launch. Lives in %TEMP%\Racks-welcome.log.
+        private static readonly object _logLock = new object();
+        private static string LogPath => System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Racks-welcome.log");
+        private static void Log(string msg)
+        {
+            try
+            {
+                lock (_logLock)
+                {
+                    System.IO.File.AppendAllText(LogPath,
+                        $"{DateTime.Now:HH:mm:ss.fff} {msg}{Environment.NewLine}");
+                }
             }
             catch { }
         }
 
         private static void RunDropAnimation()
         {
+
+            // Animate inside a single fullscreen click-through overlay window
+            // rather than animating Window.Left/Top — WPF's window animations
+            // are unreliable on transparent borderless windows (the size/pos
+            // dependency properties don't always animate, and toolwindows
+            // sometimes don't repaint between frames). A Canvas + transforms
+            // is rock-solid.
             var screen = SystemParameters.WorkArea;
             const double startSize = 128;
-            const double endSize = 20;
-            double startX = screen.Left + (screen.Width  - startSize) / 2;
-            double startY = screen.Top  + (screen.Height - startSize) / 2;
-            double endX   = screen.Right  - endSize - 12;
-            double endY   = screen.Bottom - endSize - 6;
+            const double endSize = 22;
+            double centerX = screen.Width  / 2;
+            double centerY = screen.Height / 2;
+            double trayX   = screen.Width  - endSize - 14;
+            double trayY   = screen.Height - endSize - 8;
+
+            BitmapImage src;
+            try
+            {
+                src = new BitmapImage();
+                src.BeginInit();
+                src.UriSource = new Uri("pack://application:,,,/ico.png", UriKind.Absolute);
+                src.CacheOption = BitmapCacheOption.OnLoad;
+                src.EndInit();
+                src.Freeze();
+                Log($"bitmap loaded {src.PixelWidth}x{src.PixelHeight}");
+            }
+            catch (Exception ex)
+            {
+                Log($"bitmap load failed: {ex.Message}");
+                ShowToast();
+                return;
+            }
 
             var image = new Image
             {
-                Source = new BitmapImage(new Uri("pack://application:,,,/ico.png", UriKind.Absolute)),
+                Source = src,
                 Width  = startSize,
                 Height = startSize,
-                Opacity = 0,
                 Stretch = Stretch.Uniform,
                 RenderTransformOrigin = new Point(0.5, 0.5),
+                Opacity = 0,
             };
-            // Two stacked transforms: scale for the pop-in overshoot, rotate
-            // for the half-turn spin during the drop. TransformGroup keeps
-            // each animatable independently.
-            var scale  = new ScaleTransform(0.35, 0.35);
-            var rotate = new RotateTransform(0);
-            image.RenderTransform = new TransformGroup { Children = { scale, rotate } };
+            // Place the icon at center via Canvas.SetLeft/Top so animating a
+            // TranslateTransform moves it relative to that.
+            Canvas.SetLeft(image, centerX - startSize / 2);
+            Canvas.SetTop (image, centerY - startSize / 2);
+
+            var translate = new TranslateTransform(0, 0);
+            var scale     = new ScaleTransform(0.35, 0.35);
+            var rotate    = new RotateTransform(0);
+            image.RenderTransform = new TransformGroup
+            {
+                Children = { scale, rotate, translate }
+            };
+
+            var canvas = new Canvas { Background = Brushes.Transparent };
+            canvas.Children.Add(image);
 
             var win = new Window
             {
+                // Skip the app's global Wpf.Ui Window style — it replaces the
+                // window's ControlTemplate with one that has its own Border/
+                // titlebar/content presenter, which clobbers a raw Canvas
+                // content. Without this, the window IS shown but the icon
+                // never makes it to the screen.
+                Style = null,
                 WindowStyle = WindowStyle.None,
                 AllowsTransparency = true,
-                Background = Brushes.Transparent,
+                Background = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0)),
                 Topmost = true,
                 ShowInTaskbar = false,
                 Focusable = false,
                 IsHitTestVisible = false,
                 ResizeMode = ResizeMode.NoResize,
-                ShowActivated = false,
-                Width = startSize,
-                Height = startSize,
-                Left = startX,
-                Top  = startY,
-                Content = image,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = screen.Left,
+                Top  = screen.Top,
+                Width  = screen.Width,
+                Height = screen.Height,
+                Content = canvas,
             };
             win.Show();
+            ForceTopmost(win);
+            Log($"window shown {win.Left},{win.Top} {win.Width}x{win.Height}");
 
-            // Phase 1 (0–450ms): pop in.
-            //   Opacity 0→1 with easing,
-            //   Scale 0.35→1.05 then settle to 1.0 (overshoot for that "pop").
-            image.BeginAnimation(UIElement.OpacityProperty,
-                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(400))
-                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty,
-                new DoubleAnimationUsingKeyFrames
-                {
-                    KeyFrames =
-                    {
-                        new EasingDoubleKeyFrame(0.35, KeyTime.FromTimeSpan(TimeSpan.Zero)),
-                        new EasingDoubleKeyFrame(1.05, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(300)),
-                            new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.6 }),
-                        new EasingDoubleKeyFrame(1.00, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(450))),
-                    },
-                });
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty,
-                new DoubleAnimationUsingKeyFrames
-                {
-                    KeyFrames =
-                    {
-                        new EasingDoubleKeyFrame(0.35, KeyTime.FromTimeSpan(TimeSpan.Zero)),
-                        new EasingDoubleKeyFrame(1.05, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(300)),
-                            new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.6 }),
-                        new EasingDoubleKeyFrame(1.00, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(450))),
-                    },
-                });
+            // Compute drop deltas. End position is the tray corner with the
+            // icon shrunk to endSize, so translation = trayCorner - origin.
+            double dx = (trayX - endSize / 2) - centerX;
+            double dy = (trayY - endSize / 2) - centerY;
+            double endScale = endSize / startSize;
 
-            // Phase 2 (450–950ms): hold in the center so the user actually sees
-            // it (and reads any taskbar text that flashes by). 500ms is the
-            // sweet spot — long enough to register, short enough not to feel
-            // sluggish.
+            // ONE keyframe animation per property, covering the whole timeline.
+            // BeginAnimation replaces any prior animation on the same property,
+            // so separate calls for pop-in + drop would cancel each other.
+            //
+            //   t=0–450ms    : pop in
+            //   t=450–950ms  : hold at center
+            //   t=950–2300ms : drop to tray (translate + spin + shrink)
+            //   t=2300–2600ms: fade out (handled separately on Opacity)
 
-            // Phase 3 (950–2300ms): drop to tray. 1350ms of motion gives the
-            // arc + bounce + spin time to read clearly.
-            var begin = TimeSpan.FromMilliseconds(950);
-            var dropDur = TimeSpan.FromMilliseconds(1350);
+            var scaleX = new DoubleAnimationUsingKeyFrames();
+            scaleX.KeyFrames.Add(new EasingDoubleKeyFrame(0.35, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            scaleX.KeyFrames.Add(new EasingDoubleKeyFrame(1.05, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(300)),
+                new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.6 }));
+            scaleX.KeyFrames.Add(new EasingDoubleKeyFrame(1.00, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(450))));
+            scaleX.KeyFrames.Add(new EasingDoubleKeyFrame(1.00, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(950))));
+            scaleX.KeyFrames.Add(new EasingDoubleKeyFrame(endScale, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2300)),
+                new CubicEase { EasingMode = EasingMode.EaseIn }));
+            scaleX.Duration = TimeSpan.FromMilliseconds(2300);
+            scaleX.FillBehavior = FillBehavior.HoldEnd;
 
-            win.BeginAnimation(Window.LeftProperty,
-                new DoubleAnimation(startX, endX, dropDur)
-                { BeginTime = begin, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } });
-            win.BeginAnimation(Window.TopProperty,
-                new DoubleAnimation(startY, endY, dropDur)
-                { BeginTime = begin, EasingFunction = new BounceEase { Bounces = 1, Bounciness = 4, EasingMode = EasingMode.EaseOut } });
-            image.BeginAnimation(FrameworkElement.WidthProperty,
-                new DoubleAnimation(startSize, endSize, dropDur)
-                { BeginTime = begin, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } });
-            image.BeginAnimation(FrameworkElement.HeightProperty,
-                new DoubleAnimation(startSize, endSize, dropDur)
-                { BeginTime = begin, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } });
-            rotate.BeginAnimation(RotateTransform.AngleProperty,
-                new DoubleAnimation(0, 360, dropDur)
-                { BeginTime = begin, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut } });
+            var scaleY = new DoubleAnimationUsingKeyFrames();
+            scaleY.KeyFrames.Add(new EasingDoubleKeyFrame(0.35, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            scaleY.KeyFrames.Add(new EasingDoubleKeyFrame(1.05, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(300)),
+                new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.6 }));
+            scaleY.KeyFrames.Add(new EasingDoubleKeyFrame(1.00, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(450))));
+            scaleY.KeyFrames.Add(new EasingDoubleKeyFrame(1.00, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(950))));
+            scaleY.KeyFrames.Add(new EasingDoubleKeyFrame(endScale, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2300)),
+                new CubicEase { EasingMode = EasingMode.EaseIn }));
+            scaleY.Duration = TimeSpan.FromMilliseconds(2300);
+            scaleY.FillBehavior = FillBehavior.HoldEnd;
 
-            // Phase 4 (2300–2600ms): fade out at the tray corner.
-            image.BeginAnimation(UIElement.OpacityProperty,
-                new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300))
-                {
-                    BeginTime = TimeSpan.FromMilliseconds(2300),
-                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn },
-                });
+            var transX = new DoubleAnimationUsingKeyFrames();
+            transX.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            transX.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(950))));
+            transX.KeyFrames.Add(new EasingDoubleKeyFrame(dx, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2300)),
+                new CubicEase { EasingMode = EasingMode.EaseIn }));
+            transX.Duration = TimeSpan.FromMilliseconds(2300);
+            transX.FillBehavior = FillBehavior.HoldEnd;
+
+            var transY = new DoubleAnimationUsingKeyFrames();
+            transY.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            transY.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(950))));
+            transY.KeyFrames.Add(new EasingDoubleKeyFrame(dy, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2300)),
+                new BounceEase { Bounces = 1, Bounciness = 4, EasingMode = EasingMode.EaseOut }));
+            transY.Duration = TimeSpan.FromMilliseconds(2300);
+            transY.FillBehavior = FillBehavior.HoldEnd;
+
+            var spin = new DoubleAnimationUsingKeyFrames();
+            spin.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            spin.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(950))));
+            spin.KeyFrames.Add(new EasingDoubleKeyFrame(360, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2300)),
+                new CubicEase { EasingMode = EasingMode.EaseInOut }));
+            spin.Duration = TimeSpan.FromMilliseconds(2300);
+            spin.FillBehavior = FillBehavior.HoldEnd;
+
+            var imgOpacity = new DoubleAnimationUsingKeyFrames();
+            imgOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            imgOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(400)),
+                new CubicEase { EasingMode = EasingMode.EaseOut }));
+            imgOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2300))));
+            imgOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2600)),
+                new CubicEase { EasingMode = EasingMode.EaseIn }));
+            imgOpacity.Duration = TimeSpan.FromMilliseconds(2600);
+            imgOpacity.FillBehavior = FillBehavior.HoldEnd;
+
+            var winOpacity = new DoubleAnimationUsingKeyFrames();
+            winOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            winOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2300))));
+            winOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(2600)),
+                new CubicEase { EasingMode = EasingMode.EaseIn }));
+            winOpacity.Duration = TimeSpan.FromMilliseconds(2600);
+            winOpacity.FillBehavior = FillBehavior.HoldEnd;
+
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleX);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleY);
+            translate.BeginAnimation(TranslateTransform.XProperty, transX);
+            translate.BeginAnimation(TranslateTransform.YProperty, transY);
+            rotate.BeginAnimation(RotateTransform.AngleProperty, spin);
+            image.BeginAnimation(UIElement.OpacityProperty, imgOpacity);
+            win.BeginAnimation(UIElement.OpacityProperty, winOpacity);
 
             // Close and fire toast just after the animation settles.
             Task.Delay(2700).ContinueWith(_ =>
