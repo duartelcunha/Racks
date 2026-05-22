@@ -402,6 +402,12 @@ namespace Racks
             // Ctrl+Shift+N spawns a new virtual rack.
             try { Interop.RegisterHotKey(_mainHwnd, NEW_RACK_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x4E /* VK_N */); }
             catch (Exception ex) { Debug.WriteLine($"RegisterHotKey NewRack failed: {ex.Message}"); }
+            // First-launch welcome animation: a Racks icon drops from the
+            // center of the screen into the system tray and a toast follows
+            // pointing the user at where the app now lives. Gated by a
+            // registry marker so it runs at most once per machine.
+            try { Racks.Util.FirstRunWelcome.ShowIfFirstRun(_controller.reg); }
+            catch (Exception ex) { Debug.WriteLine($"FirstRunWelcome failed: {ex.Message}"); }
         }
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
