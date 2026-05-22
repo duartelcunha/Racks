@@ -49,7 +49,6 @@ DisableReadyMemo=yes
 DisableFinishedPage=no
 ShowLanguageDialog=no
 WizardStyle=modern
-WizardResizable=no
 ; Faster install vs. smaller setup .exe — pick speed. lzma2/normal decompresses
 ; ~3× faster than ultra64 for a ~10% larger .exe. For a ~5s install that the
 ; user perceives as "instant" this is the right trade.
