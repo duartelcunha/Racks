@@ -49,8 +49,8 @@ namespace Racks.Util
         private static void RunDropAnimation()
         {
             var screen = SystemParameters.WorkArea;
-            const double startSize = 96;
-            const double endSize = 18;
+            const double startSize = 128;
+            const double endSize = 20;
             double startX = screen.Left + (screen.Width  - startSize) / 2;
             double startY = screen.Top  + (screen.Height - startSize) / 2;
             double endX   = screen.Right  - endSize - 12;
@@ -65,8 +65,12 @@ namespace Racks.Util
                 Stretch = Stretch.Uniform,
                 RenderTransformOrigin = new Point(0.5, 0.5),
             };
+            // Two stacked transforms: scale for the pop-in overshoot, rotate
+            // for the half-turn spin during the drop. TransformGroup keeps
+            // each animatable independently.
+            var scale  = new ScaleTransform(0.35, 0.35);
             var rotate = new RotateTransform(0);
-            image.RenderTransform = rotate;
+            image.RenderTransform = new TransformGroup { Children = { scale, rotate } };
 
             var win = new Window
             {
@@ -87,46 +91,71 @@ namespace Racks.Util
             };
             win.Show();
 
-            // Phase 1: pop in (0–250ms). Fade in + slight overshoot scale.
-            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220))
-            { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
-            image.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+            // Phase 1 (0–450ms): pop in.
+            //   Opacity 0→1 with easing,
+            //   Scale 0.35→1.05 then settle to 1.0 (overshoot for that "pop").
+            image.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(400))
+                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty,
+                new DoubleAnimationUsingKeyFrames
+                {
+                    KeyFrames =
+                    {
+                        new EasingDoubleKeyFrame(0.35, KeyTime.FromTimeSpan(TimeSpan.Zero)),
+                        new EasingDoubleKeyFrame(1.05, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(300)),
+                            new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.6 }),
+                        new EasingDoubleKeyFrame(1.00, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(450))),
+                    },
+                });
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty,
+                new DoubleAnimationUsingKeyFrames
+                {
+                    KeyFrames =
+                    {
+                        new EasingDoubleKeyFrame(0.35, KeyTime.FromTimeSpan(TimeSpan.Zero)),
+                        new EasingDoubleKeyFrame(1.05, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(300)),
+                            new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.6 }),
+                        new EasingDoubleKeyFrame(1.00, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(450))),
+                    },
+                });
 
-            // Phase 2: drop (350–1350ms). Concurrent translate + shrink + rotate.
-            //   X: linear-ish ease.
-            //   Y: bounce-out so it lands with a slight overshoot near the tray.
-            //   Size: ease to 18px.
-            //   Rotation: 180° spin (the "hoop").
-            var begin = TimeSpan.FromMilliseconds(350);
-            var dropDur = TimeSpan.FromMilliseconds(950);
+            // Phase 2 (450–950ms): hold in the center so the user actually sees
+            // it (and reads any taskbar text that flashes by). 500ms is the
+            // sweet spot — long enough to register, short enough not to feel
+            // sluggish.
 
-            var moveX = new DoubleAnimation(startX, endX, dropDur)
-            { BeginTime = begin, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
-            var moveY = new DoubleAnimation(startY, endY, dropDur)
-            { BeginTime = begin, EasingFunction = new BounceEase { Bounces = 1, Bounciness = 3, EasingMode = EasingMode.EaseOut } };
-            var shrinkW = new DoubleAnimation(startSize, endSize, dropDur)
-            { BeginTime = begin, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
-            var shrinkH = new DoubleAnimation(startSize, endSize, dropDur)
-            { BeginTime = begin, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
-            var spin = new DoubleAnimation(0, 360, dropDur)
-            { BeginTime = begin };
+            // Phase 3 (950–2300ms): drop to tray. 1350ms of motion gives the
+            // arc + bounce + spin time to read clearly.
+            var begin = TimeSpan.FromMilliseconds(950);
+            var dropDur = TimeSpan.FromMilliseconds(1350);
 
-            win.BeginAnimation(Window.LeftProperty, moveX);
-            win.BeginAnimation(Window.TopProperty,  moveY);
-            image.BeginAnimation(FrameworkElement.WidthProperty,  shrinkW);
-            image.BeginAnimation(FrameworkElement.HeightProperty, shrinkH);
-            rotate.BeginAnimation(RotateTransform.AngleProperty, spin);
+            win.BeginAnimation(Window.LeftProperty,
+                new DoubleAnimation(startX, endX, dropDur)
+                { BeginTime = begin, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } });
+            win.BeginAnimation(Window.TopProperty,
+                new DoubleAnimation(startY, endY, dropDur)
+                { BeginTime = begin, EasingFunction = new BounceEase { Bounces = 1, Bounciness = 4, EasingMode = EasingMode.EaseOut } });
+            image.BeginAnimation(FrameworkElement.WidthProperty,
+                new DoubleAnimation(startSize, endSize, dropDur)
+                { BeginTime = begin, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } });
+            image.BeginAnimation(FrameworkElement.HeightProperty,
+                new DoubleAnimation(startSize, endSize, dropDur)
+                { BeginTime = begin, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } });
+            rotate.BeginAnimation(RotateTransform.AngleProperty,
+                new DoubleAnimation(0, 360, dropDur)
+                { BeginTime = begin, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut } });
 
-            // Phase 3: fade out at the tray (1350–1600ms).
-            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(250))
-            {
-                BeginTime = TimeSpan.FromMilliseconds(1350),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn },
-            };
-            image.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+            // Phase 4 (2300–2600ms): fade out at the tray corner.
+            image.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300))
+                {
+                    BeginTime = TimeSpan.FromMilliseconds(2300),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn },
+                });
 
             // Close and fire toast just after the animation settles.
-            Task.Delay(1700).ContinueWith(_ =>
+            Task.Delay(2700).ContinueWith(_ =>
             {
                 Application.Current.Dispatcher.Invoke(() =>
                 {
