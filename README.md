@@ -8,8 +8,6 @@
 
 <sub>Always at hand. Doesn't touch your files. Built on .NET 10.</sub>
 
-[Download](https://github.com/duartelcunha/Racks/releases/latest) · [Report a bug](https://github.com/duartelcunha/Racks/issues) · [Suggest a feature](https://github.com/duartelcunha/Racks/issues)
-
 </div>
 
 ---
@@ -21,12 +19,6 @@
 ## What it does
 
 Racks lives in the system tray and gives you floating "racks" — small, transparent windows that group files, shortcuts, and folders right on top of your wallpaper. Drag something from the Desktop into a rack and it moves into a clean sandbox; the Desktop stays uncluttered. Open any file picker and your racks appear in the Quick Access sidebar, named exactly the way you named them.
-
-<div align="center">
-  <img src="docs/screenshots/drop-to-clean.gif" alt="Drag a file from the desktop into a rack" width="720" />
-  <br />
-  <sub><i>Drop a file from the Desktop into a rack — the Desktop stays clean.</i></sub>
-</div>
 
 ## Features
 
@@ -42,41 +34,14 @@ Racks lives in the system tray and gives you floating "racks" — small, transpa
 - **Round-trip your layout.** Export every rack to a single JSON file; import it on another machine and the layout is rebuilt.
 
 <div align="center">
-  <img src="docs/screenshots/find-anywhere.gif" alt="Open a rack file from a browser file picker" width="720" />
+  <img src="docs/screenshots/quick-access.png" alt="Racks mirror in Quick Access" width="60%" />
   <br />
   <sub><i>Every rack is reachable from any file picker via the Quick Access sidebar.</i></sub>
 </div>
 
-<div align="center">
-  <img src="docs/screenshots/quick-access.png" alt="Racks mirror in Quick Access" width="46%" />
-  &nbsp;
-  <img src="docs/screenshots/quick-finder.png" alt="Quick Finder overlay" width="46%" />
-</div>
-
 ## Install
 
-### Installer (recommended)
-
-Grab the latest `Racks-Setup-x.y.z.exe` from [Releases](https://github.com/duartelcunha/Racks/releases/latest) and double-click it. Installs per-user under `%LocalAppData%\Programs\Racks` — no admin prompt, no choices, ~5 seconds.
-
-### Build from source
-
-You only need the **.NET 10 SDK** — no Visual Studio.
-
-```powershell
-git clone https://github.com/duartelcunha/Racks.git
-cd Racks
-dotnet build Racks.sln -c Debug
-.\Racks\bin\x64\Debug\net10.0-windows10.0.26100.0\Racks.exe
-```
-
-Portable release builds:
-
-```powershell
-.\publish.ps1                 # framework-dependent (small, needs .NET 10 runtime)
-.\publish.ps1 -SelfContained  # bundles the runtime (~70 MB, no install needed)
-.\publish.ps1 -SingleFile     # everything in one .exe
-```
+Download `Racks-Setup-x.y.z.exe` and double-click it. Installs per-user under `%LocalAppData%\Programs\Racks` — no admin prompt, no choices, ~5 seconds.
 
 ## Usage
 
@@ -98,29 +63,14 @@ Right-click an empty area of the tray icon for the global menu (new rack, quick 
 ## Screenshots
 
 <div align="center">
-  <table>
-    <tr>
-      <td><img src="docs/screenshots/themes.png" alt="Theme presets" /></td>
-      <td><img src="docs/screenshots/settings.png" alt="Per-rack menu" /></td>
-    </tr>
-    <tr>
-      <td align="center"><sub>Seven coordinated theme presets</sub></td>
-      <td align="center"><sub>Slim per-rack context menu</sub></td>
-    </tr>
-  </table>
+  <img src="docs/screenshots/settings.png" alt="Per-rack menu" width="60%" />
+  <br />
+  <sub><i>Slim per-rack context menu.</i></sub>
 </div>
 
 ## License
 
-MIT. See [`LICENSE.txt`](LICENSE.txt).
+Racks is proprietary software. © 2026 Duarte L. Cunha. All rights reserved.
+Free to install and use; redistribution, modification, and reverse engineering are not permitted. See [`LICENSE.txt`](LICENSE.txt).
 
-## Credits
-
-Built on the shoulders of:
-
-- [WPF UI](https://github.com/lepoco/wpfui)
-- [WindowsCommunityToolkit](https://github.com/CommunityToolkit/WindowsCommunityToolkit)
-- [SVG.NET](https://github.com/svg-net/SVG)
-- [VirtualDesktop](https://github.com/Slion/VirtualDesktop)
-- [H.Hooks](https://github.com/HavenDV/H.Hooks)
-- [Microsoft.WindowsAPICodePack.Shell](https://github.com/contre/Windows-API-Code-Pack-1.1)
+Third-party components and required upstream attributions are listed in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

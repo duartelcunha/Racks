@@ -42,21 +42,16 @@
                 <Separator Margin="0,8" Width="auto" />
 
              
-                <TextBlock Text="Licensed under the MIT License"
+                <TextBlock Text="© 2026 Duarte L. Cunha"
                            Margin="0,4,0,0"
                            FontSize="12"
                            Opacity="0.75"
                            HorizontalAlignment="Center"/>
-                <TextBlock x:Name="Profile_TextBlock"
-                           Text="View source on GitHub"
-                           Margin="0,4,0,0"
+                <TextBlock Text="All rights reserved"
+                           Margin="0,2,0,0"
                            FontSize="11"
-                           HorizontalAlignment="Center"
                            Opacity="0.6"
-                           Cursor="Hand"
-                           MouseEnter="Profile_TextBlock_MouseEnter"
-                           MouseLeave="Profile_TextBlock_MouseLeave"
-                           MouseLeftButtonUp="Profile_TextBlock_MouseLeftButtonUp"/>
+                           HorizontalAlignment="Center"/>
 
             </StackPanel>
         </StackPanel>

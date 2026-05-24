@@ -1,21 +1,35 @@
-MIT License
+Racks
+Copyright (c) 2026 Duarte L. Cunha. All rights reserved.
 
-Copyright (c) 2025 PinchToDebug
+This software, the accompanying installer, and all related files (the
+"Software") are the proprietary work of Duarte L. Cunha.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+You may install and use unmodified copies of the Software for personal use
+free of charge. You may NOT, in whole or in part:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+  - copy, modify, adapt, translate, or create derivative works of the
+    Software;
+  - decompile, disassemble, reverse engineer, or attempt to derive the
+    source code of the Software, except to the extent that such activity is
+    expressly permitted by applicable law notwithstanding this limitation;
+  - redistribute, sell, sublicense, rent, lease, host, or otherwise make the
+    Software available to any third party;
+  - use the Software, in whole or in part, to create a competing product;
+  - remove, alter, or obscure any copyright, trademark, or other proprietary
+    notice contained in or on the Software.
+
+All rights not expressly granted are reserved by Duarte L. Cunha. No license
+is granted by implication, estoppel, or otherwise.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+---
+
+Racks incorporates code originally distributed under the MIT License.
+Required attribution and the full text of those upstream licenses are
+reproduced in THIRD-PARTY-NOTICES.md.
