@@ -1,12 +1,14 @@
 <div align="center">
 
-<img src="Racks/ico.png" width="96" height="96" alt="Racks icon" />
+<img src="docs/icon.png" width="96" height="96" alt="Racks icon" />
 
 # Racks
 
 **A fast, lightweight desktop organizer for Windows.**
 
 <sub>Always at hand. Doesn't touch your files. Built on .NET 10.</sub>
+
+[**Download Racks**](https://github.com/duartelcunha/Racks/releases/latest)
 
 </div>
 
