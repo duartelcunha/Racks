@@ -45,7 +45,7 @@ this script. If you installed to a non-default location, pass -IsccPath:
 $csprojPath = Join-Path $PSScriptRoot "Racks\Racks.csproj"
 [xml]$csproj = Get-Content $csprojPath
 $version = $csproj.Project.PropertyGroup.AssemblyVersion | Where-Object { $_ } | Select-Object -First 1
-if (-not $version) { $version = "2.0.0" }
+if (-not $version) { $version = "0.8.0" }
 Write-Host "Building installer for Racks $version"
 
 # --- Step 1: produce a self-contained publish folder. ---

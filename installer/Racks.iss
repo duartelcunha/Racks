@@ -13,7 +13,7 @@
 ; IDE during development.
 
 #ifndef AppVersion
-  #define AppVersion "2.0.0"
+  #define AppVersion "0.8.0"
 #endif
 
 #define AppName "Racks"

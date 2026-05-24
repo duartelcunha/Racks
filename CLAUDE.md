@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Racks is a WPF desktop organizer for Windows 10/11 — a heavily reworked fork of MIT-licensed DeskFrame. It runs as a tray-resident app and shows one floating "rack" window per folder the user has set up. The project is **.NET 10**, single C# project (`Racks/Racks.csproj`), WinExe. AssemblyVersion is `2.0.0` in `Racks/Racks.csproj`.
+Racks is a WPF desktop organizer for Windows 10/11 — a heavily reworked fork of MIT-licensed DeskFrame. It runs as a tray-resident app and shows one floating "rack" window per folder the user has set up. The project is **.NET 10**, single C# project (`Racks/Racks.csproj`), WinExe. AssemblyVersion is `0.8.0` in `Racks/Racks.csproj`.
 
 ## Build / run / publish
 
