@@ -19,31 +19,27 @@ Floating racks that group your files. Tray-resident. Doesn't touch the originals
   <img src="https://img.shields.io/badge/.NET-10-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 10" />
 </p>
 
-<sub>If Racks saves your desktop, consider <a href="https://github.com/duartelcunha/Racks">⭐ starring the repo</a> — it genuinely helps.</sub>
+<sub>If Racks earns a spot on your desktop, consider <a href="https://github.com/duartelcunha/Racks">⭐ starring the repo</a> — it genuinely helps.</sub>
+
+<br />
+
+<img src="docs/screenshots/demo-3.gif" alt="Dragging files from the desktop into a rack" width="80%" />
+
+<sub><i>Drag → drop → done. Your desktop stays empty, your files stay yours.</i></sub>
 
 </div>
 
 ---
 
-<div align="center">
-  <img src="docs/screenshots/hero.png" alt="Racks running on the Windows desktop" width="100%" />
-</div>
-
 ## The desktop tax
 
 You know the cycle. Files pile up on the desktop "just for a minute." A minute becomes a month. You spend ten seconds finding `report-final-v3.docx` every time, and tidying means a 20-minute archaeology session you keep postponing.
 
-Racks fixes this without asking you to change a single habit. You still drag files onto your desktop — they just land in the right place automatically.
-
-<div align="center">
-  <img src="docs/screenshots/demo-3.gif" alt="Dragging files from the desktop into a rack" width="80%" />
-  <br />
-  <sub><i>Drag → drop → done. Your desktop stays empty, your files stay yours.</i></sub>
-</div>
+**Racks fixes this without asking you to change a single habit.** You still drag files onto your desktop — they just land in the right place automatically.
 
 ## Why people keep it installed
 
-- 🎯 **Drop-and-forget.** Drag anything onto a rack — file, folder, browser tab, shortcut. It lands in a clean sandbox in AppData. Your Desktop wallpaper is visible again.
+- 🎯 **Drop-and-forget.** Drag anything onto a rack — file, folder, browser tab, shortcut. It lands in a clean sandbox. Your wallpaper is visible again.
 - 🔍 **Quick Finder.** `Ctrl+Shift+Space` opens a Spotlight-style search across every rack. Type, `Enter`, you're in the file.
 - 🤖 **Auto-route by regex.** Set a pattern per rack (`\.pdf$`, `^Invoice-`, whatever) — matching files dropped on the Desktop are routed instantly. Screenshots into "Screenshots," invoices into "Finance," and you never lift a finger.
 - 📂 **Lives in every file picker.** Racks are pinned to Explorer Quick Access on first launch. Upload from a browser? Click "Racks" in the sidebar, click the rack, done.
@@ -56,30 +52,24 @@ Racks fixes this without asking you to change a single habit. You still drag fil
 
 <table>
   <tr>
-    <td width="50%" align="center">
+    <td width="50%" align="center" valign="top">
       <img src="docs/screenshots/demo-1.gif" alt="Reordering items inside a rack" width="100%" />
       <br />
       <sub><b>Phone-style reorder.</b><br/>Drag tiles inside a rack. Smooth animation, no flicker.</sub>
     </td>
-    <td width="50%" align="center">
+    <td width="50%" align="center" valign="top">
       <img src="docs/screenshots/demo-2.gif" alt="Collapsing and expanding racks" width="100%" />
       <br />
       <sub><b>Collapse to the title bar.</b><br/>Tuck a rack out of the way without losing it.</sub>
     </td>
   </tr>
-  <tr>
-    <td width="50%" align="center">
-      <img src="docs/screenshots/settings.png" alt="Rack settings dialog" width="100%" />
-      <br />
-      <sub><b>Customize every pixel.</b><br/>Colors, fonts, regex filters, opacity, snap, lock.</sub>
-    </td>
-    <td width="50%" align="center">
-      <img src="docs/screenshots/quick-access.png" alt="Racks in Quick Access" width="100%" />
-      <br />
-      <sub><b>Quick Access integration.</b><br/>Every rack reachable from any file picker.</sub>
-    </td>
-  </tr>
 </table>
+
+<div align="center">
+  <img src="docs/screenshots/settings.png" alt="Rack settings dialog" width="85%" />
+  <br />
+  <sub><b>Customize every pixel.</b> Colors, fonts, regex filters, opacity, snap, lock — per rack.</sub>
+</div>
 
 ## Install
 
@@ -111,7 +101,7 @@ Right-click the tray icon for the global menu (new rack, hide desktop, import/ex
 ## FAQ
 
 **Does Racks move my files around behind my back?**
-No. A default drop *moves* the file from the Desktop into the rack's sandbox (so the Desktop stays clean). Hold `Ctrl` to keep the original where it was. Removing a rack only ever deletes its own sandbox in AppData — never a real folder you pointed it at.
+No. A default drop *moves* the file from the Desktop into the rack's sandbox (so the Desktop stays clean). Hold `Ctrl` to keep the original where it was. Removing a rack only ever deletes its own sandbox — never a real folder you pointed it at.
 
 **Will it slow my PC down?**
 Idle CPU is ~0%. Memory sits around 60–90 MB. There's no background indexer.
