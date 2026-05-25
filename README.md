@@ -4,10 +4,9 @@
 
 # Racks
 
-### Your desktop, finally organized.
+### A floating desktop organizer for Windows.
 
-**A fast, lightweight desktop organizer for Windows 10/11.**
-Floating racks that group your files. Tray-resident. Doesn't touch the originals.
+<sub>Tray-resident. Drop files into racks instead of onto your desktop. Doesn't touch the originals.</sub>
 
 <p>
   <a href="https://github.com/duartelcunha/Racks/releases/latest"><img src="https://img.shields.io/github/v/release/duartelcunha/Racks?style=for-the-badge&label=Download&color=2ea043" alt="Download" /></a>
@@ -19,57 +18,70 @@ Floating racks that group your files. Tray-resident. Doesn't touch the originals
   <img src="https://img.shields.io/badge/.NET-10-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 10" />
 </p>
 
-<sub>If Racks earns a spot on your desktop, consider <a href="https://github.com/duartelcunha/Racks">⭐ starring the repo</a> — it genuinely helps.</sub>
-
 <br />
 
-<img src="docs/screenshots/demo-3.gif" alt="Dragging files from the desktop into a rack" width="80%" />
-
-<sub><i>Drag → drop → done. Your desktop stays empty, your files stay yours.</i></sub>
+<img src="docs/screenshots/demo-3.gif" alt="Dragging files from the desktop into a rack" width="100%" />
 
 </div>
 
 ---
 
-## The desktop tax
+## What it does
 
-You know the cycle. Files pile up on the desktop "just for a minute." A minute becomes a month. You spend ten seconds finding `report-final-v3.docx` every time, and tidying means a 20-minute archaeology session you keep postponing.
+Racks lives in your system tray. Click **New rack** and a floating window appears on your wallpaper. Drag files into it — they're moved into a clean sandbox, one click away. Pin it, theme it, regex-route to it, search across every rack with a hotkey.
 
-**Racks fixes this without asking you to change a single habit.** You still drag files onto your desktop — they just land in the right place automatically.
+That's it. No cloud, no telemetry, no background indexer.
 
-## Why people keep it installed
+<br />
 
-- 🎯 **Drop-and-forget.** Drag anything onto a rack — file, folder, browser tab, shortcut. It lands in a clean sandbox. Your wallpaper is visible again.
-- 🔍 **Quick Finder.** `Ctrl+Shift+Space` opens a Spotlight-style search across every rack. Type, `Enter`, you're in the file.
-- 🤖 **Auto-route by regex.** Set a pattern per rack (`\.pdf$`, `^Invoice-`, whatever) — matching files dropped on the Desktop are routed instantly. Screenshots into "Screenshots," invoices into "Finance," and you never lift a finger.
-- 📂 **Lives in every file picker.** Racks are pinned to Explorer Quick Access on first launch. Upload from a browser? Click "Racks" in the sidebar, click the rack, done.
-- 🎨 **Make it yours.** Seven theme presets plus full hex/regex/opacity controls. Round corners, custom fonts, per-rack icon sizes, animation speed, grayscale-when-inactive — all of it.
-- 🛡️ **Safe by design.** Removing a rack only ever deletes its own sandbox. Point a rack at `Documents` and remove it — `Documents` is exactly as you left it.
-- 💨 **It gets out of the way.** Double-click the wallpaper to hide every rack instantly. Hot corner brings them back.
-- ✈️ **Round-trip your layout.** One JSON file exports every rack, every theme, every setting. Restore on a new machine in one click.
+## Drag in. Done.
 
-## See it in action
+Anything you drop on a rack — file, folder, browser tab, app shortcut — lands in a clean sandbox in AppData. Your desktop stays empty without you ever opening a file manager.
 
-<table>
-  <tr>
-    <td width="50%" align="center" valign="top">
-      <img src="docs/screenshots/demo-1.gif" alt="Reordering items inside a rack" width="100%" />
-      <br />
-      <sub><b>Phone-style reorder.</b><br/>Drag tiles inside a rack. Smooth animation, no flicker.</sub>
-    </td>
-    <td width="50%" align="center" valign="top">
-      <img src="docs/screenshots/demo-2.gif" alt="Collapsing and expanding racks" width="100%" />
-      <br />
-      <sub><b>Collapse to the title bar.</b><br/>Tuck a rack out of the way without losing it.</sub>
-    </td>
-  </tr>
-</table>
+Hold `Ctrl` to keep the original where it was. Hold `Shift` to drag a tile *out* of the rack into any other app. That's the entire mental model.
+
+<br />
+
+## Reorder like a phone
 
 <div align="center">
-  <img src="docs/screenshots/settings.png" alt="Rack settings dialog" width="85%" />
-  <br />
-  <sub><b>Customize every pixel.</b> Colors, fonts, regex filters, opacity, snap, lock — per rack.</sub>
+  <img src="docs/screenshots/demo-1.gif" alt="Reordering items inside a rack" width="100%" />
 </div>
+
+Drag tiles inside a rack to reorder them. Smooth animation, no flicker, no save button. The order sticks across restarts.
+
+<br />
+
+## Collapse it out of the way
+
+<div align="center">
+  <img src="docs/screenshots/demo-2.gif" alt="Collapsing and expanding a rack" width="100%" />
+</div>
+
+Click the chevron and a rack folds into its title bar — taking up almost no space but still one click away. Double-click empty wallpaper to hide every rack at once.
+
+<br />
+
+## Customize every pixel
+
+<div align="center">
+  <img src="docs/screenshots/settings.png" alt="Per-rack settings dialog" width="100%" />
+</div>
+
+Per-rack settings for colors (hex picker, with active/inactive states), fonts, icon size, opacity, snap-to-grid, lock, animation speed, regex filters for what to show or hide, and seven one-click theme presets. Set defaults globally; override anything per rack.
+
+<br />
+
+## Also in the box
+
+- 🔍 **Quick Finder.** `Ctrl+Shift+Space` opens a Spotlight-style search across every rack. Type, `Enter`, you're in the file.
+- 🤖 **Auto-route by regex.** Per-rack patterns (`\.pdf$`, `^Invoice-`, anything) — matching files dropped on the Desktop are moved in automatically. Screenshots into "Screenshots," invoices into "Finance."
+- 📂 **Lives in every file picker.** Racks are pinned to Explorer Quick Access on first launch. Uploading from a browser? Click "Racks" in the sidebar, click the rack, done.
+- 🛡️ **Safe by design.** Removing a rack only ever deletes its own sandbox. Point a rack at `Documents` and remove it — `Documents` is exactly as you left it.
+- 🖥️ **Multi-monitor aware.** Unplug a screen and racks snap back to the primary instead of being stranded off-screen.
+- ✈️ **Round-trip your layout.** One JSON file exports every rack, every theme, every setting. Restore on a new machine in one click.
+
+<br />
 
 ## Install
 
@@ -82,6 +94,8 @@ You know the cycle. Files pile up on the desktop "just for a minute." A minute b
 Double-click `Racks-Setup-x.y.z.exe`. Installs per-user under `%LocalAppData%\Programs\Racks` — **no admin prompt, no choices, ~5 seconds**. Racks starts in the system tray; right-click the tray icon to create your first rack.
 
 > **Prefer portable?** Grab the `Racks-portable-x.y.z.zip` from the same release page and run `Racks.exe` directly. Settings live in the registry under `HKCU\SOFTWARE\Racks`.
+
+<br />
 
 ## Shortcuts
 
@@ -98,23 +112,29 @@ Double-click `Racks-Setup-x.y.z.exe`. Installs per-user under `%LocalAppData%\Pr
 
 Right-click the tray icon for the global menu (new rack, hide desktop, import/export layout, settings). Right-click any rack's title bar for per-rack options.
 
+<br />
+
 ## FAQ
 
 **Does Racks move my files around behind my back?**
 No. A default drop *moves* the file from the Desktop into the rack's sandbox (so the Desktop stays clean). Hold `Ctrl` to keep the original where it was. Removing a rack only ever deletes its own sandbox — never a real folder you pointed it at.
 
 **Will it slow my PC down?**
-Idle CPU is ~0%. Memory sits around 60–90 MB. There's no background indexer.
+Idle CPU is ~0%. Memory sits around 60–90 MB. No background indexer.
 
 **Does it phone home?**
-No telemetry, no analytics, no auto-updates pinging a server. It's a single `.exe` that talks to the Windows shell and the registry, full stop.
+No telemetry, no analytics, no auto-update pings. A single `.exe` talking to the Windows shell and the registry.
 
-**What if Explorer crashes / I unplug a monitor?**
-Racks listens for `WM_DISPLAYCHANGE` and the Explorer `TaskbarCreated` message and recovers automatically. Racks on a disconnected monitor snap back to the primary instead of being stranded off-screen.
+**What if Explorer crashes or I unplug a monitor?**
+Racks listens for `WM_DISPLAYCHANGE` and the Explorer `TaskbarCreated` message and recovers automatically. Racks on a disconnected monitor snap back to the primary instead of being stranded.
+
+<br />
 
 ## Star the repo ⭐
 
-If Racks earns a spot on your machine, **[give it a star](https://github.com/duartelcunha/Racks)**. Stars are how this project gets discovered by other people drowning in desktop clutter — and they're the only feedback signal I have that the work is worth continuing.
+If Racks earns a spot on your machine, **[give it a star](https://github.com/duartelcunha/Racks)**. Stars are how this project gets discovered by other people drowning in desktop clutter — and the only feedback signal that tells me the work is worth continuing.
+
+<br />
 
 ## License
 
