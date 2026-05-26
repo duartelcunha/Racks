@@ -365,3 +365,11 @@ FodyWeavers.xsd
 # Installer build output (Inno Setup .exe) and portable publish output
 installer/Output/
 publish/
+
+# Local AI-assistant config and notes (do not publish)
+.claude/
+CLAUDE.md
+.cursor/
+.aider*
+.github/copilot-instructions.md
+blur-screenshots.ps1
