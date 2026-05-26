@@ -2,11 +2,13 @@ using Microsoft.Win32;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using Wpf.Ui.Controls;
 using Color = System.Windows.Media.Color;
 using Racks.ColorPicker;
 using System.IO;
 using System.Drawing.Text;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using TextBox = Wpf.Ui.Controls.TextBox;
 using Brush = System.Windows.Media.Brush;
@@ -14,44 +16,56 @@ using WindowsDesktop;
 using System.Windows.Controls;
 using MenuItem = Wpf.Ui.Controls.MenuItem;
 using ContextMenu = System.Windows.Controls.ContextMenu;
+
 namespace Racks
 {
-    public partial class FrameSettingsDialog : FluentWindow
+    public partial class RackSettingsDialog : FluentWindow
     {
-        private RackWindow _frame;
-        private Instance _instance;
-        private Instance _originalInstance;
-        private bool _isValidTitleBarColor = false;
-        private bool _isValidTitleTextColor = false;
+        private readonly RackWindow _frame;
+        private readonly Instance _instance;
+        private readonly Instance _originalInstance;
+
+        private bool _isValidTitleBarColor;
+        private bool _isValidTitleTextColor;
         private bool _isValidTitleTextAlignment = true;
-        private bool _isValidBorderColor = false;
-        private bool _isValidActiveBorderColor = false;
-        private bool _isValidActiveBackgroundColor = false;
-        private bool _isValidActiveTitleTextColor = false;
+        private bool _isValidBorderColor;
+        private bool _isValidActiveBorderColor;
+        private bool _isValidActiveBackgroundColor;
+        private bool _isValidActiveTitleTextColor;
         private bool _isValidFileFilterRegex = true;
         private bool _isValidFileFilterHideRegex = true;
         private bool _isValidListViewBackgroundColor = true;
         private bool _isValidListViewFontColor = true;
         private bool _isValidListViewFontShadowColor = true;
         private bool _isValidShowOnVirtualDesktops = true;
-        private bool _isReverting = false;
-        private bool _initDone = false;
-        string _lastInstanceName;
+        private bool _isReverting;
+        private bool _initDone;
+
+        private string _lastInstanceName;
         private Brush _borderBrush;
         private Brush _backgroundBrush;
-        public ObservableCollection<string> FontList;
 
-        public FrameSettingsDialog(RackWindow frame)
+        public ObservableCollection<string> FontList { get; }
+
+        private ScrollViewer[] _pages;
+
+        public RackSettingsDialog(RackWindow frame)
         {
             InitializeComponent();
+
+            this.Owner = frame;
+
             _backgroundBrush = TitleBarColorTextBox.Background;
             _borderBrush = TitleBarColorTextBox.BorderBrush;
-            // DataContext = this;
+
             _originalInstance = new Instance(frame.Instance, frame.Instance.SettingDefault);
             _lastInstanceName = _originalInstance.Name;
             _frame = frame;
             _instance = frame.Instance;
             DataContext = _instance;
+
+            _pages = new[] { PageAppearance, PageTitleBar, PageItems, PageWindow, PageFolder };
+
             GrayScaleEnabled_CheckBox.IsChecked = _instance.GrayScaleEnabled;
             GrayScaleEnabled_InactiveOnly_CheckBox.IsChecked = _instance.GrayScaleEnabled_InactiveOnly;
             MaxGrayScaleStrengthSlider.Value = _instance.MaxGrayScaleStrength * 10;
@@ -67,14 +81,16 @@ namespace Racks
                 FileFilterRegexTextBox.Visibility = Visibility.Hidden;
                 FileFilterHideRegexTextBox.Visibility = Visibility.Hidden;
             }
+
             AnimationSpeedSlider.Value = _instance.AnimationSpeed * 4;
-            AnimationSpeedLabel.Content = _instance.AnimationSpeed == 0.0 ? "OFF" : "x" + _instance.AnimationSpeed;
+            AnimationSpeedLabel.Text = _instance.AnimationSpeed == 0.0 ? "OFF" : "x" + _instance.AnimationSpeed;
             IdleOpacitySlider.Value = _instance.IdleOpacity * 10;
-            IdleOpacityLabel.Content = _instance.IdleOpacity * 100 + "%";
+            IdleOpacityLabel.Text = _instance.IdleOpacity * 100 + "%";
             IconSizeSlider.Value = _instance.IconSize / 4;
-            IconSizeLabel.Content = _instance.IconSize;
+            IconSizeLabel.Text = _instance.IconSize.ToString();
 
             frame.AnimateWindowOpacity(_instance.IdleOpacity, _instance.AnimationSpeed);
+
             if (!frame.VirtualDesktopSupported)
             {
                 ShowOnVirtualDesktopTextBox.Text = "Not available";
@@ -86,6 +102,7 @@ namespace Racks
                     ? string.Join(",", _instance.ShowOnVirtualDesktops)
                     : string.Empty;
             }
+
             _originalInstance.ShowOnVirtualDesktops = _instance.ShowOnVirtualDesktops;
             _originalInstance.AnimationSpeed = _instance.AnimationSpeed;
             _originalInstance.IdleOpacity = _instance.IdleOpacity;
@@ -94,9 +111,14 @@ namespace Racks
             _originalInstance.SnapWidthToIconWidth = _instance.SnapWidthToIconWidth;
             _originalInstance.SnapWidthToIconWidth_PlusScrollbarWidth = _instance.SnapWidthToIconWidth_PlusScrollbarWidth;
             _originalInstance.ShowShortcutArrow = _instance.ShowShortcutArrow;
-
             _originalInstance.MaxGrayScaleStrength = _instance.MaxGrayScaleStrength;
-
+            _originalInstance.AutoExpandonCursor = _instance.AutoExpandonCursor;
+            _originalInstance.FolderOpenInsideFrame = _instance.FolderOpenInsideFrame;
+            _originalInstance.CheckFolderSize = _instance.CheckFolderSize;
+            _originalInstance.GrayScaleEnabled = _instance.GrayScaleEnabled;
+            _originalInstance.GrayScaleEnabled_InactiveOnly = _instance.GrayScaleEnabled_InactiveOnly;
+            _originalInstance.LastAccesedToFirstRow = _instance.LastAccesedToFirstRow;
+            _originalInstance.TitleText = _instance.TitleText;
 
             TitleBarColorTextBox.Text = _instance.TitleBarColor;
             TitleTextColorTextBox.Text = _instance.TitleTextColor;
@@ -112,11 +134,7 @@ namespace Racks
             ActiveBackgroundEnabledCheckBox.IsChecked = _instance.ActiveBackgroundEnabled;
             ActiveTitleTextEnabledCheckBox.IsChecked = _instance.ActiveTitleTextEnabled;
             TitleTextBox.Text = _instance.TitleText ?? _instance.Name;
-            TitleFontSizeNumberBox.Value = _instance.TitleFontSize;
-            if (!_instance.SettingDefault)
-            {
-                _originalInstance.TitleText = TitleTextBox.Text;
-            }
+            TitleFontSizeNumberBox.Value = _instance.TitleFontSize > 0 ? _instance.TitleFontSize : 13;
             FileFilterRegexTextBox.Text = _instance.FileFilterRegex;
             FileFilterHideRegexTextBox.Text = _instance.FileFilterHideRegex;
             TitleTextAlignmentComboBox.SelectedIndex = (int)_instance.TitleTextAlignment;
@@ -152,14 +170,11 @@ namespace Racks
                     _frame.title.FontSize = args.NewValue.Value;
                     _frame.title.TextWrapping = TextWrapping.Wrap;
 
-                    double titleBarHeight = Math.Max(30, args.NewValue.Value * 1.5);
-                    _frame.titleBar.Height = titleBarHeight;
-
-                    double scrollViewerMargin = titleBarHeight + 5;
-                    _frame.scrollViewer.Margin = new Thickness(0, scrollViewerMargin, 0, 0);
+                    double tbH = Math.Max(30, args.NewValue.Value * 1.5);
+                    _frame.titleBar.Height = tbH;
+                    _frame.scrollViewer.Margin = new Thickness(0, tbH + 5, 0, 0);
                 }
             };
-
 
             FontList = new ObservableCollection<string>();
             InstalledFontCollection fonts = new InstalledFontCollection();
@@ -168,34 +183,175 @@ namespace Racks
                 FontList.Add(font.Name);
             }
 
-            TitleTextAutoSuggestionBox.OriginalItemsSource = FontList;
-            TitleTextAutoSuggestionBox.TextChanged += (sender, args) =>
-            {
-                if (TitleTextAutoSuggestionBox.Text != null)
-                {
-                    _frame.title.FontFamily = new System.Windows.Media.FontFamily(TitleTextAutoSuggestionBox.Text);
-                    _instance.TitleFontFamily = TitleTextAutoSuggestionBox.Text;
-                }
-                else
-                {
-                    _frame.title.FontFamily = new System.Windows.Media.FontFamily(TitleTextAutoSuggestionBox.Text);
+            var fontIndex = new HashSet<string>(FontList, StringComparer.OrdinalIgnoreCase);
 
-                }
-            };
-            ItemTextAutoSuggestionBox.OriginalItemsSource = FontList;
-            ItemTextAutoSuggestionBox.TextChanged += (sender, args) =>
-            {
-                if (ItemTextAutoSuggestionBox.Text != null)
+            TitleTextAutoSuggestionBox.ItemsSource = FontList;
+            TitleTextAutoSuggestionBox.Text = string.IsNullOrEmpty(_instance.TitleFontFamily) ? "Segoe UI" : _instance.TitleFontFamily;
+            TitleTextAutoSuggestionBox.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,
+                new System.Windows.Controls.TextChangedEventHandler((s, e) =>
                 {
-                    _frame.Resources["ItemFont"] = new System.Windows.Media.FontFamily(ItemTextAutoSuggestionBox.Text);
-                    _instance.ItemFontFamily = ItemTextAutoSuggestionBox.Text;
-                }
-                else
+                    if (!_initDone) return;
+                    var val = TitleTextAutoSuggestionBox.Text;
+                    if (string.IsNullOrWhiteSpace(val) || !fontIndex.Contains(val)) return;
+                    _frame.title.FontFamily = new System.Windows.Media.FontFamily(val);
+                    _instance.TitleFontFamily = val;
+                }));
+
+            ItemTextAutoSuggestionBox.ItemsSource = FontList;
+            ItemTextAutoSuggestionBox.Text = string.IsNullOrEmpty(_instance.ItemFontFamily) ? "Segoe UI" : _instance.ItemFontFamily;
+            ItemTextAutoSuggestionBox.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,
+                new System.Windows.Controls.TextChangedEventHandler((s, e) =>
                 {
-                    _frame.Resources["ItemFont"] = new System.Windows.Media.FontFamily(ItemTextAutoSuggestionBox.Text);
-                }
-            };
+                    if (!_initDone) return;
+                    var val = ItemTextAutoSuggestionBox.Text;
+                    if (string.IsNullOrWhiteSpace(val) || !fontIndex.Contains(val)) return;
+                    _frame.Resources["ItemFont"] = new System.Windows.Media.FontFamily(val);
+                    _instance.ItemFontFamily = val;
+                }));
+
             _initDone = true;
+        }
+
+        private int _currentPage = 0;
+
+        private void SectionList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_pages == null) return;
+            int idx = SectionList.SelectedIndex;
+            if (idx < 0) idx = 0;
+            if (idx == _currentPage && _pages[idx].Visibility == Visibility.Visible) return;
+
+            var newPage = _pages[idx];
+            ScrollViewer? oldPage = null;
+            if (_currentPage >= 0 && _currentPage < _pages.Length && _currentPage != idx)
+                oldPage = _pages[_currentPage];
+
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+            if (oldPage != null)
+            {
+                var fadeOut = new DoubleAnimation
+                {
+                    To = 0,
+                    Duration = TimeSpan.FromMilliseconds(110),
+                    EasingFunction = ease
+                };
+                var captured = oldPage;
+                fadeOut.Completed += (_, __) => captured.Visibility = Visibility.Collapsed;
+                oldPage.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+            }
+
+            newPage.Opacity = 0;
+            newPage.Visibility = Visibility.Visible;
+            var slide = new ThicknessAnimation
+            {
+                From = new Thickness(10, 0, -10, 0),
+                To = new Thickness(0),
+                Duration = TimeSpan.FromMilliseconds(220),
+                EasingFunction = ease
+            };
+            var fadeIn = new DoubleAnimation
+            {
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(180),
+                EasingFunction = ease,
+                BeginTime = TimeSpan.FromMilliseconds(60)
+            };
+            newPage.BeginAnimation(FrameworkElement.MarginProperty, slide);
+            newPage.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+
+            _currentPage = idx;
+        }
+
+        private double _rackLastLeft;
+        private double _rackLastTop;
+        private bool _rackTracked;
+
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            DockToRack();
+            _rackLastLeft = _frame.Left;
+            _rackLastTop = _frame.Top;
+            _frame.LocationChanged += Frame_LocationChanged;
+            _frame.SizeChanged += Frame_SizeChanged;
+            _rackTracked = true;
+
+            var fade = new DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(180),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            this.BeginAnimation(UIElement.OpacityProperty, fade);
+        }
+
+        private void Window_Closed(object sender, EventArgs e)
+        {
+            if (_rackTracked)
+            {
+                _frame.LocationChanged -= Frame_LocationChanged;
+                _frame.SizeChanged -= Frame_SizeChanged;
+                _rackTracked = false;
+            }
+        }
+
+        private void Frame_LocationChanged(object? sender, EventArgs e)
+        {
+            double dx = _frame.Left - _rackLastLeft;
+            double dy = _frame.Top - _rackLastTop;
+            _rackLastLeft = _frame.Left;
+            _rackLastTop = _frame.Top;
+            this.Left += dx;
+            this.Top += dy;
+        }
+
+        private void Frame_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            DockToRack();
+            _rackLastLeft = _frame.Left;
+            _rackLastTop = _frame.Top;
+        }
+
+        private void DockToRack()
+        {
+            var workArea = SystemParameters.WorkArea;
+            double gap = 8;
+
+            double rackLeft = _frame.Left;
+            double rackTop = _frame.Top;
+            double rackWidth = _frame.Width;
+            double rackHeight = _frame.Height;
+
+            bool offscreen = _frame.WindowState == WindowState.Minimized
+                || rackLeft < -10000 || rackTop < -10000
+                || double.IsNaN(rackLeft) || double.IsNaN(rackTop);
+
+            if (offscreen)
+            {
+                rackLeft = _instance.PosX > -10000 ? _instance.PosX : workArea.Left + 40;
+                rackTop = _instance.PosY > -10000 ? _instance.PosY : workArea.Top + 40;
+                rackWidth = _instance.Width > 0 ? _instance.Width : 280;
+                rackHeight = _instance.Height > 0 ? _instance.Height : 200;
+            }
+
+            double desiredLeft = rackLeft + rackWidth + gap;
+            if (desiredLeft + this.Width > workArea.Right)
+            {
+                desiredLeft = rackLeft - this.Width - gap;
+                if (desiredLeft < workArea.Left)
+                {
+                    desiredLeft = Math.Max(workArea.Left, workArea.Right - this.Width);
+                }
+            }
+            double desiredTop = rackTop;
+            if (desiredTop + this.Height > workArea.Bottom)
+                desiredTop = workArea.Bottom - this.Height;
+            if (desiredTop < workArea.Top)
+                desiredTop = workArea.Top;
+
+            this.Left = desiredLeft;
+            this.Top = desiredTop;
         }
 
         private void Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -203,35 +359,23 @@ namespace Racks
             if (!_initDone) return;
             ValidateSettings();
         }
+
         private void TextChangedHandler(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
-            ValidateSettings();
-        }
-        private void TitleTextAlignmentComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {
+            if (!_initDone) return;
             ValidateSettings();
         }
 
-        private void BorderEnabledCheckBox_Checked(object sender, RoutedEventArgs e)
+        private void TitleTextAlignmentComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            //  BorderColorTextBox.IsEnabled = BorderEnabledCheckBox.IsChecked == true;
+            if (!_initDone) return;
             ValidateSettings();
         }
-        private void ActiveBorderEnabledCheckBox_Checked(object sender, RoutedEventArgs e)
-        {
-            // ActiveBorderColorTextBox.IsEnabled = ActiveBorderEnabledCheckBox.IsChecked == true;
-            ValidateSettings();
-        }
-        private void ActiveTitleTextEnabledCheckBox_Checked(object sender, RoutedEventArgs e)
-        {
-            //  ActiveTitleTextColorTextBox.IsEnabled = ActiveTitleTextEnabledCheckBox.IsChecked == true;
-            ValidateSettings();
-        }
-        private void ActiveBackgroundEnabledCheckBox_Checked(object sender, RoutedEventArgs e)
-        {
-            //  ActiveBackgroundColorTextBox.IsEnabled = ActiveBackgroundEnabledCheckBox.IsChecked == true;
-            ValidateSettings();
-        }
+
+        private void BorderEnabledCheckBox_Checked(object sender, RoutedEventArgs e) { if (!_initDone) return; ValidateSettings(); }
+        private void ActiveBorderEnabledCheckBox_Checked(object sender, RoutedEventArgs e) { if (!_initDone) return; ValidateSettings(); }
+        private void ActiveTitleTextEnabledCheckBox_Checked(object sender, RoutedEventArgs e) { if (!_initDone) return; ValidateSettings(); }
+        private void ActiveBackgroundEnabledCheckBox_Checked(object sender, RoutedEventArgs e) { if (!_initDone) return; ValidateSettings(); }
 
         private bool ValidateVirtualDesktop(string strValue)
         {
@@ -239,15 +383,16 @@ namespace Racks
                 .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
                 .All(s => int.TryParse(s, out _));
         }
+
         private void ValidateSettings()
         {
             if (_isReverting) return;
             _instance.AnimationSpeed = AnimationSpeedSlider.Value * 0.25;
-            AnimationSpeedLabel.Content = _instance.AnimationSpeed == 0 ? "OFF" : "x" + _instance.AnimationSpeed;
-            _instance.IdleOpacity = IdleOpacitySlider.Value == 0 ? 0.002 :(IdleOpacitySlider.Value / 10);
-            IdleOpacityLabel.Content = _instance.IdleOpacity * 100 + "%";
+            AnimationSpeedLabel.Text = _instance.AnimationSpeed == 0 ? "OFF" : "x" + _instance.AnimationSpeed;
+            _instance.IdleOpacity = IdleOpacitySlider.Value == 0 ? 0.002 : (IdleOpacitySlider.Value / 10);
+            IdleOpacityLabel.Text = _instance.IdleOpacity * 100 + "%";
             _instance.IconSize = (int)(IconSizeSlider.Value * 4);
-            IconSizeLabel.Content = _instance.IconSize;
+            IconSizeLabel.Text = _instance.IconSize.ToString();
 
             _frame.AnimateWindowOpacity(_instance.IdleOpacity, _instance.AnimationSpeed);
             _isValidTitleBarColor = TryParseColor(string.IsNullOrEmpty(TitleBarColorTextBox.Text) ? "#0C000000" : TitleBarColorTextBox.Text, TitleBarColorTextBox);
@@ -264,7 +409,8 @@ namespace Racks
             _isValidListViewFontColor = TryParseColor(string.IsNullOrEmpty(ListViewFontColorTextBox.Text) ? "#FFFFFF" : ListViewFontColorTextBox.Text, ListViewFontColorTextBox);
             _isValidListViewFontShadowColor = TryParseColor(string.IsNullOrEmpty(ListViewFontShadowColorTextBox.Text) ? "#000000" : ListViewFontShadowColorTextBox.Text, ListViewFontShadowColorTextBox);
 
-            _isValidShowOnVirtualDesktops = ValidateVirtualDesktop(ShowOnVirtualDesktopTextBox.Text);
+            _isValidShowOnVirtualDesktops = !_frame.VirtualDesktopSupported
+                || ValidateVirtualDesktop(ShowOnVirtualDesktopTextBox.Text);
 
             if (_isValidTitleBarColor && _isValidTitleTextColor && _isValidTitleTextAlignment &&
                 _isValidBorderColor && _isValidActiveBorderColor && _isValidActiveBackgroundColor && _isValidActiveTitleTextColor && _isValidFileFilterRegex && _isValidFileFilterHideRegex &&
@@ -293,28 +439,30 @@ namespace Racks
                 _instance.Opacity = ((Color)System.Windows.Media.ColorConverter.ConvertFromString(_instance.ListViewBackgroundColor)).A;
                 _instance.TitleFontSize = TitleFontSizeNumberBox.Value ?? 12;
 
-                var parts = ShowOnVirtualDesktopTextBox.Text
-                    .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
-                _instance.ShowOnVirtualDesktops = parts.Length > 0
-                    ? parts.Select(s => int.Parse(s)).ToArray()
-                    : null;
-
-                if (_instance.ShowOnVirtualDesktops != null && !_instance.ShowOnVirtualDesktops.Contains(Array.IndexOf(VirtualDesktop.GetDesktops(), VirtualDesktop.Current) + 1))
+                if (_frame.VirtualDesktopSupported)
                 {
-                    _frame.Hide();
-                }
-                else
-                {
-                    _frame.Show();
-                    this.Activate();
+                    var parts = ShowOnVirtualDesktopTextBox.Text
+                        .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+                    _instance.ShowOnVirtualDesktops = parts.Length > 0
+                        ? parts.Select(s => int.Parse(s)).ToArray()
+                        : null;
+
+                    if (_instance.ShowOnVirtualDesktops != null && !_instance.ShowOnVirtualDesktops.Contains(Array.IndexOf(VirtualDesktop.GetDesktops(), VirtualDesktop.Current) + 1))
+                    {
+                        _frame.Hide();
+                    }
+                    else
+                    {
+                        _frame.Show();
+                        this.Activate();
+                    }
                 }
                 _frame.titleBar.Background = new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(_instance.TitleBarColor));
                 _frame.title.Foreground = new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(_instance.TitleTextColor));
                 _frame.title.Text = TitleTextBox.Text == "" ? _instance.Name : _instance.TitleText;
 
-                _frame.WindowBackground.Background = new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(_instance.ListViewBackgroundColor)); ;
-
+                _frame.WindowBackground.Background = new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(_instance.ListViewBackgroundColor));
 
                 TitleBarColorTextBox.Icon!.Foreground = new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(_instance.TitleBarColor));
                 TitleTextColorTextBox.Icon!.Foreground = new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(_instance.TitleTextColor));
@@ -367,13 +515,12 @@ namespace Racks
 
         private async void RevertButton_Click(object sender, RoutedEventArgs e)
         {
-
             var dialog = new Wpf.Ui.Controls.MessageBox
             {
                 Title = "Confirm",
-                Content = "Are you sure you want to revert it?",
-                PrimaryButtonText = "Yes",
-                CloseButtonText = "No"
+                Content = "Revert all settings to the values they had when you opened this window?",
+                PrimaryButtonText = "Revert",
+                CloseButtonText = "Cancel"
             };
 
             var result = await dialog.ShowDialogAsync();
@@ -433,18 +580,16 @@ namespace Racks
                     MainWindow._controller.WriteOverInstanceToKey(_instance, name);
                     _frame.LoadFiles(_frame._currentFolderPath);
                     _frame.InitializeFileWatchers();
-
                 }
-
 
                 _frame.TitleBarIconsFadeAnimation(!_instance.HideTitleBarIconsWhenInactive);
                 AnimationSpeedSlider.Value = _originalInstance.AnimationSpeed * 4;
-                AnimationSpeedLabel.Content = _originalInstance.AnimationSpeed == 0.0 ? "OFF" : "x" + _originalInstance.AnimationSpeed;
+                AnimationSpeedLabel.Text = _originalInstance.AnimationSpeed == 0.0 ? "OFF" : "x" + _originalInstance.AnimationSpeed;
                 IdleOpacitySlider.Value = _instance.IdleOpacity * 10;
                 _frame.AnimateWindowOpacity(_instance.IdleOpacity, _instance.AnimationSpeed);
-                IdleOpacityLabel.Content = _instance.IdleOpacity * 100 + "%";
+                IdleOpacityLabel.Text = _instance.IdleOpacity * 100 + "%";
                 IconSizeSlider.Value = _instance.IconSize / 4;
-                IconSizeLabel.Content = _instance.IconSize;
+                IconSizeLabel.Text = _instance.IconSize.ToString();
 
                 PositionX_NumberBox.Value = _originalInstance.PosX;
                 PositionY_NumberBox.Value = _originalInstance.PosY;
@@ -493,7 +638,6 @@ namespace Racks
 
                 ShowLastAccessedToFirstRowCheckBox.IsChecked = _instance.LastAccesedToFirstRow;
 
-
                 ShowOnVirtualDesktopTextBox.Text = _instance.ShowOnVirtualDesktops != null
                       ? string.Join(",", _instance.ShowOnVirtualDesktops)
                       : string.Empty;
@@ -509,51 +653,17 @@ namespace Racks
                 _isReverting = false;
                 ValidateSettings();
             }
-
         }
+
         private void OpenColorPicker(System.Windows.Controls.TextBox textbox)
         {
             ColorCard.Children.Clear();
             var colorPicker = new ColorPicker.ColorPicker(textbox);
             ColorCard.Children.Add(colorPicker);
+
+            uiFlyout.PlacementTarget = textbox;
+            uiFlyout.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
             uiFlyout.IsOpen = true;
-        }
-
-        private void BorderColorButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (BorderEnabledCheckBox.IsChecked == false) return;
-            OpenColorPicker(BorderColorTextBox);
-        }
-
-        private void ActiveBorderColorButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (ActiveBorderEnabledCheckBox.IsChecked == false) return;
-            OpenColorPicker(ActiveBorderColorTextBox);
-        }
-        private void ActiveBackgroundColorButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (ActiveBackgroundEnabledCheckBox.IsChecked == false) return;
-            OpenColorPicker(ActiveBackgroundColorTextBox);
-        }
-        private void ActiveTitleTextColorButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (ActiveTitleTextEnabledCheckBox.IsChecked == false) return;
-            OpenColorPicker(ActiveTitleTextColorTextBox);
-        }
-        private void FilesBackgroundColorButton_Click(object sender, RoutedEventArgs e)
-        {
-            ColorCard.Children.Clear();
-            OpenColorPicker(ListViewBackgroundColorTextBox);
-        }
-
-        private void TitleTextColorButton_Click(object sender, RoutedEventArgs e)
-        {
-            OpenColorPicker(TitleTextColorTextBox);
-        }
-
-        private void TitleBarColorButton_Click(object sender, RoutedEventArgs e)
-        {
-            OpenColorPicker(TitleBarColorTextBox);
         }
 
         private void Titlebar_CloseClicked(TitleBar sender, RoutedEventArgs args)
@@ -578,24 +688,27 @@ namespace Racks
             _instance.ShowDisplayName = ShowDisplayNameCheckBox.IsChecked ?? true;
             _frame.UpdateIconVisibility();
         }
+
         private void HideTitleBarIconsWhenInactive_CheckBox_Checked(object sender, RoutedEventArgs e)
         {
             _instance.HideTitleBarIconsWhenInactive = HideTitleBarIconsWhenInactive_CheckBox.IsChecked ?? true;
             _frame.TitleBarIconsFadeAnimation(!_instance.HideTitleBarIconsWhenInactive);
         }
+
         private void SnapWidthToIconWidth_CheckBox_Checked(object sender, RoutedEventArgs e)
         {
             _instance.SnapWidthToIconWidth = SnapWidthToIconWidth_CheckBox.IsChecked ?? true;
             SnapWidthToIconWidth_PlusScrollbarWidth_CheckBox.Visibility = _instance.SnapWidthToIconWidth ? Visibility.Visible : Visibility.Collapsed;
         }
+
         private void SnapWidthToIconWidth_PlusScrollbarWidth_CheckBox_Checked(object sender, RoutedEventArgs e)
         {
             _instance.SnapWidthToIconWidth_PlusScrollbarWidth = SnapWidthToIconWidth_PlusScrollbarWidth_CheckBox.IsChecked ?? true;
         }
-        private void AutoExpandonCursorCheckBox_Checked(object sender, RoutedEventArgs e)
-        {
-            _instance.AutoExpandonCursor = true;
-        }
+
+        private void AutoExpandonCursorCheckBox_Checked(object sender, RoutedEventArgs e) => _instance.AutoExpandonCursor = true;
+        private void AutoExpandonCursorCheckBox_Unchecked(object sender, RoutedEventArgs e) => _instance.AutoExpandonCursor = false;
+
         private void GrayScaleEnabled_CheckBox_Checked(object sender, RoutedEventArgs e)
         {
             _instance.GrayScaleEnabled = (bool)GrayScaleEnabled_CheckBox.IsChecked!;
@@ -610,49 +723,33 @@ namespace Racks
                 _frame.AnimateGrayScale(0, _instance.MaxGrayScaleStrength);
             }
         }
+
         private void GrayScaleEnabled_InactiveOnly_CheckBox_Checked(object sender, RoutedEventArgs e)
         {
             _instance.GrayScaleEnabled_InactiveOnly = (bool)GrayScaleEnabled_InactiveOnly_CheckBox.IsChecked!;
         }
 
-        private void AutoExpandonCursorCheckBox_Unchecked(object sender, RoutedEventArgs e)
-        {
-            _instance.AutoExpandonCursor = false;
-        }
-        private void ShowShortcutArrowCheckBox_Checked(object sender, RoutedEventArgs e)
-        {
-            _instance.ShowShortcutArrow = true;
-        }
-        private void ShowShortcutArrowCheckBox_Unchecked(object sender, RoutedEventArgs e)
-        {
-            _instance.ShowShortcutArrow = false;
-        }
-        private void FolderOpenInsideFrameCheckBox_Checked(object sender, RoutedEventArgs e)
-        {
-            _instance.FolderOpenInsideFrame = true;
-        }
-        private void FolderOpenInsideFrameCheckBox_Unchecked(object sender, RoutedEventArgs e)
-        {
-            _instance.FolderOpenInsideFrame = false;
-        }
-        private void CheckFolderSizeCheckBox_Checkked(object sender, RoutedEventArgs e)
-        {
-            _instance.CheckFolderSize = true;
-        }
-        private void CheckFolderSizeCheckBox_Uncheckked(object sender, RoutedEventArgs e)
-        {
-            _instance.CheckFolderSize = false;
-        }
+        private void ShowShortcutArrowCheckBox_Checked(object sender, RoutedEventArgs e) => _instance.ShowShortcutArrow = true;
+        private void ShowShortcutArrowCheckBox_Unchecked(object sender, RoutedEventArgs e) => _instance.ShowShortcutArrow = false;
+
+        private void FolderOpenInsideFrameCheckBox_Checked(object sender, RoutedEventArgs e) => _instance.FolderOpenInsideFrame = true;
+        private void FolderOpenInsideFrameCheckBox_Unchecked(object sender, RoutedEventArgs e) => _instance.FolderOpenInsideFrame = false;
+
+        private void CheckFolderSizeCheckBox_Checkked(object sender, RoutedEventArgs e) => _instance.CheckFolderSize = true;
+        private void CheckFolderSizeCheckBox_Uncheckked(object sender, RoutedEventArgs e) => _instance.CheckFolderSize = false;
+
         private void ShowLastAccessedToFirstRowCheckBox_Checked(object sender, RoutedEventArgs e)
         {
             _instance.LastAccesedToFirstRow = true;
             _frame.SortItems();
         }
+
         private void ShowLastAccessedToFirstRowCheckBox_Unchecked(object sender, RoutedEventArgs e)
         {
             _instance.LastAccesedToFirstRow = false;
             _frame.SortItems();
         }
+
         private void ChangeFolderButton_Click(object sender, RoutedEventArgs e)
         {
             var folderDialog = new FolderBrowserDialog
@@ -671,69 +768,21 @@ namespace Racks
                 _frame.title.Text = _instance.TitleText == "" ? _instance.Name : _instance.TitleText;
                 _instance.TitleText = _instance.TitleText;
                 TitleTextBox.Text = _instance.TitleText;
-                // DataContext = this;
                 _frame.InitializeFileWatchers();
                 _frame.PathToBackButton.Visibility = Visibility.Collapsed;
             }
         }
 
-        private void ListViewFontColorButton_Click(object sender, RoutedEventArgs e)
-        {
-            OpenColorPicker(ListViewFontColorTextBox);
-        }
+        private void ListViewFontShadowColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => OpenColorPicker(ListViewFontShadowColorTextBox);
+        private void ListViewFontColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => OpenColorPicker(ListViewFontColorTextBox);
+        private void TitleTextColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => OpenColorPicker(TitleTextColorTextBox);
+        private void TitleBarColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => OpenColorPicker(TitleBarColorTextBox);
+        private void ListViewBackgroundColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => OpenColorPicker(ListViewBackgroundColorTextBox);
+        private void BorderColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => OpenColorPicker(BorderColorTextBox);
+        private void ActiveBorderColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => OpenColorPicker(ActiveBorderColorTextBox);
+        private void ActiveBackgroundColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => OpenColorPicker(ActiveBackgroundColorTextBox);
+        private void ActiveTitleTextColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e) => OpenColorPicker(ActiveTitleTextColorTextBox);
 
-        private void ListViewFontShadowColorButton_Click(object sender, RoutedEventArgs e)
-        {
-            OpenColorPicker(ListViewFontShadowColorTextBox);
-        }
-
-        private void ListViewFontShadowColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            OpenColorPicker(ListViewFontShadowColorTextBox);
-        }
-
-        private void ListViewFontColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            OpenColorPicker(ListViewFontColorTextBox);
-        }
-
-        private void TitleTextColorTextBox_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            OpenColorPicker(TitleTextColorTextBox);
-        }
-
-        private void TitleTextColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            OpenColorPicker(TitleTextColorTextBox);
-        }
-
-        private void TitleBarColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            OpenColorPicker(TitleBarColorTextBox);
-        }
-
-        private void ListViewBackgroundColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            OpenColorPicker(ListViewBackgroundColorTextBox);
-        }
-
-        private void BorderColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            OpenColorPicker(BorderColorTextBox);
-        }
-
-        private void ActiveBorderColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            OpenColorPicker(ActiveBorderColorTextBox);
-        }
-        private void ActiveBackgroundColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            OpenColorPicker(ActiveBackgroundColorTextBox);
-        }
-        private void ActiveTitleTextColorTextBoxIcon_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            OpenColorPicker(ActiveTitleTextColorTextBox);
-        }
         private void ChangeStyleDropDownButton_Click(object sender, RoutedEventArgs e)
         {
             if (MainWindow._controller.Instances.Count <= 1)
@@ -742,7 +791,7 @@ namespace Racks
             ContextMenu contextMenu = new ContextMenu();
             foreach (var instance in MainWindow._controller.Instances)
             {
-                if (instance.GetHashCode() == _instance.GetHashCode()) continue;
+                if (ReferenceEquals(instance, _instance)) continue;
                 var menuItem = new MenuItem
                 {
                     Header = instance.TitleText ?? instance.Name,
@@ -750,11 +799,11 @@ namespace Racks
                 menuItem.Click += (s, e) =>
                 {
                     AnimationSpeedSlider.Value = instance.AnimationSpeed * 4;
-                    AnimationSpeedLabel.Content = instance.AnimationSpeed == 0.0 ? "OFF" : "x" + instance.AnimationSpeed;
+                    AnimationSpeedLabel.Text = instance.AnimationSpeed == 0.0 ? "OFF" : "x" + instance.AnimationSpeed;
                     IdleOpacitySlider.Value = instance.IdleOpacity * 10;
-                    IdleOpacityLabel.Content = instance.IdleOpacity * 100 + "%";
+                    IdleOpacityLabel.Text = instance.IdleOpacity * 100 + "%";
                     IconSizeSlider.Value = instance.IconSize / 4;
-                    IconSizeLabel.Content = instance.IconSize;
+                    IconSizeLabel.Text = instance.IconSize.ToString();
                     _backgroundBrush = TitleBarColorTextBox.Background;
                     _borderBrush = TitleBarColorTextBox.BorderBrush;
                     TitleBarColorTextBox.Text = instance.TitleBarColor;
@@ -779,22 +828,24 @@ namespace Racks
                     FolderOpenInsideFrameCheckBox.IsChecked = instance.FolderOpenInsideFrame;
                     CheckFolderSizeCheckBox.IsChecked = instance.CheckFolderSize;
                     ShowLastAccessedToFirstRowCheckBox.IsChecked = instance.LastAccesedToFirstRow;
-
                 };
                 contextMenu.Items.Add(menuItem);
             }
-            ChangeStyleDropDownButton.Flyout = contextMenu;
+            contextMenu.PlacementTarget = ChangeStyleDropDownButton;
+            contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
         }
+
         private async void ChangePosition(object sender, NumberBoxValueChangedEventArgs args)
         {
             await _frame.AdjustPositionAsync();
         }
 
-
         private void MaxGrayScaleStrengthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if (!_initDone) return;
             _instance.MaxGrayScaleStrength = MaxGrayScaleStrengthSlider.Value / 10;
-            MaxGrayScaleStrengthLabel.Content = (_instance.MaxGrayScaleStrength * 100).ToString("F0") + "%";
+            MaxGrayScaleStrengthLabel.Text = (_instance.MaxGrayScaleStrength * 100).ToString("F0") + "%";
             if (_instance.GrayScaleEnabled)
             {
                 _frame.AnimateGrayScale(e.OldValue / 10, e.NewValue / 10);
@@ -804,6 +855,5 @@ namespace Racks
                 _frame.AnimateGrayScale(_instance.MaxGrayScaleStrength, 0);
             }
         }
-
     }
 }

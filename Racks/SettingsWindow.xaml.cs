@@ -102,7 +102,7 @@ namespace Racks
 
                 menuItem.Click += (_, _) =>
                 {
-                    var dialog = new FrameSettingsDialog(frame);
+                    var dialog = new RackSettingsDialog(frame);
                     dialog.ShowDialog();
                     if (dialog.DialogResult == true)
                     {

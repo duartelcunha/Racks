@@ -373,7 +373,7 @@ namespace Racks
         {
             try
             {
-                ProcessStartInfo sInfo = new ProcessStartInfo($"https://github.com/duartelcunha") { UseShellExecute = true };
+                ProcessStartInfo sInfo = new ProcessStartInfo($"https://github.com/duartelcunha/Racks") { UseShellExecute = true };
                 _ = Process.Start(sInfo);
             }
             catch

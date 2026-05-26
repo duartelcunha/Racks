@@ -4221,7 +4221,9 @@ namespace Racks
             titleRenameBox.Text = Instance.TitleText ?? title.Text ?? "";
             title.Visibility = Visibility.Collapsed;
             titleRenameBox.Visibility = Visibility.Visible;
+            _isRenaming = true;
             titleRenameBox.Focus();
+            Keyboard.Focus(titleRenameBox);
             titleRenameBox.SelectAll();
         }
 
@@ -4249,6 +4251,7 @@ namespace Racks
             }
             titleRenameBox.Visibility = Visibility.Collapsed;
             title.Visibility = Visibility.Visible;
+            _isRenaming = false;
         }
 
 private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
@@ -4502,7 +4505,7 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
                 {
                     Minimize_MouseLeftButtonDown(null, null);
                 }
-                var dialog = new FrameSettingsDialog(this);
+                var dialog = new RackSettingsDialog(this);
                 dialog.ShowDialog();
                 if (dialog.DialogResult == true)
                 {

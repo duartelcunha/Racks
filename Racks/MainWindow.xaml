@@ -16,9 +16,59 @@
                    TooltipText="Racks" >
         <tray:NotifyIcon.Menu>
             <ContextMenu MinWidth="65">
-                <MenuItem Name="versionHeader" Header="Racks" FontSize="14" FontWeight="SemiBold" IsEnabled="False" HorizontalAlignment="Center" Background="{x:Null}" FontFamily="Segoe UI Variable Display, Segoe UI"/>
-
-                <ui:MenuItem x:Name="visitGithub_Buton" Header="{x:Static prop:Lang.TrayContextMenu_VisitGithub}" Click="visitGithub_Buton_Click" Icon="{ui:SymbolIcon Symbol=Link20}" />
+                <MenuItem Name="versionHeader" StaysOpenOnClick="True" Focusable="False" Background="{x:Null}">
+                    <MenuItem.Header>
+                        <Grid HorizontalAlignment="Stretch" MinWidth="240">
+                            <TextBlock Text="Racks"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontFamily="Segoe UI Variable Display, Segoe UI"
+                                       Foreground="#FFFFFF"/>
+                            <Button x:Name="GithubHeaderButton"
+                                    Click="visitGithub_Buton_Click"
+                                    ToolTip="Open Racks on GitHub"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Width="26" Height="26"
+                                    Padding="0"
+                                    Margin="0,0,2,0"
+                                    BorderThickness="0"
+                                    Background="Transparent"
+                                    Cursor="Hand"
+                                    Focusable="False">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="Bd" CornerRadius="6" Background="Transparent">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="Bd" Property="Background" Value="#22FFFFFF"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsPressed" Value="True">
+                                                            <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                                <Viewbox Width="16" Height="16" Stretch="Uniform">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Fill="#E8FFFFFF"
+                                              Data="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.757-1.333-1.757-1.089-.745.083-.73.083-.73 1.205.084 1.838 1.236 1.838 1.236 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.467-2.382 1.235-3.221-.124-.303-.535-1.527.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.649.242 2.873.119 3.176.77.839 1.233 1.911 1.233 3.221 0 4.609-2.805 5.625-5.479 5.921.43.372.823 1.102.823 2.222 0 1.604-.015 2.898-.015 3.293 0 .322.216.694.825.576C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                        </Grid>
+                    </MenuItem.Header>
+                </MenuItem>
                 <Separator Margin="0,3,0,3"/>
 
                 <ui:ToggleSwitch x:Name="AutorunToggle" Content="{x:Static prop:Lang.TrayContextMenu_StartOnLogin}"
