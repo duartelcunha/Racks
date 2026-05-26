@@ -28,7 +28,7 @@ namespace Racks.Util
     // because the welcome flow misbehaved.
     public static class FirstRunWelcome
     {
-        private const string MarkerKey = "FirstRunWelcomeShownV1";
+        private const string MarkerKey = "FirstRunWelcomeShownV2";
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,

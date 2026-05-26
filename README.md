@@ -22,6 +22,8 @@
 
 <img src="docs/screenshots/demo-3.gif" alt="Dragging files from the desktop into a rack" width="100%" />
 
+<sub><i>Drag files off the desktop, drop them onto a rack. They land in a clean sandbox. Your wallpaper stays empty, your files stay one click away.</i></sub>
+
 </div>
 
 ---
@@ -42,33 +44,35 @@ Hold `Ctrl` to keep the original where it was. Hold `Shift` to drag a tile *out*
 
 <br />
 
-## Reorder like a phone
+## Two racks, your way
 
 <div align="center">
-  <img src="docs/screenshots/demo-1.gif" alt="Reordering items inside a rack" width="100%" />
+  <img src="docs/screenshots/demo-1.gif" alt="Personal and Work racks side by side with their own themes" width="100%" />
 </div>
 
-Drag tiles inside a rack to reorder them. Smooth animation, no flicker, no save button. The order sticks across restarts.
+Spin up as many racks as you want. Each one is its own little world: title, color, opacity, icon size, font, even per-rack regex filters. Pick a theme preset or dial in every hex value yourself.
 
 <br />
 
-## Collapse it out of the way
+## Folds out of the way
 
 <div align="center">
-  <img src="docs/screenshots/demo-2.gif" alt="Collapsing and expanding a rack" width="100%" />
+  <img src="docs/screenshots/demo-2.gif" alt="Racks collapse to their title bar to save desktop space" width="100%" />
 </div>
 
-Click the chevron and a rack folds into its title bar, taking up almost no space but still one click away. Double-click empty wallpaper to hide every rack at once.
+Click the chevron and a rack collapses into its title bar, taking up almost no space but still one click away. Double-click empty wallpaper to hide every rack at once. A hot corner brings them back.
 
 <br />
 
-## Customize every pixel
+## Settings that follow the rack
 
-<div align="center">
-  <img src="docs/screenshots/settings.png" alt="Per-rack settings dialog" width="100%" />
-</div>
+The new settings panel docks beside the rack you're editing and **follows it** as you drag the rack around. Every change applies live: colors, fonts, opacity, animation speed, grayscale, icon size. No "Apply" button.
 
-Per-rack settings for colors (hex picker, with active/inactive states), fonts, icon size, opacity, snap-to-grid, lock, animation speed, regex filters for what to show or hide, and seven one-click theme presets. Set defaults globally; override anything per rack.
+- Five tight pages: **Style**, **Title**, **Items**, **Window**, **Folder**.
+- Font picker shows every installed font rendered in its own face (with scrollbar, virtualized, type-to-search).
+- Color picker pops directly under the swatch you clicked. Hex inputs validate live; checkerboard preview shows transparency.
+- One-click **Revert** if you want to discard every change in the session.
+- **Change style** copies the look of any other rack onto this one.
 
 <br />
 
@@ -80,6 +84,7 @@ Per-rack settings for colors (hex picker, with active/inactive states), fonts, i
 - 🛡️ **Safe by design.** Removing a rack only ever deletes its own sandbox. Point a rack at `Documents` and remove it, and `Documents` is exactly as you left it.
 - 🖥️ **Multi-monitor aware.** Unplug a screen and racks snap back to the primary instead of being stranded off-screen.
 - ✈️ **Round-trip your layout.** One JSON file exports every rack, every theme, every setting. Restore on a new machine in one click.
+- 🪟 **Virtual-desktop aware.** Tell a rack which virtual desktops to appear on; it stays hidden everywhere else.
 
 <br />
 
@@ -91,9 +96,7 @@ Per-rack settings for colors (hex picker, with active/inactive states), fonts, i
 
 </div>
 
-Double-click `Racks-Setup-x.y.z.exe`. Installs per-user under `%LocalAppData%\Programs\Racks`. **No admin prompt, no choices, ~5 seconds.** Racks starts in the system tray; right-click the tray icon to create your first rack.
-
-> **Prefer portable?** Grab the `Racks-portable-x.y.z.zip` from the same release page and run `Racks.exe` directly. Settings live in the registry under `HKCU\SOFTWARE\Racks`.
+Double-click `Racks-Setup-1.0.0.exe`. Installs per-user under `%LocalAppData%\Programs\Racks`. **No admin prompt, no choices, ~5 seconds.** Racks starts in the system tray; right-click the tray icon to create your first rack.
 
 <br />
 
