@@ -1,0 +1,105 @@
+<UserControl x:Class="Racks.ColorPicker.ColorPicker"
+                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                Width="256" Height="390"
+                IsTabStop="False"
+                >
+    <Grid   Margin="0,13,0,0">
+        <Canvas x:Name="ColorCanvas" Width="256" Height="390"
+                HorizontalAlignment="Center" VerticalAlignment="Top" >
+
+            <Rectangle x:Name="ColorStrip" Width="256" Height="14" RadiusX="5" RadiusY="5" 
+                       StrokeThickness="1" Stroke="#7F656565"  Canvas.Top="291" 
+                       HorizontalAlignment="Center" VerticalAlignment="Top">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Offset="0.0" Color="#FF0000"/>
+                        <GradientStop Offset="0.167" Color="#FFFF00"/>
+                        <GradientStop Offset="0.333" Color="#00FF00"/>
+                        <GradientStop Offset="0.5" Color="#00FFFF"/>
+                        <GradientStop Offset="0.667" Color="#0000FF"/>
+                        <GradientStop Offset="0.833" Color="#FF00FF"/>
+                        <GradientStop Offset="1.0" Color="#FF0000"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+
+            <Rectangle x:Name="ColorSelectRect" Width="256" Height="256">
+                <Rectangle.Fill>
+                    <DrawingBrush>
+                        <DrawingBrush.Drawing>
+                            <DrawingGroup>
+
+                                <GeometryDrawing>
+                                    <GeometryDrawing.Geometry>
+                                        <RectangleGeometry Rect="0,0,256,256"/>
+                                    </GeometryDrawing.Geometry>
+                                    <GeometryDrawing.Brush>
+                                        <LinearGradientBrush StartPoint="1,0" EndPoint="0,0">
+                                            <GradientStop Offset="0" x:Name="SelectedColor" Color="Red" />
+                                            <GradientStop Offset="1" Color="White" />
+                                        </LinearGradientBrush>
+                                    </GeometryDrawing.Brush>
+                                </GeometryDrawing>
+
+                                <GeometryDrawing>
+                                    <GeometryDrawing.Geometry>
+                                        <RectangleGeometry Rect="0,0,256,256"/>
+                                    </GeometryDrawing.Geometry>
+                                    <GeometryDrawing.Brush>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Offset="0" Color="#00000000" />
+                                            <GradientStop Offset="1" Color="Black" />
+                                        </LinearGradientBrush>
+                                    </GeometryDrawing.Brush>
+                                </GeometryDrawing>
+
+                            </DrawingGroup>
+                        </DrawingBrush.Drawing>
+                    </DrawingBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+
+            <Rectangle Width="256" Height="14" RadiusX="5" RadiusY="5" StrokeThickness="1" Stroke="#7F656565" Canvas.Top="345" HorizontalAlignment="Left" VerticalAlignment="Top">
+                <Rectangle.Fill>
+                    <VisualBrush Stretch="Uniform" TileMode="Tile" Viewport="0,0,8,8" ViewboxUnits="RelativeToBoundingBox" ViewportUnits="Absolute" >
+                        <VisualBrush.Visual>
+                            <Canvas Width="8" Height="8">
+                                <Rectangle Width="4" Height="4" Fill="DarkGray" Canvas.Left="0" Canvas.Top="0"/>
+                                <Rectangle Width="4" Height="4" Fill="DimGray" Canvas.Left="4" Canvas.Top="0"/>
+                                <Rectangle Width="4" Height="4" Fill="DimGray" Canvas.Left="0" Canvas.Top="4"/>
+                                <Rectangle Width="4" Height="4" Fill="DarkGray" Canvas.Left="4" Canvas.Top="4"/>
+                            </Canvas>
+                        </VisualBrush.Visual>
+                    </VisualBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+
+            <Rectangle x:Name="OpacityStrip" Width="256" Height="14" RadiusX="5" RadiusY="5" Canvas.Top="345" HorizontalAlignment="Left" VerticalAlignment="Top">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Offset="0" Color="{Binding OpacityColorZero}"/>
+                        <GradientStop Offset="0.5" Color="{Binding OpacityColorFifty}"/>
+                        <GradientStop Offset="1" Color="Transparent"/>
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+            <TextBlock Text="Hue" Foreground="LightGray" FontSize="12" Canvas.Top="266" HorizontalAlignment="Center" Height="13" VerticalAlignment="Top" Canvas.Left="-1" Width="25"/>
+            <TextBlock x:Name="OpacityPercentageTB" Text="Opacity" Foreground="LightGray" FontSize="12" Canvas.Top="320" Height="17" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+
+            <Ellipse Width="25" Height="25"  StrokeThickness="2.5" Fill="Transparent" x:Name="RectSelector" Stroke="White" IsHitTestVisible="False">
+                <Ellipse.Effect>
+                    <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="0" Opacity="0.05"/>
+                </Ellipse.Effect>
+            </Ellipse>
+
+            <Ellipse Width="25" Height="25" StrokeThickness="2.5" Fill="Transparent" x:Name="HueSelector" Stroke="White" IsHitTestVisible="False">
+                <Ellipse.Effect  >
+                    <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="0" Opacity="0.05"/>
+                </Ellipse.Effect>
+            </Ellipse>
+            <Rectangle Width="4" Height="24" RadiusX="0.5" RadiusY="0.5" Fill="White" StrokeThickness="4" Opacity="1" x:Name="OpacitySelector" Stroke="White" IsHitTestVisible="False"/>
+        </Canvas>
+    </Grid>
+</UserControl>

@@ -1,0 +1,76 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>True</UseWindowsForms>
+    <RootNamespace>Racks</RootNamespace>
+    <AssemblyName>Racks</AssemblyName>
+    <Product>Racks</Product>
+    <AssemblyTitle>Racks</AssemblyTitle>
+    <Description>Racks — fast, lightweight desktop organization for Windows.</Description>
+    <AssemblyVersion>1.0.0</AssemblyVersion>
+    <FileVersion>1.0.0</FileVersion>
+    <PackageIcon>ico.png</PackageIcon>
+    <ApplicationIcon>Icon\ico.ico</ApplicationIcon>
+    <Platforms>AnyCPU;x64</Platforms>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="ico.png" />
+    <None Remove="Icon\ico.png" />
+    <None Remove="Shaders\GrayscaleEffect.ps" />
+  </ItemGroup>
+  <!-- COMReference items for Shell32 + IWshRuntimeLibrary were removed because they
+       require the full MSBuild from Visual Studio (`dotnet build` errors with MSB4803).
+       Shell32 was unused; IWshRuntimeLibrary was only used for .lnk creation, which is
+       now handled by Util/ShellLinkHelper.cs (hand-rolled ComImport IShellLink). -->
+  <ItemGroup>
+    <PackageReference Include="H.Hooks" Version="1.7.0" />
+    <PackageReference Include="Microsoft-WindowsAPICodePack-Shell" Version="1.1.5" />
+    <PackageReference Include="Microsoft.CodeAnalysis" Version="5.3.0" />
+    <PackageReference Include="Microsoft.ML" Version="5.0.0" />
+    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.2.0" />
+    <PackageReference Include="Slions.VirtualDesktop" Version="6.9.2" />
+    <PackageReference Include="Svg" Version="3.4.7" />
+    <PackageReference Include="WPF-UI.Tray" Version="4.3.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Icon\Ico.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="VirtualDesktop">
+      <HintPath>VirtualDesktop\VirtualDesktop.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="ico.png" />
+    <Resource Include="Icon\ico.png" />
+    <Resource Include="Shaders\GrayscaleEffect.ps" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Update="Properties\Lang.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Lang.resx</DependentUpon>
+    </Compile>
+    <Compile Update="Util\RegistryHelper.cs">
+      <Generator>MSBuild:Compile</Generator>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Lang.cs-CZ.resx">
+      <Generator>PublicResXFileCodeGenerator</Generator>
+    </EmbeddedResource>
+    <EmbeddedResource Update="Properties\Lang.resx">
+      <Generator>PublicResXFileCodeGenerator</Generator>
+      <LastGenOutput>Lang.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+  </ItemGroup>
+</Project>

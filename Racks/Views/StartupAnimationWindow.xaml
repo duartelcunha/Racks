@@ -1,0 +1,20 @@
+<Window x:Class="Racks.Views.StartupAnimationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="StartupAnimationWindow" Height="300" Width="300"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" IsHitTestVisible="False"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Image x:Name="AppLogo" Source="pack://application:,,,/Racks;component/Icon/Ico.ico" 
+               Width="150" Height="150" RenderTransformOrigin="0.5,0.5">
+            <Image.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="LogoScale" ScaleX="0" ScaleY="0" />
+                    <RotateTransform x:Name="LogoRotate" Angle="0" />
+                    <TranslateTransform x:Name="LogoTranslate" X="0" Y="0" />
+                </TransformGroup>
+            </Image.RenderTransform>
+        </Image>
+    </Grid>
+</Window>

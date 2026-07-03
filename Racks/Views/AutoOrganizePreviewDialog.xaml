@@ -1,0 +1,53 @@
+<Window x:Class="Racks.Views.AutoOrganizePreviewDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Magic Organize Desktop" Height="500" Width="400"
+        WindowStartupLocation="CenterScreen"
+        Background="#181818" Foreground="White"
+        FontFamily="Segoe UI Variable Display, Segoe UI">
+    
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="✨ Magic Organizer" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,5"/>
+        <TextBlock Grid.Row="1" Text="AI has analyzed your desktop and grouped your files." Foreground="#A0A0A0" Margin="0,0,0,20"/>
+        
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <ItemsControl Name="ClustersControl">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="#202020" CornerRadius="8" Padding="15" Margin="0,0,0,10" BorderBrush="#333" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="16" Margin="0,0,0,10" Foreground="#4DA6FF"/>
+                                <ItemsControl ItemsSource="{Binding FilePaths}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" Foreground="#CCCCCC" Margin="0,2,0,2" TextTrimming="CharacterEllipsis"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="3" Orientation="Vertical" Margin="0,20,0,0">
+            <TextBlock Text="How would you like to organize?" Foreground="#A0A0A0" Margin="0,0,0,10" HorizontalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button Content="Organize in Folders" Click="ApplyFolders_Click" Padding="15,8" Background="#333" Foreground="White" Margin="0,0,10,0"/>
+                <Button Content="Organize in Racks" Click="ApplyRacks_Click" Padding="15,8" Background="#4DA6FF" Foreground="Black" FontWeight="SemiBold"/>
+            </StackPanel>
+            <Button Content="Cancel" Click="Cancel_Click" Margin="0,15,0,0" Padding="15,5" Background="Transparent" Foreground="#888" HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</Window>
