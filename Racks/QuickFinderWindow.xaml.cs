@@ -85,7 +85,7 @@ namespace Racks
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape) { this.Close(); e.Handled = true; }
+            if (e.Key == Key.Escape) { _isClosing = true; this.Close(); e.Handled = true; }
         }
 
         private bool _isClosing = false;
@@ -94,7 +94,7 @@ namespace Racks
             if (!_isClosing)
             {
                 _isClosing = true;
-                this.Close();
+                try { this.Close(); } catch { }
             }
         }
 
@@ -106,6 +106,7 @@ namespace Racks
             try
             {
                 Process.Start(new ProcessStartInfo(row.Item.FullPath!) { UseShellExecute = true });
+                _isClosing = true;
                 this.Close();
             }
             catch (Exception ex) { Debug.WriteLine($"QuickFinder open failed: {ex.Message}"); }
