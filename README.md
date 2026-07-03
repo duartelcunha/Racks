@@ -99,7 +99,7 @@ The new settings panel docks beside the rack you're editing and **follows it** a
 
 </div>
 
-Download `Racks-Installation.zip` (v1.1.0) and extract it. **No admin prompt, no choices, ~5 seconds.** Run `Racks.exe`. Racks starts in the system tray; right-click the tray icon to create your first rack.
+Download `Racks-Installation.zip` (v1.1.1) and extract it. **No admin prompt, no choices, ~5 seconds.** Run `Racks.exe`. Racks starts in the system tray; right-click the tray icon to create your first rack.
 
 <br />
 
