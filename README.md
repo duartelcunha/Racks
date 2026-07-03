@@ -79,6 +79,9 @@ The new settings panel docks beside the rack you're editing and **follows it** a
 ## Also in the box
 
 - 🔍 **Quick Finder.** `Ctrl+Shift+Space` opens a Spotlight-style search across every rack. Type, `Enter`, you're in the file.
+- 🪄 **Magic Organizer 2.0.** Don't want to drag files manually? Click "Magic Organize" and Racks will scan your Desktop, cluster related files automatically, and create a perfectly centered, staggered grid of Racks instantly.
+- 💥 **Pushable Physics.** Racks are solid objects! Drag one Rack into another and watch it smoothly push the other out of the way, keeping everything strictly within your screen bounds.
+- 🎬 **Premium Animations.** From the 60fps signature startup animation to bouncy elastic pop-ins and springy file drops, everything feels alive and polished.
 - 🤖 **Auto-route by regex.** Per-rack patterns (`\.pdf$`, `^Invoice-`, anything). Matching files dropped on the Desktop are moved in automatically. Screenshots into "Screenshots," invoices into "Finance."
 - 📂 **Lives in every file picker.** Racks are pinned to Explorer Quick Access on first launch. Uploading from a browser? Click "Racks" in the sidebar, click the rack, done.
 - 🛡️ **Safe by design.** Removing a rack only ever deletes its own sandbox. Point a rack at `Documents` and remove it, and `Documents` is exactly as you left it.
@@ -96,7 +99,7 @@ The new settings panel docks beside the rack you're editing and **follows it** a
 
 </div>
 
-Double-click `Racks-Setup-1.0.0.exe`. Installs per-user under `%LocalAppData%\Programs\Racks`. **No admin prompt, no choices, ~5 seconds.** Racks starts in the system tray; right-click the tray icon to create your first rack.
+Download `Racks-Installation.zip` (v1.1.0) and extract it. **No admin prompt, no choices, ~5 seconds.** Run `Racks.exe`. Racks starts in the system tray; right-click the tray icon to create your first rack.
 
 <br />
 
