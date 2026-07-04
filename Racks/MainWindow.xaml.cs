@@ -362,6 +362,33 @@ namespace Racks
             int exStyle = (int)GetWindowLong(hwnd, GWL_EXSTYLE);
             exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
             SetWindowLong(hwnd, GWL_EXSTYLE, (IntPtr)exStyle);
+
+            // Tray/hotkey setup lives here rather than in Window_Loaded: Window_Initialized
+            // schedules a background CloseHide() that Dispatcher.Invoke()s a Close() at Send
+            // priority ~100ms after construction. Loaded fires at the much lower Loaded
+            // priority, so on any startup that takes >=100ms to reach the dispatcher's message
+            // loop (routine, given OnStartup does hook/registry/IO work first), that Close/Hide
+            // wins the race and Loaded never gets a turn - the tray icon silently never
+            // registers. OnSourceInitialized runs synchronously inside Show(), before that race
+            // can start, so it always gets a turn.
+            _taskbarRestartMessage = RegisterWindowMessage("TaskbarCreated");
+            _mainHwnd = hwnd;
+            var hwndSource = HwndSource.FromHwnd(_mainHwnd);
+            hwndSource?.AddHook(WndProc);
+            TrayIcon.Register();
+
+            // Ctrl+Shift+Space opens the cross-rack quick finder.
+            try { Interop.RegisterHotKey(_mainHwnd, QUICK_FINDER_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x20); }
+            catch (Exception ex) { Debug.WriteLine($"RegisterHotKey QuickFinder failed: {ex.Message}"); }
+            // Ctrl+Shift+N spawns a new virtual rack.
+            try { Interop.RegisterHotKey(_mainHwnd, NEW_RACK_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x4E /* VK_N */); }
+            catch (Exception ex) { Debug.WriteLine($"RegisterHotKey NewRack failed: {ex.Message}"); }
+            // First-launch welcome animation: a Racks icon drops from the
+            // center of the screen into the system tray and a toast follows
+            // pointing the user at where the app now lives. Gated by a
+            // registry marker so it runs at most once per machine.
+            try { Racks.Util.FirstRunWelcome.ShowIfFirstRun(_controller.reg); }
+            catch (Exception ex) { Debug.WriteLine($"FirstRunWelcome failed: {ex.Message}"); }
         }
         private static IntPtr GetDesktopListViewHandle()
         {
@@ -550,28 +577,6 @@ namespace Racks
         {
             new SettingsWindow(_controller, this).Show();
         }
-        private void Window_Loaded(object sender, RoutedEventArgs e)
-        {
-            _taskbarRestartMessage = RegisterWindowMessage("TaskbarCreated");
-            _mainHwnd = new WindowInteropHelper(this).EnsureHandle();
-            var hwndSource = HwndSource.FromHwnd(_mainHwnd);
-            hwndSource?.AddHook(WndProc);
-            TrayIcon.Register();
-            
-            // Ctrl+Shift+Space opens the cross-rack quick finder.
-            try { Interop.RegisterHotKey(_mainHwnd, QUICK_FINDER_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x20); }
-            catch (Exception ex) { Debug.WriteLine($"RegisterHotKey QuickFinder failed: {ex.Message}"); }
-            // Ctrl+Shift+N spawns a new virtual rack.
-            try { Interop.RegisterHotKey(_mainHwnd, NEW_RACK_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x4E /* VK_N */); }
-            catch (Exception ex) { Debug.WriteLine($"RegisterHotKey NewRack failed: {ex.Message}"); }
-            // First-launch welcome animation: a Racks icon drops from the
-            // center of the screen into the system tray and a toast follows
-            // pointing the user at where the app now lives. Gated by a
-            // registry marker so it runs at most once per machine.
-            try { Racks.Util.FirstRunWelcome.ShowIfFirstRun(_controller.reg); }
-            catch (Exception ex) { Debug.WriteLine($"FirstRunWelcome failed: {ex.Message}"); }
-        }
-
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             if (msg == _taskbarRestartMessage)

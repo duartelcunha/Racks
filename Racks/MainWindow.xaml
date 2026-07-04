@@ -9,9 +9,9 @@
         xmlns:properties="clr-namespace:Racks.Properties;assembly=Racks"
         xmlns:prop="clr-namespace:Racks.Properties"
         mc:Ignorable="d"
-        Title="Racks" Height="450" Width="800" Initialized="Window_Initialized" Loaded="Window_Loaded">
-    <tray:NotifyIcon Grid.Row="0" FocusOnLeftClick="True"  
-                  
+        Title="Racks" Height="450" Width="800" Initialized="Window_Initialized">
+    <tray:NotifyIcon Grid.Row="0" FocusOnLeftClick="True"
+                   Icon="/ico.png"
                    Name="TrayIcon" MenuOnRightClick="True"
                    TooltipText="Racks" >
         <tray:NotifyIcon.Menu>
