@@ -13,7 +13,7 @@ namespace Racks
             this.Top = top + (height - this.Height) / 2;
 
             var v = Assembly.GetExecutingAssembly().GetName().Version;
-            VersionTextBlock.Text = $"Version {v.Major}.{v.Minor}.{v.Build}";
+            VersionTextBlock.Text = $"Version {v?.Major}.{v?.Minor}.{v?.Build}";
         }
     }
 }

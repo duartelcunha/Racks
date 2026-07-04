@@ -13,10 +13,10 @@ namespace Racks
     public partial class SettingsWindow : FluentWindow
     {
         InstanceController _controller;
-        RackWindow _dWindows;
-        Instance _instance;
+        RackWindow? _dWindows;
+        Instance? _instance;
         MainWindow _window;
-        ContextMenu ManageFrameContextMenu;
+        ContextMenu? ManageFrameContextMenu;
         public SettingsWindow(InstanceController controller, MainWindow window)
         {
             InitializeComponent();
@@ -26,8 +26,8 @@ namespace Racks
             _window = window;
             _controller = controller;
             // if (_controller.reg.KeyExistsRoot("blurBackground")) blurToggle.IsChecked = (bool)_controller.reg.ReadKeyValueRoot("blurBackground");
-            if (_controller.reg.KeyExistsRoot("AutoUpdate")) AutoUpdateToggleSwitch.IsChecked = (bool)_controller.reg.ReadKeyValueRoot("AutoUpdate");
-            if (_controller.reg.KeyExistsRoot("DoubleClickToHide")) DoubleClickToHideSwitch.IsChecked = (bool)_controller.reg.ReadKeyValueRoot("DoubleClickToHide");
+            if (_controller.reg.KeyExistsRoot("AutoUpdate")) AutoUpdateToggleSwitch.IsChecked = _controller.reg.ReadKeyValueRoot("AutoUpdate") as bool? ?? false;
+            if (_controller.reg.KeyExistsRoot("DoubleClickToHide")) DoubleClickToHideSwitch.IsChecked = _controller.reg.ReadKeyValueRoot("DoubleClickToHide") as bool? ?? false;
         }
 
         private void blurToggle_CheckChanged(object sender, System.Windows.RoutedEventArgs e)
@@ -54,7 +54,7 @@ namespace Racks
                 string fullKeyPath = $@"HKCU\SOFTWARE\{regKeyName}";
                 string arguments = $"export \"{fullKeyPath}\" \"{saveDialog.FileName}\" /y";
 
-                var process = new Process
+                using var process = new Process
                 {
                     StartInfo = new ProcessStartInfo
                     {
@@ -65,7 +65,9 @@ namespace Racks
                         UseShellExecute = false,
                         CreateNoWindow = true
                     }
-                }.Start();
+                };
+                process.Start();
+                process.WaitForExit();
             }
         }
 
@@ -148,7 +150,7 @@ namespace Racks
             _dWindows.Left = this.Width + this.Left + 10;
             _dWindows.Top = this.Top;
         }
-        private void Window_LocationChanged(object sender, EventArgs e)
+        private void Window_LocationChanged(object? sender, EventArgs e)
         {
             if (_dWindows != null)
             {
@@ -159,7 +161,8 @@ namespace Racks
         private void ResetDefaultFrameStyleButton_Click(object sender, RoutedEventArgs e)
         {
             string[] keep = { "AutoUpdate", "blurBackground", "startOnLogin" };
-            RegistryKey key = Registry.CurrentUser.OpenSubKey($"Software\\{InstanceController.appName}", writable: true)!;
+            using RegistryKey? key = Registry.CurrentUser.OpenSubKey($"Software\\{InstanceController.appName}", writable: true);
+            if (key == null) return;
             foreach (var name in key.GetValueNames())
             {
                 if (Array.IndexOf(keep, name) == -1)
@@ -168,12 +171,12 @@ namespace Racks
                     {
                         key.DeleteValue(name);
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        Debug.WriteLine($"Error deleting registry key: {ex.Message}");
                     }
                 }
             }
-            key.Close();
         }
 
         private void FluentWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -191,14 +194,15 @@ namespace Racks
 
         private void KofiButtonImage_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            try
-            {
-                ProcessStartInfo sInfo = new ProcessStartInfo($"https://ko-fi.com/J3J61PAH6H") { UseShellExecute = true };
-                _ = Process.Start(sInfo);
-            }
-            catch
-            {
-            }
+                    try
+                    {
+                        ProcessStartInfo sInfo = new ProcessStartInfo($"https://ko-fi.com/J3J61PAH6H") { UseShellExecute = true };
+                        _ = Process.Start(sInfo);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Kofi open failed: {ex.Message}");
+                    }
         }
 
         private void ReloadAllFramesButton_Click(object sender, RoutedEventArgs e)

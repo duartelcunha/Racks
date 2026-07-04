@@ -379,6 +379,7 @@ namespace Racks
         private void DropShadowCheckBox_Checked(object sender, RoutedEventArgs e) { if (!_initDone) return; ValidateSettings(); }
         private void GradientBackgroundCheckBox_Checked(object sender, RoutedEventArgs e) { if (!_initDone) return; ValidateSettings(); }
         private void DisableAnimationsCheckBox_Checked(object sender, RoutedEventArgs e) { if (!_initDone) return; ValidateSettings(); }
+        private void TransparentBackgroundCheckBox_Checked(object sender, RoutedEventArgs e) { if (!_initDone) return; ValidateSettings(); }
 
         private bool ValidateVirtualDesktop(string strValue)
         {
@@ -400,10 +401,10 @@ namespace Racks
             _frame.AnimateWindowOpacity(_instance.IdleOpacity, _instance.AnimationSpeed);
             _isValidTitleBarColor = TryParseColor(string.IsNullOrEmpty(TitleBarColorTextBox.Text) ? "#0C000000" : TitleBarColorTextBox.Text, TitleBarColorTextBox);
             _isValidTitleTextColor = TryParseColor(string.IsNullOrEmpty(TitleTextColorTextBox.Text) ? "#FFFFFF" : TitleTextColorTextBox.Text, TitleTextColorTextBox);
-            _isValidBorderColor = BorderEnabledCheckBox.IsChecked == true ? TryParseColor(string.IsNullOrEmpty(BorderColorTextBox.Text) ? "#FFFFFF" : BorderColorTextBox.Text, BorderColorTextBox) : true;
-            _isValidActiveBorderColor = ActiveBorderEnabledCheckBox.IsChecked == true ? TryParseColor(string.IsNullOrEmpty(ActiveBorderColorTextBox.Text) ? "#FFFFFF" : ActiveBorderColorTextBox.Text, ActiveBorderColorTextBox) : true;
-            _isValidActiveBackgroundColor = ActiveBackgroundEnabledCheckBox.IsChecked == true ? TryParseColor(string.IsNullOrEmpty(ActiveBackgroundColorTextBox.Text) ? "#FFFFFF" : ActiveBackgroundColorTextBox.Text, ActiveBackgroundColorTextBox) : true;
-            _isValidActiveTitleTextColor = ActiveTitleTextEnabledCheckBox.IsChecked == true ? TryParseColor(string.IsNullOrEmpty(ActiveTitleTextColorTextBox.Text) ? "#FFFFFF" : ActiveTitleTextColorTextBox.Text, ActiveTitleTextColorTextBox) : true;
+            _isValidBorderColor = (BorderEnabledCheckBox.IsChecked ?? false) ? TryParseColor(string.IsNullOrEmpty(BorderColorTextBox.Text) ? "#FFFFFF" : BorderColorTextBox.Text, BorderColorTextBox) : true;
+            _isValidActiveBorderColor = (ActiveBorderEnabledCheckBox.IsChecked ?? false) ? TryParseColor(string.IsNullOrEmpty(ActiveBorderColorTextBox.Text) ? "#FFFFFF" : ActiveBorderColorTextBox.Text, ActiveBorderColorTextBox) : true;
+            _isValidActiveBackgroundColor = (ActiveBackgroundEnabledCheckBox.IsChecked ?? false) ? TryParseColor(string.IsNullOrEmpty(ActiveBackgroundColorTextBox.Text) ? "#FFFFFF" : ActiveBackgroundColorTextBox.Text, ActiveBackgroundColorTextBox) : true;
+            _isValidActiveTitleTextColor = (ActiveTitleTextEnabledCheckBox.IsChecked ?? false) ? TryParseColor(string.IsNullOrEmpty(ActiveTitleTextColorTextBox.Text) ? "#FFFFFF" : ActiveTitleTextColorTextBox.Text, ActiveTitleTextColorTextBox) : true;
             _isValidFileFilterRegex = TryParseRegex(FileFilterRegexTextBox.Text, FileFilterRegexTextBox);
             _isValidFileFilterHideRegex = TryParseRegex(FileFilterHideRegexTextBox.Text, FileFilterHideRegexTextBox);
 
@@ -434,6 +435,7 @@ namespace Racks
                 _instance.DropShadowEnabled = DropShadowCheckBox.IsChecked == true;
                 _instance.GradientBackgroundEnabled = GradientBackgroundCheckBox.IsChecked == true;
                 _instance.DisableAnimations = DisableAnimationsCheckBox.IsChecked == true;
+                _instance.IsTransparent = TransparentBackgroundCheckBox.IsChecked == true;
                 _instance.TitleTextAlignment = (System.Windows.HorizontalAlignment)TitleTextAlignmentComboBox.SelectedIndex;
                 _instance.TitleText = TitleTextBox.Text;
                 _instance.FileFilterRegex = FileFilterRegexTextBox.Text;
@@ -617,6 +619,7 @@ namespace Racks
                 DropShadowCheckBox.IsChecked = _instance.DropShadowEnabled;
                 GradientBackgroundCheckBox.IsChecked = _instance.GradientBackgroundEnabled;
                 DisableAnimationsCheckBox.IsChecked = _instance.DisableAnimations;
+                TransparentBackgroundCheckBox.IsChecked = _instance.IsTransparent;
 
                 GrayScaleEnabled_CheckBox.IsChecked = _instance.GrayScaleEnabled;
                 GrayScaleEnabled_InactiveOnly_CheckBox.IsChecked = _instance.GrayScaleEnabled_InactiveOnly;
@@ -727,7 +730,7 @@ namespace Racks
             {
                 _frame.AnimateGrayScale(_instance.MaxGrayScaleStrength, 0);
             }
-            else if (_instance.GrayScaleEnabled != null)
+            else
             {
                 _frame.AnimateGrayScale(0, _instance.MaxGrayScaleStrength);
             }
@@ -831,6 +834,7 @@ namespace Racks
                     DropShadowCheckBox.IsChecked = instance.DropShadowEnabled;
                     GradientBackgroundCheckBox.IsChecked = instance.GradientBackgroundEnabled;
                     DisableAnimationsCheckBox.IsChecked = instance.DisableAnimations;
+                    TransparentBackgroundCheckBox.IsChecked = instance.IsTransparent;
                     TitleFontSizeNumberBox.Value = instance.TitleFontSize;
                     TitleTextAutoSuggestionBox.Text = instance.TitleFontFamily;
                     ItemTextAutoSuggestionBox.Text = instance.ItemFontFamily;

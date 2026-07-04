@@ -28,11 +28,11 @@ namespace Racks.Core
         public DateTime DateCreated { get; set; }
         public string? FileType { get; set; }
         public long ItemSize { get; set; }
-        public string DisplaySize { get; set; }
+        public string DisplaySize { get; set; } = string.Empty;
 
         public string Name
         {
-            get => _name;
+            get => _name ?? string.Empty;
             set
             {
                 _name = value;
@@ -65,7 +65,7 @@ namespace Racks.Core
         }
         public string DisplayName
         {
-            get => _name;
+            get => _name ?? string.Empty;
             set
             {
                 _displayName = value;

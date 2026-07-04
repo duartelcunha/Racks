@@ -1,3 +1,4 @@
+#pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604, CS8618, CS8625
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -74,16 +75,19 @@ namespace Racks.Util
                 _oContextMenu = (IContextMenu)Marshal.GetTypedObjectForIUnknown(pUnknownContextMenu, typeof(IContextMenu));
 
                 IntPtr pUnknownContextMenu2 = IntPtr.Zero;
-                if (S_OK == Marshal.QueryInterface(pUnknownContextMenu, ref IID_IContextMenu2, out pUnknownContextMenu2))
+                if (S_OK == Marshal.QueryInterface(pUnknownContextMenu, in IID_IContextMenu2, out pUnknownContextMenu2))
                 {
                     _oContextMenu2 = (IContextMenu2)Marshal.GetTypedObjectForIUnknown(pUnknownContextMenu2, typeof(IContextMenu2));
+                    Marshal.Release(pUnknownContextMenu2);
                 }
                 IntPtr pUnknownContextMenu3 = IntPtr.Zero;
-                if (S_OK == Marshal.QueryInterface(pUnknownContextMenu, ref IID_IContextMenu3, out pUnknownContextMenu3))
+                if (S_OK == Marshal.QueryInterface(pUnknownContextMenu, in IID_IContextMenu3, out pUnknownContextMenu3))
                 {
                     _oContextMenu3 = (IContextMenu3)Marshal.GetTypedObjectForIUnknown(pUnknownContextMenu3, typeof(IContextMenu3));
+                    Marshal.Release(pUnknownContextMenu3);
                 }
 
+                Marshal.Release(pUnknownContextMenu);
                 return true;
             }
             else
@@ -467,7 +471,7 @@ namespace Racks.Util
         /// </summary>
         private void WindowsHookInvoked(object sender, HookEventArgs e)
         {
-            CWPSTRUCT cwp = (CWPSTRUCT)Marshal.PtrToStructure(e.lParam, typeof(CWPSTRUCT));
+            CWPSTRUCT cwp = Marshal.PtrToStructure<CWPSTRUCT>(e.lParam);
 
             if (_oContextMenu2 != null &&
                 (cwp.message == (int)WM.INITMENUPOPUP ||
@@ -1448,6 +1452,9 @@ namespace Racks.Util
         }
         // ************************************************************************
 
+        [DllImport("kernel32.dll")]
+        static extern uint GetCurrentThreadId();
+
         // ************************************************************************
         // Install the hook
         public void Install()
@@ -1456,7 +1463,7 @@ namespace Racks.Util
                 m_hookType,
                 m_filterFunc,
                 IntPtr.Zero,
-                Thread.CurrentThread.ManagedThreadId); // (int)AppDomain.GetCurrentThreadId());
+                (int)GetCurrentThreadId());
         }
         // ************************************************************************
 

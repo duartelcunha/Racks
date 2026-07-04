@@ -100,13 +100,13 @@ namespace Racks.Util
             try
             {
                 Directory.CreateDirectory(MirrorRoot);
-                Type shellAppType = Type.GetTypeFromProgID("Shell.Application");
+                Type? shellAppType = Type.GetTypeFromProgID("Shell.Application");
                 if (shellAppType == null) return;
-                dynamic shell = Activator.CreateInstance(shellAppType);
+                dynamic? shell = Activator.CreateInstance(shellAppType);
                 if (shell == null) return;
 
-                string parent = Path.GetDirectoryName(MirrorRoot);
-                string leaf = Path.GetFileName(MirrorRoot);
+                string? parent = Path.GetDirectoryName(MirrorRoot);
+                string? leaf = Path.GetFileName(MirrorRoot);
                 if (string.IsNullOrEmpty(parent) || string.IsNullOrEmpty(leaf)) return;
 
                 dynamic ns = shell.NameSpace(parent);

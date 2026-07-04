@@ -16,6 +16,8 @@
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Windows 10 / 11" />
   &nbsp;
   <img src="https://img.shields.io/badge/.NET-10-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 10" />
+  &nbsp;
+  <img src="https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge" alt="License: MIT" />
 </p>
 
 <br />
@@ -123,4 +125,6 @@ If Racks cleans up your workflow, **[drop a star](https://github.com/duartelcunh
 
 ## License
 
-Proprietary software. © 2026 Duarte L. Cunha. Free to use, but modification, redistribution, or reverse engineering are not allowed. See [`LICENSE.txt`](LICENSE.txt) and [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+This project is licensed under the MIT License - see the [`LICENSE.txt`](LICENSE.txt) file for details. © 2026 Duarte L. Cunha.
+
+Racks incorporates code originally distributed under the MIT License. Required attribution and the full text of those upstream licenses are reproduced in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

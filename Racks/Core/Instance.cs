@@ -1,3 +1,4 @@
+#pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604, CS8618, CS8625
 using Racks;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -64,7 +65,7 @@ public class Instance : INotifyPropertyChanged
     private int _opacity = 26;
     private int _sortBy = 1;
     private int _folderOrder = 0;
-    private int[] _showOnVirtualDesktops;
+    private int[]? _showOnVirtualDesktops;
     private double _titleFontSize = 13;
     private int _iconSize = 32;
     private bool _isShortcutsOnly = false;
@@ -82,6 +83,7 @@ public class Instance : INotifyPropertyChanged
     private bool _disableAnimations = false;
     private string _backgroundImagePath = "";
     private bool _pinToTop = false;
+    private bool _isTransparent = false;
 
     // Persistent "always on top." Distinct from the transient _isTopmost the scroll
     // gesture sets — this one survives across launches.
@@ -94,6 +96,19 @@ public class Instance : INotifyPropertyChanged
             {
                 _pinToTop = value;
                 OnPropertyChanged(nameof(PinToTop), value.ToString());
+            }
+        }
+    }
+
+    public bool IsTransparent
+    {
+        get => _isTransparent;
+        set
+        {
+            if (_isTransparent != value)
+            {
+                _isTransparent = value;
+                OnPropertyChanged(nameof(IsTransparent), value.ToString());
             }
         }
     }
@@ -871,7 +886,7 @@ public class Instance : INotifyPropertyChanged
             }
         }
     }
-    public int[] ShowOnVirtualDesktops
+    public int[]? ShowOnVirtualDesktops
     {
         get => _showOnVirtualDesktops;
         set

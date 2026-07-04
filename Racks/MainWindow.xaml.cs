@@ -17,11 +17,12 @@ namespace Racks
         bool startOnLogin;
         bool reseted = false;
         private uint _taskbarRestartMessage;
-        public static InstanceController _controller;
-        public static MainWindow _mainWindow;
-        private LowLevelMouseHook _lowLevelMouseHook;
-        private DesktopRouter _desktopRouter;
-        private System.Windows.Threading.DispatcherTimer _hotCornerTimer;
+        public static InstanceController _controller = null!;
+        public static MainWindow _mainWindow = null!;
+        private LowLevelMouseHook? _lowLevelMouseHook;
+        private QuickFinderWindow? _quickFinder;
+        private DesktopRouter _desktopRouter = null!;
+        private System.Windows.Threading.DispatcherTimer? _hotCornerTimer;
         private bool _hotCornerHidden; // tracks whether racks are currently hidden by hot-corner
         private const int QUICK_FINDER_HOTKEY_ID = 0xB0CC;
         private const int NEW_RACK_HOTKEY_ID = 0xB0CD;
@@ -45,13 +46,14 @@ namespace Racks
         {
             if (_doubleClickToHide)
             {
+                _lowLevelMouseHook?.Dispose();
                 _lowLevelMouseHook = new LowLevelMouseHook { AddKeyboardKeys = true };
                 _lowLevelMouseHook.DoubleClick += HandleGlobalDoubleClick;
                 _lowLevelMouseHook.Start();
             }
             else
             {
-                _lowLevelMouseHook.Stop();
+                _lowLevelMouseHook?.Stop();
             }
         }
 
@@ -98,18 +100,18 @@ namespace Racks
                     });
             }
             catch (System.Exception ex) { Debug.WriteLine($"DesktopRouter init failed: {ex.Message}"); }
-            if (_controller.reg.KeyExistsRoot("startOnLogin")) startOnLogin = (bool)_controller.reg.ReadKeyValueRoot("startOnLogin");
+            if (_controller.reg.KeyExistsRoot("startOnLogin")) startOnLogin = _controller.reg.ReadKeyValueRoot("startOnLogin") as bool? ?? false;
             AutorunToggle.IsChecked = startOnLogin;
             // if (_controller.reg.KeyExistsRoot("blurBackground")) BlurToggle.IsChecked = (bool)_controller.reg.ReadKeyValueRoot("blurBackground");
-            if (_controller.reg.KeyExistsRoot("DoubleClickToHide")) DoubleClickToHide = (bool)_controller.reg.ReadKeyValueRoot("DoubleClickToHide");
+            if (_controller.reg.KeyExistsRoot("DoubleClickToHide")) DoubleClickToHide = _controller.reg.ReadKeyValueRoot("DoubleClickToHide") as bool? ?? false;
             if (_controller.reg.KeyExistsRoot("HideDesktopIcons"))
             {
-                bool hide = (bool)_controller.reg.ReadKeyValueRoot("HideDesktopIcons");
+                bool hide = _controller.reg.ReadKeyValueRoot("HideDesktopIcons") as bool? ?? false;
                 HideDesktopIconsToggle.IsChecked = hide;
                 if (hide) ApplyDesktopIconsHidden(true);
             }
             if (_controller.reg.KeyExistsRoot("HotCornerHide")
-                && (bool)_controller.reg.ReadKeyValueRoot("HotCornerHide"))
+                && _controller.reg.ReadKeyValueRoot("HotCornerHide") as bool? == true)
             {
                 HotCornerHideToggle.IsChecked = true;
                 StartHotCornerWatch();
@@ -188,7 +190,7 @@ namespace Racks
                     if (dialog.Result == Racks.Views.OrganizeChoice.Racks)
                     {
                         // User approved, create racks and move files!
-                        var workingArea = System.Windows.Forms.Screen.PrimaryScreen.WorkingArea;
+                        var workingArea = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
                         
                         int rackWidth = 300;
                         int rackHeight = 380;
@@ -363,16 +365,16 @@ namespace Racks
         }
         private static IntPtr GetDesktopListViewHandle()
         {
-            IntPtr progman = FindWindow("Progman", null);
-            IntPtr defView = FindWindowEx(progman, IntPtr.Zero, "SHELLDLL_DefView", null);
+            IntPtr progman = FindWindow("Progman", null!);
+            IntPtr defView = FindWindowEx(progman, IntPtr.Zero, "SHELLDLL_DefView", null!);
 
             if (defView == IntPtr.Zero)
             {
                 IntPtr workerw = IntPtr.Zero;
                 do
                 {
-                    workerw = FindWindowEx(IntPtr.Zero, workerw, "WorkerW", null);
-                    defView = FindWindowEx(workerw, IntPtr.Zero, "SHELLDLL_DefView", null);
+                    workerw = FindWindowEx(IntPtr.Zero, workerw, "WorkerW", null!);
+                    defView = FindWindowEx(workerw, IntPtr.Zero, "SHELLDLL_DefView", null!);
                 }
                 while (workerw != IntPtr.Zero && defView == IntPtr.Zero);
             }
@@ -499,14 +501,14 @@ namespace Racks
         // whether wallpaper slideshow is on (Progman) or off (WorkerW).
         private static IntPtr GetDesktopShellView()
         {
-            IntPtr progman = FindWindow("Progman", null);
-            IntPtr defView = FindWindowEx(progman, IntPtr.Zero, "SHELLDLL_DefView", null);
+            IntPtr progman = FindWindow("Progman", null!);
+            IntPtr defView = FindWindowEx(progman, IntPtr.Zero, "SHELLDLL_DefView", null!);
             if (defView != IntPtr.Zero) return defView;
             IntPtr workerw = IntPtr.Zero;
             do
             {
-                workerw = FindWindowEx(IntPtr.Zero, workerw, "WorkerW", null);
-                defView = FindWindowEx(workerw, IntPtr.Zero, "SHELLDLL_DefView", null);
+                workerw = FindWindowEx(IntPtr.Zero, workerw, "WorkerW", null!);
+                defView = FindWindowEx(workerw, IntPtr.Zero, "SHELLDLL_DefView", null!);
             } while (workerw != IntPtr.Zero && defView == IntPtr.Zero);
             return defView;
         }
@@ -532,8 +534,9 @@ namespace Racks
                 ProcessStartInfo sInfo = new ProcessStartInfo($"https://github.com/duartelcunha/Racks") { UseShellExecute = true };
                 _ = Process.Start(sInfo);
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"visitGithub failed: {ex.Message}");
             }
         }
 
@@ -552,7 +555,7 @@ namespace Racks
             _taskbarRestartMessage = RegisterWindowMessage("TaskbarCreated");
             _mainHwnd = new WindowInteropHelper(this).Handle;
             var hwndSource = HwndSource.FromHwnd(_mainHwnd);
-            hwndSource.AddHook(WndProc);
+            hwndSource?.AddHook(WndProc);
             // Ctrl+Shift+Space opens the cross-rack quick finder.
             try { Interop.RegisterHotKey(_mainHwnd, QUICK_FINDER_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x20); }
             catch (Exception ex) { Debug.WriteLine($"RegisterHotKey QuickFinder failed: {ex.Message}"); }
@@ -566,6 +569,7 @@ namespace Racks
             try { Racks.Util.FirstRunWelcome.ShowIfFirstRun(_controller.reg); }
             catch (Exception ex) { Debug.WriteLine($"FirstRunWelcome failed: {ex.Message}"); }
         }
+
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             if (msg == _taskbarRestartMessage)
@@ -585,8 +589,7 @@ namespace Racks
                     // System.Windows.Forms.MessageBox.Show("ee");
 
                     _controller.CheckFrameWindowsLive();
-                    Thread.Sleep(200);
-                    DummyWindow();
+                    Application.Current.Dispatcher.InvokeAsync(async () => { await Task.Delay(200); DummyWindow(); });
                     reseted = true;
                 }
             }
@@ -597,17 +600,17 @@ namespace Racks
 
                     reseted = false;
                     _controller.CheckFrameWindowsLive();
-                    Thread.Sleep(200);
-                    DummyWindow();
+                    Application.Current.Dispatcher.InvokeAsync(async () => { await Task.Delay(200); DummyWindow(); });
                 }
             }
             if (msg == Interop.WM_HOTKEY && wParam.ToInt32() == QUICK_FINDER_HOTKEY_ID)
             {
                 try
                 {
-                    var finder = new QuickFinderWindow(_controller);
-                    finder.Show();
-                    finder.Activate();
+                    _quickFinder?.Close();
+                    _quickFinder = new QuickFinderWindow(_controller);
+                    _quickFinder.Show();
+                    _quickFinder.Activate();
                 }
                 catch (Exception ex) { Debug.WriteLine($"QuickFinder open failed: {ex.Message}"); }
                 handled = true;
@@ -638,6 +641,7 @@ namespace Racks
             if (_lowLevelMouseHook != null)
             {
                 _lowLevelMouseHook.Stop();
+                _lowLevelMouseHook.Dispose();
             }
             _desktopRouter?.Dispose();
             StopHotCornerWatch();

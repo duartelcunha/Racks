@@ -18,6 +18,9 @@
     <Platforms>AnyCPU;x64</Platforms>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Produce a single standalone EXE -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
   </PropertyGroup>
   <ItemGroup>
     <None Remove="ico.png" />

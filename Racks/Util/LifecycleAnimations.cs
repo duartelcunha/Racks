@@ -193,97 +193,93 @@ namespace Racks.Util
                 Canvas.SetLeft(image, centerX - size / 2);
                 Canvas.SetTop(image, centerY - size / 2);
                 
+                // Add a shockwave element (initially hidden/collapsed)
+                var shockwave = new System.Windows.Shapes.Ellipse
+                {
+                    Width = size,
+                    Height = size,
+                    Stroke = Brushes.Cyan,
+                    StrokeThickness = 4,
+                    Opacity = 0,
+                    RenderTransformOrigin = new Point(0.5, 0.5)
+                };
+                
+                var shockwaveScale = new ScaleTransform(1, 1);
+                shockwave.RenderTransform = shockwaveScale;
+
+                Canvas.SetLeft(shockwave, centerX - size / 2);
+                Canvas.SetTop(shockwave, centerY - size / 2);
+                canvas.Children.Insert(0, shockwave); // Behind image
+                
                 win.Show();
                 ForceTopmost(win);
 
-                // Phase 1: Charge up (vibrate and scale up slightly)
-                var chargeTime = TimeSpan.FromMilliseconds(800);
+                // Phase 1: Singularity (Spin and suck into center)
+                var suckTime = TimeSpan.FromMilliseconds(600);
                 
-                var scaleAnim = new DoubleAnimationUsingKeyFrames();
-                scaleAnim.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                scaleAnim.KeyFrames.Add(new EasingDoubleKeyFrame(1.4, KeyTime.FromTimeSpan(chargeTime), new SineEase { EasingMode = EasingMode.EaseIn }));
-                scaleAnim.Duration = chargeTime;
-
-                var shakeAnim = new DoubleAnimationUsingKeyFrames();
-                var r = new Random();
-                for (int i = 0; i < 20; i++)
+                var suckScaleAnim = new DoubleAnimation
                 {
-                    shakeAnim.KeyFrames.Add(new LinearDoubleKeyFrame(r.Next(-5, 6), KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(i * 40))));
-                }
-                shakeAnim.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(chargeTime)));
-                shakeAnim.Duration = chargeTime;
+                    From = 1.0,
+                    To = 0.0,
+                    Duration = suckTime,
+                    EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseIn }
+                };
+                
+                var spinAnim = new DoubleAnimation
+                {
+                    From = 0,
+                    To = 720, // 2 full rotations
+                    Duration = suckTime,
+                    EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseIn }
+                };
 
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleAnim);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleAnim);
-                translate.BeginAnimation(TranslateTransform.XProperty, shakeAnim);
-                translate.BeginAnimation(TranslateTransform.YProperty, shakeAnim);
+                // Phase 2: Shockwave (Burst into nothing)
+                var burstTime = TimeSpan.FromMilliseconds(400);
+                
+                var shockwaveScaleAnim = new DoubleAnimation
+                {
+                    From = 0.1,
+                    To = 10.0,
+                    Duration = burstTime,
+                    EasingFunction = new CircleEase { EasingMode = EasingMode.EaseOut }
+                };
+                
+                var shockwaveFadeAnim = new DoubleAnimation
+                {
+                    From = 1.0,
+                    To = 0.0,
+                    Duration = burstTime,
+                    EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+                };
+                
+                var shockwaveThickAnim = new DoubleAnimation
+                {
+                    From = 15.0,
+                    To = 0.0,
+                    Duration = burstTime,
+                    EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+                };
 
-                // Phase 2: Burst into particles
-                Task.Delay(chargeTime).ContinueWith(_ =>
+                // Execute Singularity
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, suckScaleAnim);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, suckScaleAnim);
+                rotate.BeginAnimation(RotateTransform.AngleProperty, spinAnim);
+                
+                Task.Delay(suckTime).ContinueWith(_ =>
                 {
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        image.Visibility = Visibility.Hidden; // Hide main image
-
-                        // Generate particles
-                        int particleCount = 150;
-                        var burstTime = TimeSpan.FromMilliseconds(800);
-                        var colors = new[] { 
-                            Color.FromRgb(46, 160, 67),  // Green
-                            Color.FromRgb(0, 120, 212),  // Blue
-                            Color.FromRgb(245, 166, 35), // Orange/Yellow
-                            Color.FromRgb(255, 255, 255) // White
-                        };
-
-                        for (int i = 0; i < particleCount; i++)
-                        {
-                            double angle = r.NextDouble() * Math.PI * 2;
-                            double distance = r.NextDouble() * 400 + 100; // Fly outwards up to 500px
-                            double pSize = r.Next(3, 12);
-
-                            var particle = new System.Windows.Shapes.Ellipse
-                            {
-                                Width = pSize,
-                                Height = pSize,
-                                Fill = new SolidColorBrush(colors[r.Next(colors.Length)]),
-                                RenderTransformOrigin = new Point(0.5, 0.5)
-                            };
-
-                            var pTranslate = new TranslateTransform(0, 0);
-                            particle.RenderTransform = pTranslate;
-
-                            Canvas.SetLeft(particle, centerX - pSize / 2);
-                            Canvas.SetTop(particle, centerY - pSize / 2);
-                            canvas.Children.Add(particle);
-
-                            var moveX = new DoubleAnimation
-                            {
-                                To = Math.Cos(angle) * distance,
-                                Duration = burstTime,
-                                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
-                            };
-
-                            var moveY = new DoubleAnimation
-                            {
-                                To = Math.Sin(angle) * distance,
-                                Duration = burstTime,
-                                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
-                            };
-
-                            var fadeP = new DoubleAnimation
-                            {
-                                To = 0,
-                                Duration = burstTime,
-                                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
-                            };
-
-                            pTranslate.BeginAnimation(TranslateTransform.XProperty, moveX);
-                            pTranslate.BeginAnimation(TranslateTransform.YProperty, moveY);
-                            particle.BeginAnimation(UIElement.OpacityProperty, fadeP);
-                        }
-
-                        // Close window after burst
-                        Task.Delay(burstTime.Add(TimeSpan.FromMilliseconds(200))).ContinueWith(__ =>
+                        // Hide image
+                        image.Visibility = Visibility.Collapsed;
+                        
+                        // Execute Shockwave
+                        shockwave.Opacity = 1;
+                        shockwaveScale.BeginAnimation(ScaleTransform.ScaleXProperty, shockwaveScaleAnim);
+                        shockwaveScale.BeginAnimation(ScaleTransform.ScaleYProperty, shockwaveScaleAnim);
+                        shockwave.BeginAnimation(System.Windows.Shapes.Ellipse.OpacityProperty, shockwaveFadeAnim);
+                        shockwave.BeginAnimation(System.Windows.Shapes.Ellipse.StrokeThicknessProperty, shockwaveThickAnim);
+                        
+                        Task.Delay(burstTime).ContinueWith(__ => 
                         {
                             Application.Current.Dispatcher.Invoke(() =>
                             {

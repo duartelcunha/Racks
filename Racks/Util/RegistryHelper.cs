@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System.Diagnostics;
 
 public class RegistryHelper
@@ -172,7 +172,7 @@ public class RegistryHelper
             return false;
         }
     }
-    public object ReadKeyValueRoot(string keyName)
+    public object? ReadKeyValueRoot(string keyName)
     {
         try
         {
@@ -211,7 +211,7 @@ public class RegistryHelper
             return null;
         }
     }
-    public object ReadKeyValueRootInt(string keyName)
+    public object? ReadKeyValueRootInt(string keyName)
     {
         try
         {
@@ -219,7 +219,7 @@ public class RegistryHelper
             {
                 if (key != null)
                 {
-                    return Int32.Parse(key.GetValue(keyName).ToString());
+                    return Int32.Parse(key.GetValue(keyName)?.ToString() ?? "0");
                 }
             }
 

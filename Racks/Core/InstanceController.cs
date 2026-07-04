@@ -86,7 +86,8 @@ public class InstanceController
     {
         foreach (var name in source.GetValueNames())
         {
-            dest.SetValue(name, source.GetValue(name), source.GetValueKind(name));
+            object? val = source.GetValue(name);
+            if (val != null) dest.SetValue(name, val, source.GetValueKind(name));
         }
         foreach (var sub in source.GetSubKeyNames())
         {
@@ -186,7 +187,7 @@ public class InstanceController
     {
         if (reg.KeyExistsRoot("blurBackground"))
         {
-            ChangeBlur((bool)reg.ReadKeyValueRoot("blurBackground"));
+            ChangeBlur(reg.ReadKeyValueRoot("blurBackground") as bool? ?? false);
         }
     }
     public void WriteInstanceToKey(Instance instance)
@@ -353,8 +354,6 @@ public class InstanceController
             }
         }
 
-        System.IO.File.AppendAllText("C:/Users/dlcun/.gemini/antigravity/brain/363578c0-0e3f-4ec7-9d9b-efafdb14042b/scratch/debug.txt", $"newPosX={newPosX} newPosY={newPosY} source.Width={source.Width} source.Height={source.Height} source.PosX={source.PosX} source.PosY={source.PosY}\n");
-
         var inst = new Instance("empty", false)
         {
             Folder = desktopFolder,
@@ -481,7 +480,7 @@ public class InstanceController
         {
             if (forceFullReload || closedCount == _subWindows.Count)
             {
-                foreach (var window in _subWindows)
+                foreach (var window in _subWindows.ToList())
                 {
                     window.Close();
                 }
@@ -641,11 +640,11 @@ public class InstanceController
                                                 }
                                                 break;
                                             case "GrayScaleEnabled":
-                                                temp.GrayScaleEnabled = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_GrayScaleEnabled)) temp.GrayScaleEnabled = parsed_GrayScaleEnabled;
                                                 Debug.WriteLine($"GrayScaleEnabled added\t{temp.GrayScaleEnabled}");
                                                 break;
                                             case "GrayScaleEnabled_InactiveOnly":
-                                                temp.GrayScaleEnabled_InactiveOnly = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_GrayScaleEnabled_InactiveOnly)) temp.GrayScaleEnabled_InactiveOnly = parsed_GrayScaleEnabled_InactiveOnly;
                                                 Debug.WriteLine($"GrayScaleEnabled_InactiveOnly added\t{temp.GrayScaleEnabled_InactiveOnly}");
                                                 break;
                                             case "Name":
@@ -666,75 +665,75 @@ public class InstanceController
                                                 Debug.WriteLine($"ItemFontFamily added\t{temp.ItemFontFamily}");
                                                 break;
                                             case "Minimized":
-                                                temp.Minimized = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_Minimized)) temp.Minimized = parsed_Minimized;
                                                 Debug.WriteLine($"Minimized added\t{temp.Minimized}");
                                                 break;
                                             case "ShowHiddenFiles":
-                                                temp.ShowHiddenFiles = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_ShowHiddenFiles)) temp.ShowHiddenFiles = parsed_ShowHiddenFiles;
                                                 Debug.WriteLine($"ShowHiddenFiles added\t{temp.ShowHiddenFiles}");
                                                 break;
                                             case "LastAccesedToFirstRow":
-                                                temp.LastAccesedToFirstRow = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_LastAccesedToFirstRow)) temp.LastAccesedToFirstRow = parsed_LastAccesedToFirstRow;
                                                 Debug.WriteLine($"LastAccesedToFirstRow added\t{temp.LastAccesedToFirstRow}");
                                                 break;
                                             case "EnableCustomItemsOrder":
-                                                temp.EnableCustomItemsOrder = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_EnableCustomItemsOrder)) temp.EnableCustomItemsOrder = parsed_EnableCustomItemsOrder;
                                                 Debug.WriteLine($"EnableCustomItemsOrder added\t{temp.EnableCustomItemsOrder}");
                                                 break;
                                             case "ShowFileExtension":
-                                                temp.ShowFileExtension = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_ShowFileExtension)) temp.ShowFileExtension = parsed_ShowFileExtension;
                                                 Debug.WriteLine($"ShowFileExtension added\t{temp.ShowFileExtension}");
                                                 break;
                                             case "ShowFileExtensionIcon":
-                                                temp.ShowFileExtensionIcon = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_ShowFileExtensionIcon)) temp.ShowFileExtensionIcon = parsed_ShowFileExtensionIcon;
                                                 Debug.WriteLine($"ShowFileExtensionIcon added\t{temp.ShowFileExtensionIcon}");
                                                 break;
                                             case "ShowHiddenFilesIcon":
-                                                temp.ShowHiddenFilesIcon = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_ShowHiddenFilesIcon)) temp.ShowHiddenFilesIcon = parsed_ShowHiddenFilesIcon;
                                                 Debug.WriteLine($"ShowHiddenFilesIcon added\t{temp.ShowHiddenFilesIcon}");
                                                 break;
                                             case "ShowDisplayName":
-                                                temp.ShowDisplayName = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_ShowDisplayName)) temp.ShowDisplayName = parsed_ShowDisplayName;
                                                 Debug.WriteLine($"ShowDisplayName added\t{temp.ShowDisplayName}");
                                                 break;
                                             case "IsLocked":
-                                                temp.IsLocked = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_IsLocked)) temp.IsLocked = parsed_IsLocked;
                                                 Debug.WriteLine($"IsLocked added\t{temp.IsLocked}");
                                                 break;
                                             case "ShowInGrid":
-                                                temp.ShowInGrid = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_ShowInGrid)) temp.ShowInGrid = parsed_ShowInGrid;
                                                 Debug.WriteLine($"ShowInGrid added\t{temp.ShowInGrid}");
                                                 break;
                                             case "AutoExpandonCursor":
-                                                temp.AutoExpandonCursor = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_AutoExpandonCursor)) temp.AutoExpandonCursor = parsed_AutoExpandonCursor;
                                                 Debug.WriteLine($"AutoExpandonCursor added\t{temp.AutoExpandonCursor}");
                                                 break;
                                             case "ShowShortcutArrow":
-                                                temp.ShowShortcutArrow = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_ShowShortcutArrow)) temp.ShowShortcutArrow = parsed_ShowShortcutArrow;
                                                 Debug.WriteLine($"ShowShortcutArrow added\t{temp.ShowShortcutArrow}");
                                                 break;
                                             case "FolderOpenInsideFrame":
-                                                temp.FolderOpenInsideFrame = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_FolderOpenInsideFrame)) temp.FolderOpenInsideFrame = parsed_FolderOpenInsideFrame;
                                                 Debug.WriteLine($"FolderOpenInsideFrame added\t{temp.FolderOpenInsideFrame}");
                                                 break;
                                             case "HideTitleBarIconsWhenInactive":
-                                                temp.HideTitleBarIconsWhenInactive = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_HideTitleBarIconsWhenInactive)) temp.HideTitleBarIconsWhenInactive = parsed_HideTitleBarIconsWhenInactive;
                                                 Debug.WriteLine($"HideTitleBarIconsWhenInactive added\t{temp.HideTitleBarIconsWhenInactive}");
                                                 break;
                                             case "SnapWidthToIconWidth":
-                                                temp.SnapWidthToIconWidth = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_SnapWidthToIconWidth)) temp.SnapWidthToIconWidth = parsed_SnapWidthToIconWidth;
                                                 Debug.WriteLine($"SnapWidthToIconWidth added\t{temp.SnapWidthToIconWidth}");
                                                 break;
                                             case "SnapWidthToIconWidth_PlusScrollbarWidth":
-                                                temp.SnapWidthToIconWidth_PlusScrollbarWidth = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_SnapWidthToIconWidth_PlusScrollbarWidth)) temp.SnapWidthToIconWidth_PlusScrollbarWidth = parsed_SnapWidthToIconWidth_PlusScrollbarWidth;
                                                 Debug.WriteLine($"SnapWidthToIconWidth_PlusScrollbarWidth added\t{temp.SnapWidthToIconWidth_PlusScrollbarWidth}");
                                                 break;
                                             case "CheckFolderSize":
-                                                temp.CheckFolderSize = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_CheckFolderSize)) temp.CheckFolderSize = parsed_CheckFolderSize;
                                                 Debug.WriteLine($"CheckFolderSize added\t{temp.CheckFolderSize}");
                                                 break;
                                             case "LinkOnDrop":
-                                                temp.LinkOnDrop = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_LinkOnDrop)) temp.LinkOnDrop = parsed_LinkOnDrop;
                                                 break;
                                             // Legacy: read old MoveFilesOnDrop (inverted semantic).
                                             // If user explicitly enabled it, they wanted move — that's
@@ -742,7 +741,7 @@ public class InstanceController
                                             case "MoveFilesOnDrop":
                                                 break;
                                             case "SnapToGrid":
-                                                temp.SnapToGrid = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_SnapToGrid)) temp.SnapToGrid = parsed_SnapToGrid;
                                                 break;
                                             case "GridSize":
                                                 if (int.TryParse(value.ToString(), out int parsedGrid))
@@ -755,19 +754,19 @@ public class InstanceController
                                                 temp.BackgroundImagePath = value.ToString() ?? "";
                                                 break;
                                             case "PinToTop":
-                                                temp.PinToTop = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_PinToTop)) temp.PinToTop = parsed_PinToTop;
                                                 break;
                                             case "DropShadowEnabled":
-                                                temp.DropShadowEnabled = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_DropShadowEnabled)) temp.DropShadowEnabled = parsed_DropShadowEnabled;
                                                 break;
                                             case "GradientBackgroundEnabled":
-                                                temp.GradientBackgroundEnabled = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_GradientBackgroundEnabled)) temp.GradientBackgroundEnabled = parsed_GradientBackgroundEnabled;
                                                 break;
                                             case "DisableAnimations":
-                                                temp.DisableAnimations = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_DisableAnimations)) temp.DisableAnimations = parsed_DisableAnimations;
                                                 break;
                                             case "IsDesktopFilterRack":
-                                                temp.IsDesktopFilterRack = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_IsDesktopFilterRack)) temp.IsDesktopFilterRack = parsed_IsDesktopFilterRack;
                                                 break;
                                             case "AssignedFiles":
                                                 var files = value.ToString()?.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
@@ -799,19 +798,19 @@ public class InstanceController
                                                 Debug.WriteLine($"BorderColor added\t{temp.BorderColor}");
                                                 break;
                                             case "BorderEnabled":
-                                                temp.BorderEnabled = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_BorderEnabled)) temp.BorderEnabled = parsed_BorderEnabled;
                                                 Debug.WriteLine($"BorderEnabled added\t{temp.BorderEnabled}");
                                                 break;
                                             case "ActiveBorderEnabled":
-                                                temp.ActiveBorderEnabled = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_ActiveBorderEnabled)) temp.ActiveBorderEnabled = parsed_ActiveBorderEnabled;
                                                 Debug.WriteLine($"ActiveBorderEnabled added\t{temp.ActiveBorderEnabled}");
                                                 break;
                                             case "ActiveBackgroundEnabled":
-                                                temp.ActiveBackgroundEnabled = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_ActiveBackgroundEnabled)) temp.ActiveBackgroundEnabled = parsed_ActiveBackgroundEnabled;
                                                 Debug.WriteLine($"ActiveBackgroundEnabled added\t{temp.ActiveBackgroundEnabled}");
                                                 break;
                                             case "ActiveTitleTextEnabled":
-                                                temp.ActiveTitleTextEnabled = bool.Parse(value.ToString()!);
+                                                if (bool.TryParse(value.ToString(), out bool parsed_ActiveTitleTextEnabled)) temp.ActiveTitleTextEnabled = parsed_ActiveTitleTextEnabled;
                                                 Debug.WriteLine($"ActiveTitleTextEnabled added\t{temp.ActiveTitleTextEnabled}");
                                                 break;
                                             case "FileFilterRegex":
@@ -901,8 +900,9 @@ public class InstanceController
                                                         .Select(s =>
                                                         {
                                                             var parts = s.Split(',');
+                                                            if (parts.Length < 2) return null;
                                                             return Tuple.Create(parts[0], parts[1]);
-                                                        }).ToList();
+                                                        }).Where(t => t != null).ToList()!;
                                                 }
                                                 break;
 
@@ -966,7 +966,7 @@ public class InstanceController
                                     }
                                     else
                                     {
-                                        RegistryKey key = Registry.CurrentUser.OpenSubKey(temp.GetKeyLocation(), true)!;
+                                        using RegistryKey? key = Registry.CurrentUser.OpenSubKey(temp.GetKeyLocation(), true);
                                         if (key != null)
                                         {
                                             temp.IsFolderMissing = true;

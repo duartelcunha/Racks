@@ -38,7 +38,7 @@ namespace Racks.Views
             await Task.Delay(1500);
 
             // 3. Fall into the system tray
-            var workingArea = System.Windows.Forms.Screen.PrimaryScreen.WorkingArea;
+            var workingArea = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
             double targetX = (workingArea.Right - this.Left) - 75; // 75 is half icon width
             double targetY = (workingArea.Bottom - this.Top) - 75;
 

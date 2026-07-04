@@ -15,12 +15,14 @@ namespace Racks
     /// </summary>
     public partial class App : Application
     {
-        private DispatcherTimer updateTimer;
+        
         // Hold a named Mutex for the lifetime of the process. Second-launch detects
         // this in <1ms and exits silently — the existing tray icon is already there.
         // Beats the previous Process.GetProcessesByName check, which raced on startup
         // and popped a modal dialog when you double-clicked the exe.
-        private static Mutex _singleInstanceMutex;
+        #pragma warning disable CS0649
+        private static Mutex? _singleInstanceMutex;
+#pragma warning restore CS0649
         public RegistryHelper reg = new RegistryHelper(InstanceController.appName);
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -62,7 +64,7 @@ namespace Racks
             Racks.Core.DesktopIconManager.StartHook();
 
             ToastNotificationManagerCompat.OnActivated += ToastActivatedHandler;
-            StartUpdateCheckTimer();
+            ToastNotificationManagerCompat.OnActivated += ToastActivatedHandler;
             // Once-only: pin %USERPROFILE%\Racks to the Explorer / file-picker
             // Quick Access list so that the user can reach rack contents from
             // any picker without manually navigating. Gated by a registry
@@ -82,13 +84,17 @@ namespace Racks
         protected override void OnExit(ExitEventArgs e)
         {
             // Remove the C++ desktop hook
-            Racks.Core.DesktopIconManager.StopHook();
+            try { Racks.Core.DesktopIconManager.StopHook(); } catch { }
+            
+            _singleInstanceMutex?.ReleaseMutex();
+            _singleInstanceMutex?.Dispose();
+            
             base.OnExit(e);
         }
         private void ToastActivatedHandler(ToastNotificationActivatedEventArgsCompat toastArgs)
         {
             var args = ToastArguments.Parse(toastArgs.Argument);
-            Current.Dispatcher.Invoke(async () =>
+            Current.Dispatcher.InvokeAsync(async () =>
             {
                 if (args.Contains("action") && args["action"] == "install_update")
                 {
@@ -97,20 +103,7 @@ namespace Racks
 
             });
         }
-        private void StartUpdateCheckTimer()
-        {
-            updateTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromHours(6)
-            };
-            updateTimer.Tick += async (_, _) =>
-            {
-                // Auto-update disabled — no release pipeline. Intentional no-op so the
-                // timer doesn't hammer a placeholder URL every six hours.
-                await Task.CompletedTask;
-            };
-            updateTimer.Start();
-        }
+
     }
 
 }

@@ -153,7 +153,7 @@ namespace Racks
                     }
                 }
                 ToastNotificationManagerCompat.CreateToastNotifier().Hide(notif);
-                RestartApplication(tempFilePath);
+                await RestartApplication(tempFilePath);
             }
         }
         private static bool HasPermissionToWrite(string currentExecutablePath)
@@ -169,17 +169,17 @@ namespace Racks
                 CreateNoWindow = true
             };
 
-            Process proc = Process.Start(psi)!;
+            using Process proc = Process.Start(psi)!;
             proc.WaitForExit();
             if (proc.ExitCode == 0)
             {
-                Process.Start(new ProcessStartInfo
+                using (Process.Start(new ProcessStartInfo
                 {
                     FileName = "cmd.exe",
                     Arguments = $"/C cd /d \"{path}\" && del RacksUpdatePermissionCheck",
                     UseShellExecute = false,
                     CreateNoWindow = true
-                });
+                })) {}
                 return true;
             }
             return false;
@@ -203,11 +203,11 @@ namespace Racks
                 WindowStyle = ProcessWindowStyle.Hidden,
                 Verb = "runas"
             };
-            Process.Start(psi);
+            using (Process.Start(psi)) {}
 
         }
 
-        private static void RestartApplication(string tempPath)
+        private static async Task RestartApplication(string tempPath)
         {
             string currentExecutablePath = Process.GetCurrentProcess().MainModule!.FileName;
             string command = $"timeout /t 2 && move /y \"{tempPath}\" \"{currentExecutablePath}\" & \"{currentExecutablePath}\" && exit ";
@@ -225,9 +225,9 @@ namespace Racks
                     PrimaryButtonText = "OK"
                 };
 
-                var result = dialog.ShowDialogAsync();
+                var result = await dialog.ShowDialogAsync();
 
-                if (result.Result == Wpf.Ui.Controls.MessageBoxResult.Primary)
+                if (result == Wpf.Ui.Controls.MessageBoxResult.Primary)
                 {
                     ExecuteCommand(command, true);
                 }

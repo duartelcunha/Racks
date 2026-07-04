@@ -247,6 +247,11 @@
                                           Margin="0,0,0,8"
                                           Checked="DisableAnimationsCheckBox_Checked"
                                           Unchecked="DisableAnimationsCheckBox_Checked"/>
+                                <CheckBox x:Name="TransparentBackgroundCheckBox"
+                                          Content="Transparent Background"
+                                          Margin="0,0,0,8"
+                                          Checked="TransparentBackgroundCheckBox_Checked"
+                                          Unchecked="TransparentBackgroundCheckBox_Checked"/>
                             </StackPanel>
                         </Border>
 

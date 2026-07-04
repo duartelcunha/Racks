@@ -1,3 +1,5 @@
+#pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604, CS8618, CS8622, CS8625
+using Racks.ViewModels;
 using Racks.Core;
 using Racks.Properties;
 using Racks.Shaders;
@@ -64,9 +66,11 @@ namespace Racks
         ShellContextMenu scm = new ShellContextMenu();
         public Instance Instance { get; set; }
         public string _currentFolderPath;
-        private FileSystemWatcher _fileWatcher = new FileSystemWatcher();
-        private FileSystemWatcher _parentWatcher = new FileSystemWatcher();
-        public ObservableCollection<FileItem> FileItems { get; set; }
+        private readonly Racks.Services.FileWatcherService _fileWatcherService = new Racks.Services.FileWatcherService();
+
+        public RackViewModel ViewModel { get; }
+        public System.Collections.ObjectModel.ObservableCollection<FileItem> FileItems => ViewModel.FileItems;
+        
 
         public bool VirtualDesktopSupported;
         IntPtr hwnd;
@@ -88,8 +92,13 @@ namespace Racks
         bool _dragMovingWinddow = false;
 
 
+        
+        #pragma warning disable CS0649
+        private FileItem? _draggedItem;
+#pragma warning restore CS0649
+        
         private List<FileItem> _selectedItems = new List<FileItem>();
-        private FileItem _draggedItem;
+        
         private FileItem _itemUnderCursor;
         private FileItem _itemCurrentlyRenaming;
         string _dropIntoFolderPath;
@@ -112,7 +121,7 @@ namespace Racks
         private int _currentVD;
         int _oriPosX, _oriPosY;
         private bool _isBlack = true;
-        private bool _checkForChages = false;
+        
         private bool _canAutoClose = true;
         private bool _isLocked = false;
         private bool _isOnTop = false;
@@ -175,7 +184,7 @@ namespace Racks
         MenuItem ascendingMenuItem;
         MenuItem descendingMenuItem;
         MenuItem CustomItemOrderMenuItem;
-        MenuItem CustomItemOrderEnabledMenuItem;
+
         MenuItem folderOrderMenuItem;
         MenuItem folderFirstMenuItem;
         MenuItem folderLastMenuItem;
@@ -185,7 +194,7 @@ namespace Racks
         private int _folderCount = 0;
         private DateTime _lastUpdated;
         private string _folderSize;
-        private double _itemWidth;
+
         private double _windowsScalingFactor;
 
         public enum SortBy
@@ -443,7 +452,7 @@ namespace Racks
                     };
                     timer.Tick += (s, args) =>
                     {
-                        if (!_dragdropIntoFolder) ;
+                        if (!_dragdropIntoFolder)
                         {
                             Dispatcher.InvokeAsync(() =>
                             {
@@ -837,7 +846,7 @@ namespace Racks
                     handled = true;
                     return IntPtr.Zero;
                 }
-                Interop.RECT rect = (Interop.RECT)Marshal.PtrToStructure(lParam, typeof(Interop.RECT));
+                Interop.RECT rect = Marshal.PtrToStructure<Interop.RECT>(lParam);
 
                 Instance.PosX = this.Left;
                 Instance.PosY = this.Top;
@@ -1877,8 +1886,7 @@ namespace Racks
             titleStackPanel.MouseEnter += (s, e) => AnimateSymbolIcon(frameTypeSymbol, Instance.TitleFontSize, 1, 5);
             titleStackPanel.MouseLeave += (s, e) => AnimateSymbolIcon(frameTypeSymbol, 0, 0, 0);
 
-            _checkForChages = true;
-            FileItems = new ObservableCollection<FileItem>();
+            
             // Restore persistent pin-to-top.
             if (Instance.PinToTop)
             {
@@ -2320,21 +2328,7 @@ namespace Racks
         {
             if (Instance.Folder != null && Instance.Folder != "empty")
             {
-                if (_parentWatcher != null)
-                {
-                    _parentWatcher.Created -= OnParentChanged;
-                    _parentWatcher.Deleted -= OnParentChanged;
-                    _parentWatcher.Renamed -= OnParentRenamed;
-                }
-                _parentWatcher = new FileSystemWatcher(Path.GetDirectoryName(Instance.Folder))
-                {
-                    NotifyFilter = NotifyFilters.DirectoryName,
-                    IncludeSubdirectories = false,
-                    EnableRaisingEvents = true
-                };
-                _parentWatcher.Created += OnParentChanged;
-                _parentWatcher.Deleted += OnParentChanged;
-                _parentWatcher.Renamed += OnParentRenamed;
+                _fileWatcherService.Initialize(Instance.Folder, _currentFolderPath);
             }
 
             if (!Path.Exists(Instance.Folder) && Instance.Folder != "empty")
@@ -2345,26 +2339,6 @@ namespace Racks
             else
             {
                 missingFolderGrid.Visibility = Visibility.Hidden;
-            }
-            if (Instance.Folder != "empty")
-            {
-                if (_fileWatcher != null)
-                {
-                    _fileWatcher.Created -= OnFileChanged;
-                    _fileWatcher.Deleted -= OnFileChanged;
-                    _fileWatcher.Renamed -= OnFileRenamed;
-                    _fileWatcher.Changed -= OnFileChanged;
-                }
-                _fileWatcher = new FileSystemWatcher(_currentFolderPath)
-                {
-                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
-                    IncludeSubdirectories = false,
-                    EnableRaisingEvents = true
-                };
-                _fileWatcher.Created += OnFileChanged;
-                _fileWatcher.Deleted += OnFileChanged;
-                _fileWatcher.Renamed += OnFileRenamed;
-                _fileWatcher.Changed += OnFileChanged;
             }
         }
         private void OnParentRenamed(object sender, RenamedEventArgs e)
@@ -4200,7 +4174,7 @@ namespace Racks
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return "";
             }
@@ -4214,7 +4188,7 @@ namespace Racks
             AnimateChevron(_isMinimized, true, 0.01); // When 0 docked window won't open
             KeepWindowBehind();
             RegistryHelper rgh = new RegistryHelper(InstanceController.appName);
-            bool toBlur = true;
+            
             //if (rgh.KeyExistsRoot("blurBackground"))
             //{
             //    toBlur = (bool)rgh.ReadKeyValueRoot("blurBackground");
@@ -4226,6 +4200,13 @@ namespace Racks
         {
             try
             {
+                if (Instance.IsTransparent)
+                {
+                    WindowBackground.Background = System.Windows.Media.Brushes.Transparent;
+                    BackgroundType(false);
+                    return;
+                }
+
                 // Prefer image background when one is configured and the file still exists.
                 if (!string.IsNullOrWhiteSpace(Instance.BackgroundImagePath)
                     && File.Exists(Instance.BackgroundImagePath))
@@ -4293,6 +4274,8 @@ namespace Racks
                 {
                     WindowBackground.Background = new SolidColorBrush(Color.FromArgb((byte)Instance.Opacity, c.R, c.G, c.B));
                 }
+                
+                BackgroundType(_isTopmost);
             }
             catch
             {
@@ -4305,6 +4288,11 @@ namespace Racks
         }
         public void BackgroundType(bool toBlur)
         {
+            if (Instance.IsTransparent)
+            {
+                toBlur = false;
+            }
+
             var hwnd = new WindowInteropHelper(this).Handle;
             var accent = new Interop.AccentPolicy
             {
@@ -5186,16 +5174,16 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
             };
 
             InfoText.Inlines.Add(new Run(Lang.TitleBarContextMenu_Info_Files) { Foreground = Brushes.White });
-            InfoText.Inlines.Add(new Run($"{_fileCount}") { Foreground = Brushes.CornflowerBlue });
+            InfoText.Inlines.Add(new Run($"{ViewModel.FileCount}") { Foreground = Brushes.CornflowerBlue });
             InfoText.Inlines.Add(new Run("\n"));
 
             InfoText.Inlines.Add(new Run(Lang.TitleBarContextMenu_Info_Folders) { Foreground = Brushes.White });
-            InfoText.Inlines.Add(new Run($"{_folderCount}") { Foreground = Brushes.CornflowerBlue });
+            InfoText.Inlines.Add(new Run($"{ViewModel.FolderCount}") { Foreground = Brushes.CornflowerBlue });
             InfoText.Inlines.Add(new Run("\n"));
             if (Instance.CheckFolderSize)
             {
                 InfoText.Inlines.Add(new Run(Lang.TitleBarContextMenu_Info_FolderSize) { Foreground = Brushes.White });
-                InfoText.Inlines.Add(new Run($"{_folderSize}") { Foreground = Brushes.CornflowerBlue });
+                InfoText.Inlines.Add(new Run($"{ViewModel.FolderSize}") { Foreground = Brushes.CornflowerBlue });
                 InfoText.Inlines.Add(new Run("\n"));
             }
 

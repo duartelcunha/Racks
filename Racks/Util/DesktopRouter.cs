@@ -43,8 +43,11 @@ namespace Racks.Util
         private void Enqueue(string path)
         {
             lock (_pending) _pending.Add(path);
-            _debounce.Stop();
-            _debounce.Start();
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _debounce.Stop();
+                _debounce.Start();
+            }));
         }
 
         private void Flush()

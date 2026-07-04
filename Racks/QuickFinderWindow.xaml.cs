@@ -83,9 +83,15 @@ namespace Racks
             }
         }
 
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            _isClosing = true;
+            base.OnClosing(e);
+        }
+
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape) { _isClosing = true; this.Close(); e.Handled = true; }
+            if (e.Key == Key.Escape) { this.Close(); e.Handled = true; }
         }
 
         private bool _isClosing = false;
@@ -93,8 +99,7 @@ namespace Racks
         {
             if (!_isClosing)
             {
-                _isClosing = true;
-                try { this.Close(); } catch { }
+                this.Close();
             }
         }
 
@@ -103,6 +108,7 @@ namespace Racks
         private void OpenSelected()
         {
             if (Results.SelectedItem is not Row row) return;
+            if (string.IsNullOrEmpty(row.Item.FullPath)) return;
             try
             {
                 Process.Start(new ProcessStartInfo(row.Item.FullPath!) { UseShellExecute = true });
