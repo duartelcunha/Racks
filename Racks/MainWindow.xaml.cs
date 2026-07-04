@@ -553,9 +553,11 @@ namespace Racks
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             _taskbarRestartMessage = RegisterWindowMessage("TaskbarCreated");
-            _mainHwnd = new WindowInteropHelper(this).Handle;
+            _mainHwnd = new WindowInteropHelper(this).EnsureHandle();
             var hwndSource = HwndSource.FromHwnd(_mainHwnd);
             hwndSource?.AddHook(WndProc);
+            TrayIcon.Register();
+            
             // Ctrl+Shift+Space opens the cross-rack quick finder.
             try { Interop.RegisterHotKey(_mainHwnd, QUICK_FINDER_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x20); }
             catch (Exception ex) { Debug.WriteLine($"RegisterHotKey QuickFinder failed: {ex.Message}"); }
