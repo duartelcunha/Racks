@@ -539,7 +539,8 @@ namespace Racks
 
         private void ExitApp(object sender, RoutedEventArgs e)
         {
-            Application.Current.Shutdown();
+            TrayIcon.Visibility = Visibility.Hidden;
+            Racks.Util.LifecycleAnimations.RunQuitAnimation(() => Application.Current.Shutdown());
         }
 
         private void Settings_Button_Click(object sender, RoutedEventArgs e)

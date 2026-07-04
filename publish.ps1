@@ -59,7 +59,7 @@ if (Test-Path $exe) {
     $size = (Get-Item $exe).Length
     Write-Host ""
     Write-Host "Built $exe ($([math]::Round($size / 1MB, 1)) MB)"
-    Write-Host "Run it from anywhere — the folder is portable."
+    Write-Host "Run it from anywhere - the folder is portable."
 } else {
     Write-Warning "Racks.exe not found in $outFull. Check the dotnet output above."
 }

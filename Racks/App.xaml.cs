@@ -30,16 +30,26 @@ namespace Racks
             // Tell Windows we'd like dark mode for native popups (shell context
             // menu). Has to run before any menu is shown.
             Racks.Util.DarkModeHelper.EnableForApp();
+            bool isUninstallAnim = e.Args.Length > 0 && e.Args[0] == "--uninstall-anim";
 #if !DEBUG
-            bool createdNew;
-            _singleInstanceMutex = new Mutex(true, @"Global\Racks-SingleInstance-2C9D", out createdNew);
-            if (!createdNew)
+            if (!isUninstallAnim)
             {
-                // Another Racks is already running — its tray icon is live. Just exit.
-                Application.Current.Shutdown();
-                return;
+                bool createdNew;
+                _singleInstanceMutex = new Mutex(true, @"Global\Racks-SingleInstance-2C9D", out createdNew);
+                if (!createdNew)
+                {
+                    // Another Racks is already running — its tray icon is live. Just exit.
+                    Application.Current.Shutdown();
+                    return;
+                }
             }
 #endif
+            if (isUninstallAnim)
+            {
+                Racks.Util.LifecycleAnimations.RunUninstallAnimation(() => Application.Current.Shutdown());
+                return;
+            }
+
             PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Critical;
             base.OnStartup(e);
 

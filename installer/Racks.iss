@@ -61,6 +61,7 @@ SetupMutex=Racks-Setup-{#AppVersion}
 OutputBaseFilename=Racks-Setup-{#AppVersion}
 OutputDir=Output
 SetupIconFile=..\Racks\Icon\ico.ico
+WizardSmallImageFile=..\Racks\Icon\logo_small.bmp
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
 ; Single-arch — Racks targets x64 only (see csproj <Platforms>x64</Platforms>).
@@ -93,6 +94,7 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-; Make sure the running Racks tray instance is closed before uninstall tries
-; to delete the .exe. Best-effort: ignore errors (e.g., not running).
+; Kill running instance silently so the uninstaller instance can run without hitting the Mutex
 Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExeName} /F"; Flags: runhidden; RunOnceId: "KillRacks"
+; Run the uninstall animation
+Filename: "{app}\{#AppExeName}"; Parameters: "--uninstall-anim"; Flags: waituntilterminated skipifdoesntexist; RunOnceId: "UninstallAnim"
