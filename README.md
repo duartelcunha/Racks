@@ -93,7 +93,12 @@ The settings panel snaps right next to the rack you're tweaking and updates **li
 
 </div>
 
-Download `Racks-Installation.zip`, extract, and run `Racks.exe`. No admin prompts, no installers. Racks boots into your tray in seconds. Right-click the icon to start.
+Download `Racks-Setup-1.1.1.exe` and double-click it. 
+
+> [!NOTE]
+> **Windows SmartScreen** may show a blue "Windows protected your PC" popup because Racks is an indie app without an expensive corporate signing certificate. Click **More info** → **Run anyway**. It's 100% open source and safe.
+
+The installer takes ~2 seconds. No admin prompts. Racks starts instantly in the system tray. Right-click the icon to start.
 
 <br />
 

@@ -193,78 +193,104 @@ namespace Racks.Util
                 Canvas.SetLeft(image, centerX - size / 2);
                 Canvas.SetTop(image, centerY - size / 2);
                 
-                // Explode effect: turn red/white
-                var colorOverlay = new System.Windows.Shapes.Rectangle
-                {
-                    Width = size,
-                    Height = size,
-                    Fill = Brushes.Red,
-                    Opacity = 0,
-                    OpacityMask = new ImageBrush(image.Source)
-                };
-                colorOverlay.RenderTransformOrigin = new Point(0.5, 0.5);
-                colorOverlay.RenderTransform = image.RenderTransform;
-                
-                Canvas.SetLeft(colorOverlay, centerX - size / 2);
-                Canvas.SetTop(colorOverlay, centerY - size / 2);
-                canvas.Children.Add(colorOverlay);
-                
                 win.Show();
                 ForceTopmost(win);
 
-                // 0-800ms: Swell and vibrate
-                // 800-1100ms: Burst (rapid expand, fade to 0)
-
+                // Phase 1: Charge up (vibrate and scale up slightly)
+                var chargeTime = TimeSpan.FromMilliseconds(800);
+                
                 var scaleAnim = new DoubleAnimationUsingKeyFrames();
                 scaleAnim.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                scaleAnim.KeyFrames.Add(new EasingDoubleKeyFrame(1.3, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(400)), new SineEase { EasingMode = EasingMode.EaseInOut }));
-                scaleAnim.KeyFrames.Add(new EasingDoubleKeyFrame(1.1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(600)), new SineEase { EasingMode = EasingMode.EaseInOut }));
-                scaleAnim.KeyFrames.Add(new EasingDoubleKeyFrame(1.5, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(800)), new SineEase { EasingMode = EasingMode.EaseIn }));
-                scaleAnim.KeyFrames.Add(new EasingDoubleKeyFrame(8.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1100)), new QuarticEase { EasingMode = EasingMode.EaseOut }));
-                scaleAnim.Duration = TimeSpan.FromMilliseconds(1100);
+                scaleAnim.KeyFrames.Add(new EasingDoubleKeyFrame(1.4, KeyTime.FromTimeSpan(chargeTime), new SineEase { EasingMode = EasingMode.EaseIn }));
+                scaleAnim.Duration = chargeTime;
 
-                var opacityAnim = new DoubleAnimationUsingKeyFrames();
-                opacityAnim.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                opacityAnim.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(800))));
-                opacityAnim.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1100)), new CubicEase { EasingMode = EasingMode.EaseOut }));
-                opacityAnim.Duration = TimeSpan.FromMilliseconds(1100);
-
-                var colorOpacity = new DoubleAnimationUsingKeyFrames();
-                colorOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                colorOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(0.5, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(400))));
-                colorOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(0.2, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(600))));
-                colorOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(800))));
-                colorOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1100))));
-                colorOpacity.Duration = TimeSpan.FromMilliseconds(1100);
-
-                var spin = new DoubleAnimationUsingKeyFrames();
-                spin.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                spin.KeyFrames.Add(new EasingDoubleKeyFrame(15, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(100))));
-                spin.KeyFrames.Add(new EasingDoubleKeyFrame(-15, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(300))));
-                spin.KeyFrames.Add(new EasingDoubleKeyFrame(20, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(500))));
-                spin.KeyFrames.Add(new EasingDoubleKeyFrame(-20, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(700))));
-                spin.KeyFrames.Add(new EasingDoubleKeyFrame(180, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1100)), new QuarticEase { EasingMode = EasingMode.EaseOut }));
-                spin.Duration = TimeSpan.FromMilliseconds(1100);
-                
-                var winOpacity = new DoubleAnimationUsingKeyFrames();
-                winOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                winOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1100))));
-                winOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1300))));
-                winOpacity.Duration = TimeSpan.FromMilliseconds(1300);
+                var shakeAnim = new DoubleAnimationUsingKeyFrames();
+                var r = new Random();
+                for (int i = 0; i < 20; i++)
+                {
+                    shakeAnim.KeyFrames.Add(new LinearDoubleKeyFrame(r.Next(-5, 6), KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(i * 40))));
+                }
+                shakeAnim.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(chargeTime)));
+                shakeAnim.Duration = chargeTime;
 
                 scale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleAnim);
                 scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleAnim);
-                image.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
-                colorOverlay.BeginAnimation(UIElement.OpacityProperty, colorOpacity);
-                rotate.BeginAnimation(RotateTransform.AngleProperty, spin);
-                win.BeginAnimation(UIElement.OpacityProperty, winOpacity);
+                translate.BeginAnimation(TranslateTransform.XProperty, shakeAnim);
+                translate.BeginAnimation(TranslateTransform.YProperty, shakeAnim);
 
-                Task.Delay(1350).ContinueWith(_ =>
+                // Phase 2: Burst into particles
+                Task.Delay(chargeTime).ContinueWith(_ =>
                 {
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        try { win.Close(); } catch { }
-                        onComplete?.Invoke();
+                        image.Visibility = Visibility.Hidden; // Hide main image
+
+                        // Generate particles
+                        int particleCount = 150;
+                        var burstTime = TimeSpan.FromMilliseconds(800);
+                        var colors = new[] { 
+                            Color.FromRgb(46, 160, 67),  // Green
+                            Color.FromRgb(0, 120, 212),  // Blue
+                            Color.FromRgb(245, 166, 35), // Orange/Yellow
+                            Color.FromRgb(255, 255, 255) // White
+                        };
+
+                        for (int i = 0; i < particleCount; i++)
+                        {
+                            double angle = r.NextDouble() * Math.PI * 2;
+                            double distance = r.NextDouble() * 400 + 100; // Fly outwards up to 500px
+                            double pSize = r.Next(3, 12);
+
+                            var particle = new System.Windows.Shapes.Ellipse
+                            {
+                                Width = pSize,
+                                Height = pSize,
+                                Fill = new SolidColorBrush(colors[r.Next(colors.Length)]),
+                                RenderTransformOrigin = new Point(0.5, 0.5)
+                            };
+
+                            var pTranslate = new TranslateTransform(0, 0);
+                            particle.RenderTransform = pTranslate;
+
+                            Canvas.SetLeft(particle, centerX - pSize / 2);
+                            Canvas.SetTop(particle, centerY - pSize / 2);
+                            canvas.Children.Add(particle);
+
+                            var moveX = new DoubleAnimation
+                            {
+                                To = Math.Cos(angle) * distance,
+                                Duration = burstTime,
+                                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+                            };
+
+                            var moveY = new DoubleAnimation
+                            {
+                                To = Math.Sin(angle) * distance,
+                                Duration = burstTime,
+                                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+                            };
+
+                            var fadeP = new DoubleAnimation
+                            {
+                                To = 0,
+                                Duration = burstTime,
+                                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+                            };
+
+                            pTranslate.BeginAnimation(TranslateTransform.XProperty, moveX);
+                            pTranslate.BeginAnimation(TranslateTransform.YProperty, moveY);
+                            particle.BeginAnimation(UIElement.OpacityProperty, fadeP);
+                        }
+
+                        // Close window after burst
+                        Task.Delay(burstTime.Add(TimeSpan.FromMilliseconds(200))).ContinueWith(__ =>
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                try { win.Close(); } catch { }
+                                onComplete?.Invoke();
+                            });
+                        });
                     });
                 });
             }
