@@ -73,7 +73,7 @@ if (Test-Path $outExe) {
     $size = [math]::Round((Get-Item $outExe).Length / 1MB, 1)
     Write-Host ""
     Write-Host "Built $outExe ($size MB)"
-    Write-Host "Distribute that single .exe — double-click it to install Racks (no UAC, no choices)."
+    Write-Host 'Distribute that single .exe to install Racks.'
 } else {
     Write-Warning "Expected output not found at $outExe — check iscc output above."
 }
