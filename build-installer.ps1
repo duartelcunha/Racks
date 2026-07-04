@@ -1,8 +1,8 @@
 # Build the distributable Racks-Setup-x.y.z.exe.
 #
 # Pipeline:
-#   1. publish.ps1 -SelfContained  →  .\publish\  (bundled .NET 10 runtime)
-#   2. iscc.exe installer\Racks.iss  →  .\installer\Output\Racks-Setup-<ver>.exe
+#   1. publish.ps1 -SelfContained     .\publish\  (bundled .NET 10 runtime)
+#   2. iscc.exe installer\Racks.iss     .\installer\Output\Racks-Setup-<ver>.exe
 #
 # Requires Inno Setup 6 (https://jrsoftware.org/isdl.php). The script auto-
 # detects ISCC.exe at the usual install locations; pass -IsccPath to override.
@@ -73,7 +73,7 @@ if (Test-Path $outExe) {
     $size = [math]::Round((Get-Item $outExe).Length / 1MB, 1)
     Write-Host ""
     Write-Host "Built $outExe ($size MB)"
-    Write-Host 'Distribute that single .exe to install Racks.'
+    Write-Host "Distribute that single .exe to install Racks."
 } else {
-    Write-Warning "Expected output not found at $outExe — check iscc output above."
+    Write-Warning "Expected output not found at $outExe"
 }

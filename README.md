@@ -91,11 +91,11 @@ The settings panel snaps right next to the rack you're tweaking and updates **li
 
 <div align="center">
 
-### [⬇️ Download v1.1.1](https://github.com/duartelcunha/Racks/releases/latest)
+### [⬇️ Download v1.1.2](https://github.com/duartelcunha/Racks/releases/latest)
 
 </div>
 
-Download `Racks-Setup-1.1.1.exe` and double-click it. 
+Download `Racks-Setup-1.1.2.exe` and double-click it. 
 
 > [!NOTE]
 > **Windows SmartScreen** may show a blue "Windows protected your PC" popup because Racks is an indie app without an expensive corporate signing certificate. Click **More info** → **Run anyway**. It's 100% open source and safe.
