@@ -37,7 +37,6 @@ namespace Racks.Services
             {
                 if (string.IsNullOrWhiteSpace(path) || (!File.Exists(path) && !Directory.Exists(path)))
                 {
-                    Console.WriteLine("Invalid path: " + path);
                     return null;
                 }
                 BitmapSource? thumbnail = null;

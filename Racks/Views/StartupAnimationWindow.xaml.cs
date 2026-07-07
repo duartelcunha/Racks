@@ -15,19 +15,20 @@ namespace Racks.Views
 
         private async void StartupAnimationWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // 1. Pop-in scale
+            // 1. Pop-in scale: a slightly stiffer spring so the logo arrives with one
+            // gentle settle instead of a wobble.
             var scaleAnim = new DoubleAnimation
             {
                 To = 1.0,
-                Duration = TimeSpan.FromSeconds(0.6),
-                EasingFunction = new ElasticEase { Oscillations = 1, Springiness = 4, EasingMode = EasingMode.EaseOut }
+                Duration = TimeSpan.FromSeconds(0.5),
+                EasingFunction = new ElasticEase { Oscillations = 1, Springiness = 6, EasingMode = EasingMode.EaseOut }
             };
 
-            // 2. Roll in place
+            // 2. Roll in place: one clean turn reads more premium than two.
             var rotateAnim = new DoubleAnimation
             {
-                To = 720,
-                Duration = TimeSpan.FromSeconds(1.5),
+                To = 360,
+                Duration = TimeSpan.FromSeconds(1.1),
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
             };
 
@@ -35,7 +36,7 @@ namespace Racks.Views
             LogoScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
             LogoRotate.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, rotateAnim);
 
-            await Task.Delay(1500);
+            await Task.Delay(1100);
 
             // 3. Fall into the system tray
             var workingArea = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
@@ -45,28 +46,28 @@ namespace Racks.Views
             var fallXAnim = new DoubleAnimation
             {
                 To = targetX,
-                Duration = TimeSpan.FromSeconds(0.6),
+                Duration = TimeSpan.FromSeconds(0.5),
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
             };
 
             var fallYAnim = new DoubleAnimation
             {
                 To = targetY,
-                Duration = TimeSpan.FromSeconds(0.6),
+                Duration = TimeSpan.FromSeconds(0.5),
                 EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseIn }
             };
 
             var fadeOut = new DoubleAnimation
             {
                 To = 0.0,
-                Duration = TimeSpan.FromSeconds(0.6),
+                Duration = TimeSpan.FromSeconds(0.5),
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
             };
 
             var scaleDown = new DoubleAnimation
             {
                 To = 0.0,
-                Duration = TimeSpan.FromSeconds(0.6),
+                Duration = TimeSpan.FromSeconds(0.5),
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
             };
 
@@ -76,7 +77,7 @@ namespace Racks.Views
             LogoScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleDown);
             LogoScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleDown);
 
-            await Task.Delay(600);
+            await Task.Delay(500);
             this.Close();
         }
     }

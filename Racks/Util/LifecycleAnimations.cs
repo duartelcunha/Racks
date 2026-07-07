@@ -170,9 +170,10 @@ namespace Racks.Util
                     });
                 });
             }
-            catch 
-            { 
-                onComplete?.Invoke(); 
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"RunQuitAnimation failed (skipping animation): {ex.Message}");
+                onComplete?.Invoke();
             }
         }
 
@@ -279,7 +280,7 @@ namespace Racks.Util
                         shockwave.BeginAnimation(System.Windows.Shapes.Ellipse.OpacityProperty, shockwaveFadeAnim);
                         shockwave.BeginAnimation(System.Windows.Shapes.Ellipse.StrokeThicknessProperty, shockwaveThickAnim);
                         
-                        Task.Delay(burstTime).ContinueWith(__ => 
+                        Task.Delay(burstTime).ContinueWith(__ =>
                         {
                             Application.Current.Dispatcher.Invoke(() =>
                             {
@@ -290,9 +291,10 @@ namespace Racks.Util
                     });
                 });
             }
-            catch 
-            { 
-                onComplete?.Invoke(); 
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"RunUninstallAnimation failed (skipping animation): {ex.Message}");
+                onComplete?.Invoke();
             }
         }
     }

@@ -16,6 +16,7 @@ namespace Racks
     {
         bool startOnLogin;
         bool reseted = false;
+        private bool _dummyWindowPending = false;
         private uint _taskbarRestartMessage;
         public static InstanceController _controller = null!;
         public static MainWindow _mainWindow = null!;
@@ -62,9 +63,20 @@ namespace Racks
             InitializeComponent();
             _mainWindow = this;
 
+            // App.OnStartup shows StartupAnimationWindow before WPF's own StartupUri
+            // logic constructs and shows this window, so WPF's "first window shown
+            // becomes Application.MainWindow" default would otherwise leave MainWindow
+            // pointing at the animation window - which closes itself a couple seconds
+            // later. Wpf.Ui.Tray's TrayManager resolves the tray icon's owner HWND via
+            // Application.Current.MainWindow, and RackWindow's drag/snap logic does the
+            // same via an "as MainWindow" cast, so both silently broke once that window
+            // closed / never matched. Claim the slot explicitly so it always points here.
+            Application.Current.MainWindow = this;
+
             // Tray-menu header shows just "Racks" in a clean font. The version is still
             // available in the About window and as the ToolTip on this header for nerds.
-            versionHeader.ToolTip = $"Racks {Process.GetCurrentProcess().MainModule!.FileVersionInfo.FileVersion}";
+            try { versionHeader.ToolTip = $"Racks {Process.GetCurrentProcess().MainModule?.FileVersionInfo.FileVersion}"; }
+            catch { versionHeader.ToolTip = "Racks"; }
             _controller = new InstanceController();
             _controller.InitInstances();
             RefreshGlobalHiddenFiles();
@@ -375,7 +387,12 @@ namespace Racks
             _mainHwnd = hwnd;
             var hwndSource = HwndSource.FromHwnd(_mainHwnd);
             hwndSource?.AddHook(WndProc);
-            TrayIcon.Register();
+            RegisterTrayIcon();
+            // Re-register once more after the startup animation / hide sequence settles,
+            // in case the first attempt lost a race with Explorer or the splash window.
+            var trayRetry = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+            trayRetry.Tick += (_, _) => { trayRetry.Stop(); RegisterTrayIcon(); };
+            trayRetry.Start();
 
             // Ctrl+Shift+Space opens the cross-rack quick finder.
             try { Interop.RegisterHotKey(_mainHwnd, QUICK_FINDER_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x20); }
@@ -389,6 +406,20 @@ namespace Racks
             // registry marker so it runs at most once per machine.
             try { Racks.Util.FirstRunWelcome.ShowIfFirstRun(_controller.reg); }
             catch (Exception ex) { Debug.WriteLine($"FirstRunWelcome failed: {ex.Message}"); }
+        }
+
+        // The tray icon is the only way back into a hidden app, so registration is
+        // guarded (a throw here used to skip the rest of OnSourceInitialized too) and
+        // always forces the icon visible. Register() is idempotent, so the startup
+        // retry and the TaskbarCreated handler can call this freely.
+        private void RegisterTrayIcon()
+        {
+            try
+            {
+                TrayIcon.Register();
+                TrayIcon.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex) { Debug.WriteLine($"TrayIcon register failed: {ex.Message}"); }
         }
         private static IntPtr GetDesktopListViewHandle()
         {
@@ -584,19 +615,16 @@ namespace Racks
                 // always recreate on UI thread
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    TrayIcon.Register();
+                    RegisterTrayIcon();
                     if (!_controller.isInitializingInstances)
                         _controller.CheckFrameWindowsLive();
                 });
             }
-            if (msg == 0x007E) // WM_DISPLAYCHANGE   
+            if (msg == 0x007E) // WM_DISPLAYCHANGE
             {
                 if (!_controller.isInitializingInstances)
                 {
-                    // System.Windows.Forms.MessageBox.Show("ee");
-
-                    _controller.CheckFrameWindowsLive();
-                    Application.Current.Dispatcher.InvokeAsync(async () => { await Task.Delay(200); DummyWindow(); });
+                    HandleDisplayOrSettingsChange();
                     reseted = true;
                 }
             }
@@ -606,8 +634,7 @@ namespace Racks
                 {
 
                     reseted = false;
-                    _controller.CheckFrameWindowsLive();
-                    Application.Current.Dispatcher.InvokeAsync(async () => { await Task.Delay(200); DummyWindow(); });
+                    HandleDisplayOrSettingsChange();
                 }
             }
             if (msg == Interop.WM_HOTKEY && wParam.ToInt32() == QUICK_FINDER_HOTKEY_ID)
@@ -629,6 +656,25 @@ namespace Racks
                 handled = true;
             }
             return IntPtr.Zero;
+        }
+        // WM_DISPLAYCHANGE/WM_WININICHANGE can arrive repeatedly in quick succession
+        // (observed on multi-monitor setups with GPU overlay software running). Both
+        // CheckFrameWindowsLive() (which loops every open rack and repositions it) and
+        // DummyWindow() used to run once per message with no guard, so a burst spawned
+        // dozens of reposition passes and throwaway RackWindows a few hundred ms apart,
+        // pegging a core and leaking windows. This collapses an entire burst into at
+        // most one CheckFrameWindowsLive() + one pending dummy window at a time.
+        private void HandleDisplayOrSettingsChange()
+        {
+            if (_dummyWindowPending) return;
+            _dummyWindowPending = true;
+            _controller.CheckFrameWindowsLive();
+            Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                await Task.Delay(200);
+                try { DummyWindow(); }
+                finally { _dummyWindowPending = false; }
+            });
         }
         private void DummyWindow()
         {

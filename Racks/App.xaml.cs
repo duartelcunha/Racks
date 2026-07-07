@@ -3,7 +3,9 @@ using Microsoft.Toolkit.Uwp.Notifications;
 using Microsoft.Win32;
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using Application = System.Windows.Application;
@@ -15,7 +17,7 @@ namespace Racks
     /// </summary>
     public partial class App : Application
     {
-        
+
         // Hold a named Mutex for the lifetime of the process. Second-launch detects
         // this in <1ms and exits silently — the existing tray icon is already there.
         // Beats the previous Process.GetProcessesByName check, which raced on startup
@@ -24,6 +26,54 @@ namespace Racks
         private static Mutex? _singleInstanceMutex;
 #pragma warning restore CS0649
         public RegistryHelper reg = new RegistryHelper(InstanceController.appName);
+
+        public App()
+        {
+            // Racks is a background tray app that's meant to keep running for the
+            // whole session - a single bad rename, a bad saved regex, a stray null
+            // ref in a click handler, shouldn't take down every open rack with it.
+            // These are the last line of defense: log what happened and keep going
+            // instead of vanishing with no explanation. Wired in the constructor so
+            // they're active before OnStartup does anything else.
+            DispatcherUnhandledException += OnDispatcherUnhandledException;
+            AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
+            TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+        }
+
+        private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+        {
+            LogUnhandledException(e.Exception, "DispatcherUnhandledException");
+            e.Handled = true;
+        }
+
+        private static void OnAppDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            // Non-UI-thread exceptions are always fatal on .NET - this can't stop the
+            // crash, only make sure there's a record of what actually happened.
+            if (e.ExceptionObject is Exception ex) LogUnhandledException(ex, "AppDomainUnhandledException");
+        }
+
+        private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            LogUnhandledException(e.Exception, "UnobservedTaskException");
+            e.SetObserved();
+        }
+
+        private static void LogUnhandledException(Exception ex, string source)
+        {
+            try
+            {
+                string dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    InstanceController.appName);
+                Directory.CreateDirectory(dir);
+                File.AppendAllText(Path.Combine(dir, "crash.log"),
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {source}{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}");
+            }
+            catch { /* logging is best-effort; never let it mask the original exception */ }
+            Debug.WriteLine($"{source}: {ex}");
+        }
+
         protected override void OnStartup(StartupEventArgs e)
         {
             // One-time migration of HKCU\SOFTWARE\DeskFrame → HKCU\SOFTWARE\Racks so
@@ -63,7 +113,6 @@ namespace Racks
             Racks.Core.DesktopIconManager.Initialize();
             Racks.Core.DesktopIconManager.StartHook();
 
-            ToastNotificationManagerCompat.OnActivated += ToastActivatedHandler;
             ToastNotificationManagerCompat.OnActivated += ToastActivatedHandler;
             // Once-only: pin %USERPROFILE%\Racks to the Explorer / file-picker
             // Quick Access list so that the user can reach rack contents from

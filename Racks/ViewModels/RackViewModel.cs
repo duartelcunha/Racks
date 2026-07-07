@@ -75,6 +75,17 @@ namespace Racks.ViewModels
             _controller = controller;
         }
 
+        // File filter patterns are saved as raw strings and read back from the registry
+        // with no validation on that read path - a hand-edited value, or one carried
+        // over from an older build, would otherwise throw on the very next file load.
+        // Treat an invalid pattern as "no filter" rather than crashing.
+        private static Regex? TryCompileRegex(string? pattern)
+        {
+            if (string.IsNullOrEmpty(pattern)) return null;
+            try { return new Regex(pattern); }
+            catch (ArgumentException) { return null; }
+        }
+
         public async Task LoadFilesAsync(string path, int itemPerRow, double windowsScalingFactor)
         {
             _loadFilesCancellationToken.Cancel();
@@ -101,10 +112,18 @@ namespace Racks.ViewModels
                     void ScanDir(string dirPath)
                     {
                         if (!Directory.Exists(dirPath)) return;
-                        var dirInfo = new DirectoryInfo(dirPath);
-                        var files = dirInfo.GetFiles();
-                        var directories = dirInfo.GetDirectories();
-                        filteredFiles.AddRange(files.Cast<FileSystemInfo>().Concat(directories));
+                        // A network share or removable drive can disconnect between the
+                        // Exists check above and the enumeration below - that race would
+                        // otherwise throw IOException/UnauthorizedAccessException uncaught.
+                        try
+                        {
+                            var dirInfo = new DirectoryInfo(dirPath);
+                            var files = dirInfo.GetFiles();
+                            var directories = dirInfo.GetDirectories();
+                            filteredFiles.AddRange(files.Cast<FileSystemInfo>().Concat(directories));
+                        }
+                        catch (IOException) { }
+                        catch (UnauthorizedAccessException) { }
                     }
                     
                     ScanDir(path);
@@ -143,10 +162,10 @@ namespace Racks.ViewModels
                     
                     if (!_instance.ShowHiddenFiles)
                         filteredFiles = filteredFiles.Where(entry => !entry.Attributes.HasFlag(FileAttributes.Hidden)).ToList();
-                    if (_instance.FileFilterRegex != null)
+                    var fileFilterRegex = TryCompileRegex(_instance.FileFilterRegex);
+                    if (fileFilterRegex != null)
                     {
-                        var regex = new Regex(_instance.FileFilterRegex);
-                        filteredFiles = filteredFiles.Where(entry => regex.IsMatch(entry.Name)).ToList();
+                        filteredFiles = filteredFiles.Where(entry => fileFilterRegex.IsMatch(entry.Name)).ToList();
                     }
 
                     if (_instance.IsDesktopFilterRack)
@@ -186,6 +205,7 @@ namespace Racks.ViewModels
                         IsLoading = false;
                         return;
                     }
+                    var fileFilterHideRegex = TryCompileRegex(_instance.FileFilterHideRegex);
                     bool assignedFilesChanged = false;
                     for (int i = FileItems.Count - 1; i >= 0; i--)  // Remove item that no longer exist
                     {
@@ -242,12 +262,11 @@ namespace Racks.ViewModels
                         string actualExt = isFile ? Path.GetExtension(entry.Name) : string.Empty;
                         if (existingItem == null)
                         {
-                            if (!string.IsNullOrEmpty(_instance.FileFilterHideRegex) &&
-                                new Regex(_instance.FileFilterHideRegex).IsMatch(entry.Name))
+                            if (fileFilterHideRegex != null && fileFilterHideRegex.IsMatch(entry.Name))
                             {
                                 continue;
                             }
-                            
+
                             // If it's a DesktopFilterRack, ensure it hasn't just been removed from AssignedFiles during the cleanup phase
                             if (_instance.IsDesktopFilterRack && _instance.AssignedFiles != null && !_instance.AssignedFiles.Contains(entry.Name))
                             {
@@ -289,8 +308,7 @@ namespace Racks.ViewModels
                     FileItems.Clear();
                     foreach (var fileItem in sortedList)
                     {
-                        if (_instance.FileFilterHideRegex != null && _instance.FileFilterHideRegex != ""
-                          && new Regex(_instance.FileFilterHideRegex).IsMatch(fileItem.Name))
+                        if (fileFilterHideRegex != null && fileFilterHideRegex.IsMatch(fileItem.Name))
                         {
                             continue;
                         }
@@ -493,7 +511,14 @@ namespace Racks.ViewModels
                     size += file.Length;
                 }
 
-                Parallel.ForEach(directory.EnumerateDirectories("*", SearchOption.TopDirectoryOnly), (subDir) =>
+                // Skip reparse points (symlinks/junctions): a link back to an ancestor
+                // directory would otherwise recurse forever - StackOverflowException,
+                // which can't be caught, kills the whole app. Not following links also
+                // matches how disk-usage tools normally measure a folder's own size.
+                var subDirs = directory.EnumerateDirectories("*", SearchOption.TopDirectoryOnly)
+                    .Where(d => !d.Attributes.HasFlag(FileAttributes.ReparsePoint));
+
+                Parallel.ForEach(subDirs, (subDir) =>
                 {
                     token.ThrowIfCancellationRequested();
                     Interlocked.Add(ref size, GetDirectorySize(subDir, token));

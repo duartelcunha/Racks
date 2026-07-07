@@ -105,6 +105,8 @@ namespace Racks
         FrameworkElement _lastBorder;
         private bool _isRenaming = true;
         private bool _isTopmost = false;
+        private bool _inHandleWindowMove = false;
+        private bool _inSnapToGrid = false;
         private bool _isRenamingFromContextMenu = false;
         private bool _canChangeItemPosition = false;
         private bool _bringForwardForMove = false;
@@ -392,7 +394,14 @@ namespace Racks
                     size += file.Length;
                 }
 
-                Parallel.ForEach(directory.EnumerateDirectories("*", SearchOption.TopDirectoryOnly), (subDir) =>
+                // Skip reparse points (symlinks/junctions): a link back to an ancestor
+                // directory would otherwise recurse forever - StackOverflowException,
+                // which can't be caught, kills the whole app. Not following links also
+                // matches how disk-usage tools normally measure a folder's own size.
+                var subDirs = directory.EnumerateDirectories("*", SearchOption.TopDirectoryOnly)
+                    .Where(d => !d.Attributes.HasFlag(FileAttributes.ReparsePoint));
+
+                Parallel.ForEach(subDirs, (subDir) =>
                 {
                     token.ThrowIfCancellationRequested();
                     Interlocked.Add(ref size, GetDirectorySize(subDir, token));
@@ -1024,6 +1033,14 @@ namespace Racks
         }
         private void SnapToGrid()
         {
+            // SetWindowPos further down can synchronously re-fire WM_MOVE while Alt is
+            // still held, re-entering this method (own guard, not _inHandleWindowMove,
+            // since this deliberately calls HandleWindowMove(false) as its last step and
+            // that call should still go through).
+            if (_inSnapToGrid) return;
+            _inSnapToGrid = true;
+            try
+            {
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
 
             Interop.RECT windowRect;
@@ -1106,13 +1123,27 @@ namespace Racks
             {
                 _isIngrid = false;
             }
+            }
+            finally
+            {
+                _inSnapToGrid = false;
+            }
         }
         public void HandleWindowMove(bool initWindow)
         {
-            if (_isTopmost)
+            // WM_MOVE below calls HandleWindowMove on this window AND directly on its
+            // WonRight/WonLeft neighbors; SetWindowPos further down synchronously fires
+            // another WM_MOVE for whichever window it repositions. Without this guard,
+            // two docked racks can retrigger each other's HandleWindowMove in a nested
+            // A-calls-B-calls-A chain that never bottoms out (visible as the racks
+            // jittering non-stop and the app pegging a core / going unresponsive).
+            if (_isTopmost || _inHandleWindowMove)
             {
                 return;
             }
+            _inHandleWindowMove = true;
+            try
+            {
             Interop.RECT windowRect;
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
             Interop.GetWindowRect(hwnd, out windowRect);
@@ -1401,6 +1432,11 @@ namespace Racks
                              SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
             }
 
+            }
+            finally
+            {
+                _inHandleWindowMove = false;
+            }
         }
 
         public void SetCornerRadius(Border border, double topLeft, double topRight, double bottomLeft, double bottomRight)
@@ -1410,23 +1446,25 @@ namespace Racks
 
         private void SetAsDesktopChild()
         {
-            while (true)
+            // Explorer briefly has no SHELLDLL_DefView while it's restarting (a common
+            // user troubleshooting step). This used to retry with no delay and no cap -
+            // a 100%-CPU spin on the UI thread that never gave up, hanging the whole
+            // app since WPF has one dispatcher. Retry with a real pause instead, and
+            // give up after a bounded wait rather than spinning forever.
+            const int maxAttempts = 10;
+            for (int attempt = 0; shellView == IntPtr.Zero && attempt < maxAttempts; attempt++)
             {
-                while (shellView == IntPtr.Zero)
+                EnumWindows((tophandle, _) =>
                 {
-                    EnumWindows((tophandle, _) =>
+                    IntPtr shellViewIntPtr = FindWindowEx(tophandle, IntPtr.Zero, "SHELLDLL_DefView", null);
+                    if (shellViewIntPtr != IntPtr.Zero)
                     {
-                        IntPtr shellViewIntPtr = FindWindowEx(tophandle, IntPtr.Zero, "SHELLDLL_DefView", null);
-                        if (shellViewIntPtr != IntPtr.Zero)
-                        {
-                            shellView = shellViewIntPtr;
-                            return false;
-                        }
-                        return true;
-                    }, IntPtr.Zero);
-                }
+                        shellView = shellViewIntPtr;
+                        return false;
+                    }
+                    return true;
+                }, IntPtr.Zero);
                 if (shellView == IntPtr.Zero) Thread.Sleep(1000);
-                else break;
             }
             if (shellView == IntPtr.Zero) throw new InvalidOperationException("SHELLDLL_DefView not found.");
 
@@ -1852,6 +1890,7 @@ namespace Racks
             };
 
             Instance = instance;
+            ViewModel = new RackViewModel(instance, MainWindow._controller);
 
             _grayscaleEffect = (GrayscaleEffect)FindResource("ImageGrayscaleEffect");
             _grayscaleEffect.Strength = Instance.GrayScaleEnabled ? Instance.MaxGrayScaleStrength : 0;
@@ -2324,6 +2363,23 @@ namespace Racks
             this.BeginAnimation(HeightProperty, animation);
         }
 
+        // VirtualDesktop.CurrentChanged is a static event, so the lambda we used to
+        // subscribe with captured this window and kept it alive after close. Named
+        // handler so Window_Closing can detach it cleanly.
+        private void OnVirtualDesktopChanged(object? sender, VirtualDesktopChangedEventArgs args)
+        {
+            var newDesktop = args.NewDesktop;
+            _currentVD = Array.IndexOf(VirtualDesktop.GetDesktops(), newDesktop) + 1;
+            if (Instance.ShowOnVirtualDesktops != null && Instance.ShowOnVirtualDesktops.Length != 0 && !Instance.ShowOnVirtualDesktops.Contains(_currentVD))
+            {
+                Dispatcher.InvokeAsync(() => this.Hide());
+            }
+            else
+            {
+                Dispatcher.InvokeAsync(() => this.Show());
+            }
+            Debug.WriteLine($"Switched to virtual desktop: {_currentVD}");
+        }
         public void InitializeFileWatchers()
         {
             if (Instance.Folder != null && Instance.Folder != "empty")
@@ -2530,6 +2586,21 @@ namespace Racks
         }
         private void ToggleFileExtension() => Instance.ShowFileExtension = !Instance.ShowFileExtension;
 
+        // File filter patterns are saved as raw strings and read back from the registry
+        // with no validation on that read path - a hand-edited value, or one carried
+        // over from an older build, would otherwise throw on the very next file load.
+        // Treat an invalid pattern as "no filter" rather than crashing.
+        private static Regex? TryCompileRegex(string? pattern)
+        {
+            if (string.IsNullOrEmpty(pattern)) return null;
+            try { return new Regex(pattern); }
+            catch (ArgumentException ex)
+            {
+                Debug.WriteLine($"Invalid saved filter regex '{pattern}': {ex.Message}");
+                return null;
+            }
+        }
+
         public async void LoadFiles(string path)
         {
             loadFilesCancellationToken.Cancel();
@@ -2557,10 +2628,18 @@ namespace Racks
                     void ScanDir(string dirPath)
                     {
                         if (!Directory.Exists(dirPath)) return;
-                        var dirInfo = new DirectoryInfo(dirPath);
-                        var files = dirInfo.GetFiles();
-                        var directories = dirInfo.GetDirectories();
-                        filteredFiles.AddRange(files.Cast<FileSystemInfo>().Concat(directories));
+                        // A network share or removable drive can disconnect between the
+                        // Exists check above and the enumeration below - that race would
+                        // otherwise throw IOException/UnauthorizedAccessException uncaught.
+                        try
+                        {
+                            var dirInfo = new DirectoryInfo(dirPath);
+                            var files = dirInfo.GetFiles();
+                            var directories = dirInfo.GetDirectories();
+                            filteredFiles.AddRange(files.Cast<FileSystemInfo>().Concat(directories));
+                        }
+                        catch (IOException ex) { Debug.WriteLine($"ScanDir failed for '{dirPath}': {ex.Message}"); }
+                        catch (UnauthorizedAccessException ex) { Debug.WriteLine($"ScanDir failed for '{dirPath}': {ex.Message}"); }
                     }
                     
                     ScanDir(path);
@@ -2586,10 +2665,10 @@ namespace Racks
                     
                     if (!Instance.ShowHiddenFiles)
                         filteredFiles = filteredFiles.Where(entry => !entry.Attributes.HasFlag(FileAttributes.Hidden)).ToList();
-                    if (Instance.FileFilterRegex != null)
+                    var fileFilterRegex = TryCompileRegex(Instance.FileFilterRegex);
+                    if (fileFilterRegex != null)
                     {
-                        var regex = new Regex(Instance.FileFilterRegex);
-                        filteredFiles = filteredFiles.Where(entry => regex.IsMatch(entry.Name)).ToList();
+                        filteredFiles = filteredFiles.Where(entry => fileFilterRegex.IsMatch(entry.Name)).ToList();
                     }
 
                     if (Instance.IsDesktopFilterRack)
@@ -2638,6 +2717,7 @@ namespace Racks
                         LoadingProgressRingFade(false);
                         return;
                     }
+                    var fileFilterHideRegex = TryCompileRegex(Instance.FileFilterHideRegex);
                     bool assignedFilesChanged = false;
                     for (int i = FileItems.Count - 1; i >= 0; i--)  // Remove item that no longer exist
                     {
@@ -2694,12 +2774,11 @@ namespace Racks
                         string actualExt = isFile ? Path.GetExtension(entry.Name) : string.Empty;
                         if (existingItem == null)
                         {
-                            if (!string.IsNullOrEmpty(Instance.FileFilterHideRegex) &&
-                                new Regex(Instance.FileFilterHideRegex).IsMatch(entry.Name))
+                            if (fileFilterHideRegex != null && fileFilterHideRegex.IsMatch(entry.Name))
                             {
                                 continue;
                             }
-                            
+
                             // If it's a DesktopFilterRack, ensure it hasn't just been removed from AssignedFiles during the cleanup phase
                             if (Instance.IsDesktopFilterRack && Instance.AssignedFiles != null && !Instance.AssignedFiles.Contains(entry.Name))
                             {
@@ -2741,8 +2820,7 @@ namespace Racks
                     FileItems.Clear();
                     foreach (var fileItem in sortedList)
                     {
-                        if (Instance.FileFilterHideRegex != null && Instance.FileFilterHideRegex != ""
-                          && new Regex(Instance.FileFilterHideRegex).IsMatch(fileItem.Name))
+                        if (fileFilterHideRegex != null && fileFilterHideRegex.IsMatch(fileItem.Name))
                         {
                             continue;
                         }
@@ -2792,16 +2870,13 @@ namespace Racks
             }
             else
             {
-                try
-                {
-                    fadeOut.Completed += (s, e) =>
-                    {
-                        fadeOut.Completed -= (s, e) => { }; // cleanup
-                        LoadingProgressRing.IsIndeterminate = false;
-                    };
-                }
-                catch { }
-
+                // Turn the spin off DIRECTLY, not via fadeOut.Completed. An indeterminate
+                // ProgressRing animates continuously - pinning a CPU core through nonstop
+                // composition even while collapsed or at zero opacity. The old Completed
+                // handler both leaked (its "-=" removed a different lambda, never the real
+                // one) and could fail to fire, leaving the ring spinning forever. The fade
+                // is only cosmetic opacity, so stopping the spin up front is fine.
+                LoadingProgressRing.IsIndeterminate = false;
                 fadeOut.Begin();
             }
         }
@@ -2841,10 +2916,6 @@ namespace Racks
             {
                 FileItems.Add(fileItem);
             }
-            
-            try {
-                System.IO.File.AppendAllText(@"C:\Users\dlcun\AppData\Local\Temp\RacksDebug.log", $"SortItems: Name={Instance.Name}, IsDesktop={Instance.IsDesktopFilterRack}, Folder={Instance.Folder}, Count={FileItems.Count}\n");
-            } catch {}
 
             if (Instance.IsDesktopFilterRack)
             {
@@ -2873,7 +2944,6 @@ namespace Racks
                         Thread.Sleep(5);
                         Application.Current.Dispatcher.Invoke(() =>
                         {
-                            File.WriteAllText(@"C:\Users\dlcun\OneDrive\Ambiente de Trabalho\drag_debug.txt", "Dragging: " + clickedItem.FullPath);
                             DragDrop.DoDragDrop(listView, data, DragDropEffects.Copy | DragDropEffects.Link | DragDropEffects.Move);
                         });
                     });
@@ -3629,6 +3699,7 @@ namespace Racks
                 currentBorder = sourceElement as Border ?? FindParent<Border>(sourceElement);
             }
             _dragdropIntoFolder = true;
+            if (Instance.Folder == "empty") StartParticles();
             if (currentBorder != _lastBorder)
             {
                 if (_lastBorder != null)
@@ -3835,7 +3906,6 @@ namespace Racks
             {
                 if (string.IsNullOrWhiteSpace(path) || (!File.Exists(path) && !Directory.Exists(path)))
                 {
-                    Console.WriteLine("Invalid path: " + path);
                     return null;
                 }
                 IntPtr hBitmap = IntPtr.Zero;
@@ -4407,21 +4477,23 @@ namespace Racks
         {
             KeepWindowBehind();
             
-            // Pop-in Animation
-            RootScaleTransform.ScaleX = 0.5;
-            RootScaleTransform.ScaleY = 0.5;
+            // Pop-in: a gentle spring from a near-full scale reads as confident and
+            // premium rather than a cartoonish 0.5->1.0 bounce. Opacity eases in over a
+            // slightly shorter window so the rack "arrives" before it finishes settling.
+            RootScaleTransform.ScaleX = 0.88;
+            RootScaleTransform.ScaleY = 0.88;
             this.Opacity = 0;
-            
+
             var scaleAnim = new System.Windows.Media.Animation.DoubleAnimation
             {
                 To = 1.0,
-                Duration = TimeSpan.FromSeconds(0.4),
-                EasingFunction = new System.Windows.Media.Animation.ElasticEase { Oscillations = 1, Springiness = 5, EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                Duration = TimeSpan.FromSeconds(0.36),
+                EasingFunction = new System.Windows.Media.Animation.ElasticEase { Oscillations = 1, Springiness = 7, EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
             };
             var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation
             {
                 To = Instance.IdleOpacity > 0 ? Instance.IdleOpacity : 1.0,
-                Duration = TimeSpan.FromSeconds(0.2),
+                Duration = TimeSpan.FromSeconds(0.22),
                 EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
             };
             RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
@@ -4463,26 +4535,7 @@ namespace Racks
                 {
                     this.Show();
                 }
-                VirtualDesktop.CurrentChanged += (sender, args) =>
-                {
-                    var newDesktop = args.NewDesktop;
-                    _currentVD = Array.IndexOf(VirtualDesktop.GetDesktops(), newDesktop) + 1;
-                    if (Instance.ShowOnVirtualDesktops != null && Instance.ShowOnVirtualDesktops.Length != 0 && !Instance.ShowOnVirtualDesktops.Contains(_currentVD))
-                    {
-                        Dispatcher.InvokeAsync(() =>
-                        {
-                            this.Hide();
-                        });
-                    }
-                    else
-                    {
-                        Dispatcher.InvokeAsync(() =>
-                        {
-                            this.Show();
-                        });
-                    }
-                    Debug.WriteLine($"Switched to virtual desktop: {_currentVD}");
-                };
+                VirtualDesktop.CurrentChanged += OnVirtualDesktopChanged;
                 VirtualDesktopSupported = true;
             }
             catch
@@ -4492,12 +4545,36 @@ namespace Racks
             if (Instance.Folder == "empty")
             {
                 ParticleCanvas.Margin = new Thickness(0, titleBar.Height + 10, 0, 0);
-                CompositionTarget.Rendering += UpdateParticle!;
+                // The particle prompt only appears WHILE you drag something over an
+                // empty rack. The per-frame render loop that drives it is started on
+                // drag-over (StartParticles) and stopped once the drag ends and the
+                // particles decay - subscribing it here at setup left it running
+                // forever on every empty rack, a runaway CompositionTarget.Rendering
+                // loop that pinned a whole CPU core per rack.
             }
             else
             {
                 ParticleCanvas.Visibility = Visibility.Hidden;
             }
+        }
+
+        private bool _particleRenderingActive = false;
+
+        // Subscribe the particle animation to the per-frame render callback. Guarded so
+        // repeated DragOver events can't double-subscribe (which would run it twice a frame).
+        private void StartParticles()
+        {
+            if (_particleRenderingActive) return;
+            _particleRenderingActive = true;
+            ParticleCanvas.Visibility = Visibility.Visible;
+            CompositionTarget.Rendering += UpdateParticle!;
+        }
+
+        private void StopParticles()
+        {
+            if (!_particleRenderingActive) return;
+            _particleRenderingActive = false;
+            CompositionTarget.Rendering -= UpdateParticle;
         }
 
         private void UpdateParticle(object sender, EventArgs e)
@@ -4512,10 +4589,13 @@ namespace Racks
                     CreateParticle();
                 }
             }
-            else if (Instance.Folder != "empty" && particles.Count == 0)
+            else if (particles.Count == 0 && !_dragdropIntoFolder)
             {
-                CompositionTarget.Rendering -= UpdateParticle;
-                ParticleCanvas.Visibility = Visibility.Hidden;
+                // Drag ended and every particle has decayed: stop the render loop so an
+                // idle rack costs zero CPU. It restarts on the next drag-over.
+                StopParticles();
+                if (Instance.Folder != "empty") ParticleCanvas.Visibility = Visibility.Hidden;
+                return;
             }
 
             for (int i = particles.Count - 1; i >= 0; i--)
@@ -5629,24 +5709,37 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
 
                 string oldPath = _itemCurrentlyRenaming.FullPath!;
                 string newPath = Path.Combine(Path.GetDirectoryName(oldPath)!, newName);
+                bool renamed = true;
 
-                if (!_itemCurrentlyRenaming.IsFolder)
+                // A colliding name, a trailing dot/space, a reserved character, or a
+                // file locked by another process all throw here - renaming is routine
+                // enough that this was one of the easiest ways to crash the app.
+                try
                 {
-                    var ext = Path.GetExtension(oldPath);
-                    if (!string.IsNullOrEmpty(ext) && string.IsNullOrEmpty(Path.GetExtension(newName)))
+                    if (!_itemCurrentlyRenaming.IsFolder)
                     {
-                        newPath += ext;
+                        var ext = Path.GetExtension(oldPath);
+                        if (!string.IsNullOrEmpty(ext) && string.IsNullOrEmpty(Path.GetExtension(newName)))
+                        {
+                            newPath += ext;
 
+                        }
+                        File.Move(oldPath, newPath);
                     }
-                    File.Move(oldPath, newPath);
+                    else
+                    {
+                        Directory.Move(oldPath, newPath);
+                    }
                 }
-                else
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
                 {
-                    Directory.Move(oldPath, newPath);
+                    renamed = false;
+                    Racks.Views.RacksMessageBox.Show($"Couldn't rename to \"{newName}\":\n{ex.Message}", "Rename failed");
                 }
+
                 _isRenaming = false;
                 _isRenamingFromContextMenu = false;
-                _itemCurrentlyRenaming.Name = newName;
+                if (renamed) _itemCurrentlyRenaming.Name = newName;
                 _itemCurrentlyRenaming.IsRenaming = false;
                 _itemCurrentlyRenaming.IsSelected = false;
                 _itemCurrentlyRenaming.Background = Brushes.Transparent;
@@ -5684,28 +5777,49 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
         }
 
         private bool _isClosingAnimPlaying = false;
+        private bool _closeRequested = false;
         private void Window_Closing(object sender, CancelEventArgs e)
         {
             Instance.isWindowClosing = true;
+            // CompositionTarget.Rendering holds a strong reference to the handler, which
+            // would keep this window (and its whole visual tree) alive after close. Detach.
+            StopParticles();
+            // Detach the static VirtualDesktop event so it can't keep this window alive
+            // after close, then drop the folder watcher.
+            try { VirtualDesktop.CurrentChanged -= OnVirtualDesktopChanged; } catch { }
+            try { _fileWatcherService.Dispose(); } catch { }
             if (!_isClosingAnimPlaying)
             {
                 e.Cancel = true;
                 _isClosingAnimPlaying = true;
-                
+
+                // Close: a small graceful shrink + fade. Snappy (0.18s) so dismissing a
+                // rack feels responsive, with matching eases so scale and opacity leave
+                // together instead of one outlasting the other.
                 var scaleAnim = new System.Windows.Media.Animation.DoubleAnimation
                 {
-                    To = 0.5,
-                    Duration = TimeSpan.FromSeconds(0.2),
+                    To = 0.9,
+                    Duration = TimeSpan.FromSeconds(0.18),
                     EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn }
                 };
                 var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation
                 {
                     To = 0.0,
-                    Duration = TimeSpan.FromSeconds(0.2),
+                    Duration = TimeSpan.FromSeconds(0.18),
                     EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn }
                 };
-                
-                scaleAnim.Completed += (s, args) => { this.Close(); };
+
+                // scaleAnim drives both ScaleX and ScaleY below, so this Completed handler
+                // fires once per clock (twice total) - Completed lives on the shared
+                // Timeline, not the clock. Guard so the second firing can't re-enter
+                // Close() while the first is still tearing the window down (WPF throws
+                // InvalidOperationException from VerifyNotClosing in that case).
+                scaleAnim.Completed += (s, args) =>
+                {
+                    if (_closeRequested) return;
+                    _closeRequested = true;
+                    this.Close();
+                };
                 RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
                 RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
                 this.BeginAnimation(OpacityProperty, opacityAnim);

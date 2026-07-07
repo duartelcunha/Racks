@@ -963,6 +963,11 @@ public class Instance : INotifyPropertyChanged
         {
             // Read global defaults from the rebranded root, not the legacy "DeskFrame"
             // one. After registry migration the new root holds whatever the user had.
+            // A single corrupt or hand-edited value used to throw here and abort startup.
+            // Wrapped so the window still comes up (with whatever it managed to read)
+            // instead of vanishing; the app-level handler is the backstop if this throws.
+            try
+            {
             RegistryHelper helper = new RegistryHelper(InstanceController.appName);
 
             var v = helper.ReadKeyValueRoot("IdleOpacity");
@@ -1060,6 +1065,8 @@ public class Instance : INotifyPropertyChanged
 
             v = helper.ReadKeyValueRoot("IconSize");
             if (v != null) _iconSize = int.Parse(v.ToString());
+            }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Instance global-defaults read failed: {ex.Message}"); }
         }
     }
     protected void OnPropertyChanged(string propertyName, string value)
