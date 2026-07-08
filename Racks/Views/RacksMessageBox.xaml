@@ -11,9 +11,74 @@
         FontFamily="Segoe UI Variable Display, Segoe UI"
         ResizeMode="NoResize" WindowStyle="None" AllowsTransparency="True"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
-    
-    <!-- We can use a shadow or just a simple border -->
-    <Border CornerRadius="14" BorderThickness="1" Margin="20">
+
+    <Window.Resources>
+        <!-- Shared pill-button look used by every Racks dialog for design coherence. -->
+        <Style x:Key="RacksDialogButton" TargetType="Button">
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="MinWidth" Value="110"/>
+            <Setter Property="Padding" Value="18,0"/>
+            <Setter Property="Margin" Value="5,0"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#1EFFFFFF"/>
+            <Setter Property="BorderBrush" Value="#3CFFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="18" Padding="{TemplateBinding Padding}"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="btnScale" ScaleX="1" ScaleY="1"/>
+                            </Border.RenderTransform>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#33FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="btnScale" Storyboard.TargetProperty="ScaleX" To="0.95" Duration="0:0:0.08"/>
+                                            <DoubleAnimation Storyboard.TargetName="btnScale" Storyboard.TargetProperty="ScaleY" To="0.95" Duration="0:0:0.08"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="btnScale" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.12"/>
+                                            <DoubleAnimation Storyboard.TargetName="btnScale" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.12"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Primary (confirm) variant: a subtle accent so the main action stands out. -->
+        <Style x:Key="RacksDialogButtonPrimary" TargetType="Button" BasedOn="{StaticResource RacksDialogButton}">
+            <Setter Property="Background" Value="#3A6FA8FF"/>
+            <Setter Property="BorderBrush" Value="#66A6D2FF"/>
+        </Style>
+    </Window.Resources>
+
+    <!-- Root scales+fades in on open (set from code-behind). -->
+    <Border x:Name="RootBorder" CornerRadius="14" BorderThickness="1" Margin="20"
+            RenderTransformOrigin="0.5,0.5">
+        <Border.RenderTransform>
+            <ScaleTransform x:Name="RootScale" ScaleX="0.92" ScaleY="0.92"/>
+        </Border.RenderTransform>
         <Border.Background>
             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                 <GradientStop Color="#F0242426" Offset="0"/>
@@ -26,56 +91,28 @@
                 <GradientStop Color="#0AFFFFFF" Offset="1"/>
             </LinearGradientBrush>
         </Border.BorderBrush>
-        <!-- Optional shadow if we have drop shadow effect, but lets keep it lightweight -->
         <Border.Effect>
             <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="15" Opacity="0.5"/>
         </Border.Effect>
-        <Grid Margin="20">
+        <Grid Margin="24">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- Custom title -->
-            <TextBlock x:Name="TitleText" Text="Racks" FontSize="14" FontWeight="SemiBold" Foreground="#88FFFFFF" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+            <TextBlock x:Name="TitleText" Text="Racks" FontSize="13" FontWeight="SemiBold" Foreground="#88FFFFFF"
+                       HorizontalAlignment="Center" Margin="0,0,0,12"/>
 
-            <!-- Message content -->
-            <TextBlock x:Name="MessageText" Grid.Row="1" Text="Message" FontSize="15" TextWrapping="Wrap" VerticalAlignment="Center" HorizontalAlignment="Center" TextAlignment="Center"/>
+            <TextBlock x:Name="MessageText" Grid.Row="1" Text="Message" FontSize="15" TextWrapping="Wrap"
+                       VerticalAlignment="Center" HorizontalAlignment="Center" TextAlignment="Center" LineHeight="21"/>
 
-            <!-- Action button -->
-            <Button x:Name="OkButton" Grid.Row="2" Content="OK" Width="120" Height="36" Margin="0,20,0,0" HorizontalAlignment="Center"
-                    Background="#22FFFFFF" Foreground="White" BorderBrush="#44FFFFFF" BorderThickness="1"
-                    Cursor="Hand"
-                    Click="OkButton_Click">
-                <Button.Resources>
-                    <Style TargetType="Border">
-                        <Setter Property="CornerRadius" Value="18"/>
-                    </Style>
-                </Button.Resources>
-                <!-- Add a nice hover effect to the button using WPF triggers -->
-                <Button.Style>
-                    <Style TargetType="Button">
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="18">
-                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="border" Property="Background" Value="#33FFFFFF"/>
-                                        </Trigger>
-                                        <Trigger Property="IsPressed" Value="True">
-                                            <Setter TargetName="border" Property="Background" Value="#44FFFFFF"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </Button.Style>
-            </Button>
+            <StackPanel x:Name="ButtonPanel" Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,22,0,0">
+                <Button x:Name="SecondaryButton" Content="Cancel" Style="{StaticResource RacksDialogButton}"
+                        Visibility="Collapsed" Click="SecondaryButton_Click"/>
+                <Button x:Name="OkButton" Content="OK" Style="{StaticResource RacksDialogButtonPrimary}"
+                        Click="OkButton_Click"/>
+            </StackPanel>
         </Grid>
     </Border>
 </Window>

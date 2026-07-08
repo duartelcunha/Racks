@@ -186,13 +186,7 @@ namespace Racks
                 
                 if (clusters.Count == 0)
                 {
-                    var msgDialog = new Wpf.Ui.Controls.MessageBox
-                    {
-                        Title = "Magic Organizer",
-                        Content = "Your desktop is already empty or too clean to organize!",
-                        CloseButtonText = "Ok"
-                    };
-                    await msgDialog.ShowDialogAsync();
+                    Racks.Views.RacksMessageBox.Show("Your desktop is already empty or too clean to organize!", "Magic Organizer");
                     return;
                 }
 
@@ -341,14 +335,9 @@ namespace Racks
         {
             try
             {
-                var confirm = new Wpf.Ui.Controls.MessageBox
-                {
-                    Title = "Import racks",
-                    Content = "Importing will REPLACE all your current racks with the layout in the file. Continue?",
-                    PrimaryButtonText = "Replace",
-                    CloseButtonText = "Cancel",
-                };
-                if ((await confirm.ShowDialogAsync()) != Wpf.Ui.Controls.MessageBoxResult.Primary) return;
+                if (!Racks.Views.RacksMessageBox.Confirm(
+                        "Importing will REPLACE all your current racks with the layout in the file. Continue?",
+                        "Import racks", "Replace", "Cancel")) return;
                 int count = Racks.Util.RackLayoutIO.PromptImport(replaceExisting: true);
                 if (count > 0) _controller.CheckFrameWindowsLive(true);
             }

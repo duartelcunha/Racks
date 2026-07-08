@@ -218,16 +218,9 @@ namespace Racks
             }
             else
             {
-                var dialog = new Wpf.Ui.Controls.MessageBox
-                {
-                    Title = "Racks",
-                    Content = Lang.Racks_Update_DialogContent,
-                    PrimaryButtonText = "OK"
-                };
-
-                var result = await dialog.ShowDialogAsync();
-
-                if (result == Wpf.Ui.Controls.MessageBoxResult.Primary)
+                bool proceed = Racks.Views.RacksMessageBox.Confirm(
+                    Lang.Racks_Update_DialogContent, "Racks", "OK", "Cancel");
+                if (proceed)
                 {
                     ExecuteCommand(command, true);
                 }

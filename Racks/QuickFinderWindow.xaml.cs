@@ -14,7 +14,7 @@ namespace Racks
     // Spotlight-style cross-rack finder. Opened by the global Ctrl+Shift+Space hotkey
     // registered in MainWindow. Lists every FileItem from every open rack, filtered
     // as you type. Enter opens the highlighted item; Esc / clicking-away dismisses.
-    public partial class QuickFinderWindow : FluentWindow
+    public partial class QuickFinderWindow : Window
     {
         public sealed class Row
         {
@@ -28,6 +28,8 @@ namespace Racks
         {
             InitializeComponent();
             Racks.Util.WindowFade.Attach(this);
+            this.WindowStartupLocation = WindowStartupLocation.Manual;
+            Loaded += (_, _) => Racks.Util.WindowPlacement.CenterOnCursorScreen(this);
             _all = new List<Row>();
             foreach (var w in controller._subWindows)
             {

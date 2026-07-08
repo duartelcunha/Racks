@@ -19,7 +19,7 @@ using ContextMenu = System.Windows.Controls.ContextMenu;
 
 namespace Racks
 {
-    public partial class RackSettingsDialog : FluentWindow
+    public partial class RackSettingsDialog : Window
     {
         private readonly RackWindow _frame;
         private readonly Instance _instance;
@@ -523,19 +523,11 @@ namespace Racks
             }
         }
 
-        private async void RevertButton_Click(object sender, RoutedEventArgs e)
+        private void RevertButton_Click(object sender, RoutedEventArgs e)
         {
-            var dialog = new Wpf.Ui.Controls.MessageBox
-            {
-                Title = "Confirm",
-                Content = "Revert all settings to the values they had when you opened this window?",
-                PrimaryButtonText = "Revert",
-                CloseButtonText = "Cancel"
-            };
-
-            var result = await dialog.ShowDialogAsync();
-
-            if (result == Wpf.Ui.Controls.MessageBoxResult.Primary)
+            if (Racks.Views.RacksMessageBox.Confirm(
+                    "Revert all settings to the values they had when you opened this window?",
+                    "Confirm", "Revert", "Cancel"))
             {
                 _isReverting = true;
                 _instance.TitleBarColor = _originalInstance.TitleBarColor;
@@ -680,9 +672,14 @@ namespace Racks
             uiFlyout.IsOpen = true;
         }
 
-        private void Titlebar_CloseClicked(TitleBar sender, RoutedEventArgs args)
+        private void Titlebar_CloseClicked(object sender, RoutedEventArgs args)
         {
             this.DialogResult = true;
+        }
+
+        private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (e.ButtonState == System.Windows.Input.MouseButtonState.Pressed) DragMove();
         }
 
         private void ShowFileExtensionIconCheckBox_Checked(object sender, RoutedEventArgs e)

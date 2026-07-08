@@ -114,6 +114,24 @@ namespace Racks.Util
 
             oContextMenu.InvokeCommand(ref invoke);
         }
+
+        // Resolve a selected command to its canonical (language-independent) verb and check
+        // if it's the Delete verb. Uses the ANSI GetCommandString on IContextMenu; the shell
+        // returns "delete" for both "Delete" and "Delete permanently" (Shift+Delete), so this
+        // catches both. Returns false on any failure so protection never blocks a real action.
+        private bool IsDeleteVerb(IContextMenu oContextMenu, uint nSelected)
+        {
+            try
+            {
+                byte[] buffer = new byte[256];
+                int hr = oContextMenu.GetCommandString(nSelected - CMD_FIRST, GCS.VERBA, 0, buffer, buffer.Length);
+                int len = Array.IndexOf(buffer, (byte)0);
+                if (len < 0) len = buffer.Length;
+                string verb = (hr == S_OK && len > 0) ? Encoding.ASCII.GetString(buffer, 0, len) : "";
+                return string.Equals(verb, "delete", StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
         #endregion
 
         #region ReleaseAll()
@@ -365,7 +383,16 @@ namespace Racks.Util
         /// <param name="handleOwner">Window that will get messages</param>
         /// <param name="arrFI">FileInfos (should all be in same directory)</param>
         /// <param name="pointScreen">Where to show the menu</param>
-        public void ShowContextMenu(IntPtr handleOwner, object target, Point pointScreen, bool IsRootFolder)
+        // When protectFromDelete is true, the shell's Delete verb is refused after the user
+        // picks it - files inside a rack are a safe space and can't be deleted from here.
+        // Everything else (open, copy, cut, rename, properties...) works normally so quality
+        // of life is untouched. The user takes an item out of the rack first if they really
+        // want to delete it.
+        public event Action DeleteBlocked;
+        // Fired when the user picks our custom "Open in File Explorer" item.
+        public event Action OpenInExplorerRequested;
+
+        public void ShowContextMenu(IntPtr handleOwner, object target, Point pointScreen, bool IsRootFolder, bool protectFromDelete = false)
         {
             // Release all resources first.
             ReleaseAll();
@@ -417,6 +444,11 @@ namespace Racks.Util
                     (!IsRootFolder ? CMF.CANRENAME : CMF.NORMAL) |
                     ((Control.ModifierKeys & Keys.Shift) != 0 ? CMF.EXTENDEDVERBS : 0));
 
+                // Prepend a Racks-branded "Open in File Explorer" entry so items in a rack can
+                // always be revealed in their real folder, above the shell's own verbs.
+                InsertMenu(pMenu, 0, MF_BYPOSITION | MF_SEPARATOR, 0, null);
+                InsertMenu(pMenu, 0, MF_BYPOSITION | MF_STRING, CMD_OPEN_IN_EXPLORER, "Open in File Explorer");
+
                 hook.Install();
 
                 uint nSelected = TrackPopupMenuEx(
@@ -438,9 +470,18 @@ namespace Racks.Util
 
                 if (nSelected != 0)
                 {
-                    if (renaming && !IsRootFolder)
+                    if (nSelected == CMD_OPEN_IN_EXPLORER)
+                    {
+                        OpenInExplorerRequested?.Invoke();
+                    }
+                    else if (renaming && !IsRootFolder)
                     {
                         ContextMenuRenameSelected?.Invoke();
+                    }
+                    else if (protectFromDelete && IsDeleteVerb(_oContextMenu, nSelected))
+                    {
+                        // Safe space: swallow the Delete command instead of invoking it.
+                        DeleteBlocked?.Invoke();
                     }
                     else
                     {
@@ -545,6 +586,15 @@ namespace Racks.Util
         // The CreatePopupMenu function creates a drop-down menu, submenu, or shortcut menu. The menu is initially empty. You can insert or append menu items by using the InsertMenuItem function. You can also use the InsertMenu function to insert menu items and the AppendMenu function to append menu items.
         [DllImport("user32", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern IntPtr CreatePopupMenu();
+
+        // Insert our own "Open in File Explorer" item at the top of the shell menu.
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern bool InsertMenu(IntPtr hMenu, uint uPosition, uint uFlags, uint uIDNewItem, string lpNewItem);
+        private const uint MF_BYPOSITION = 0x400;
+        private const uint MF_STRING = 0x0;
+        private const uint MF_SEPARATOR = 0x800;
+        // Custom command id, kept well above the shell's CMD range (CMD_LAST = 30000).
+        private const uint CMD_OPEN_IN_EXPLORER = 40001;
 
         // The DestroyMenu function destroys the specified menu and frees any memory that the menu occupies.
         [DllImport("user32", SetLastError = true, CharSet = CharSet.Auto)]

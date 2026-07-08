@@ -139,6 +139,11 @@ namespace Racks
         private CancellationTokenSource loadFilesCancellationToken = new CancellationTokenSource();
         private CancellationTokenSource _changeIconSizeCts = new CancellationTokenSource();
         private CancellationTokenSource _adjustPositionCts;
+        private Util.PhysicsBody _physics;
+        // Drag velocity tracking for flick-to-throw (updated in Window_LocationChanged).
+        private double _dragVelX, _dragVelY, _lastDragLeft, _lastDragTop;
+        private long _lastDragTicks;
+        private bool _isResizing;  // true while the user is resizing via the border (suppresses physics)
 
         // Placement mode (follow-the-cursor-then-click-to-drop) was removed. It wrote
         // screen coordinates to a window that SetAsDesktopChild reparents as a WS_CHILD of
@@ -725,7 +730,8 @@ namespace Racks
                         {
                             _itemCurrentlyRenaming.IsRenaming = false;
                         }
-                        scm.ShowContextMenu(windowHelper.Handle, new DirectoryInfo(_currentFolderPath), drawingPoint, true);
+                        _lastRightClickedPath = _currentFolderPath;
+                        scm.ShowContextMenu(windowHelper.Handle, new DirectoryInfo(_currentFolderPath), drawingPoint, true, RackProtectsFromDelete);
                         handled = true;
                     }
                     catch
@@ -766,8 +772,14 @@ namespace Racks
                 }
             }
 
+            // WM_SIZING only fires while resizing (not moving), so it's the reliable "this is
+            // a resize" signal; WM_EXITSIZEMOVE ends the whole modal loop. Guarding physics on
+            // _isResizing stops a resize from being read as a drag (false velocity) and stops
+            // the collision loop from fighting a rack whose edges are being dragged.
+            if (msg == 0x0232) _isResizing = false; // WM_EXITSIZEMOVE
             if (msg == 0x0214) // WM_SIZING
             {
+                _isResizing = true;
                 int edge = wParam.ToInt32();
                 if (_isMinimized && (edge != 1 && edge != 2)) // block resizing except left or right edges
                 {
@@ -1448,7 +1460,9 @@ namespace Racks
                 Search.Visibility = Visibility.Visible;
                 Search.Margin = PathToBackButton.Visibility == Visibility.Visible ?
                     new Thickness(PathToBackButton.Width + 4, 0, 0, 0) : new Thickness(0, 0, 0, 0);
-                title.Visibility = Visibility.Collapsed;
+                // On a collapsed rack the title bar is all that's visible, so keep the name
+                // showing even while searching (there's no item list to filter here anyway).
+                if (!_isMinimized) title.Visibility = Visibility.Collapsed;
             }
 
 
@@ -1721,6 +1735,18 @@ namespace Racks
 
             Instance = instance;
             ViewModel = new RackViewModel(instance, MainWindow._controller);
+            scm.DeleteBlocked += OnRackDeleteBlocked;
+            scm.OpenInExplorerRequested += OnOpenInExplorerRequested;
+
+            // Ice-rink physics body for this rack. Anchored (never slid) while locked or
+            // pinned-topmost; persists its position once it comes to rest.
+            _physics = new Util.PhysicsBody
+            {
+                Window = this,
+                IsAnchored = () => _isLocked || _isTopmost || Instance.isWindowClosing,
+                OnSettled = () => { Instance.PosX = this.Left; Instance.PosY = this.Top; }
+            };
+            Util.RackPhysics.Register(_physics);
 
             _grayscaleEffect = (GrayscaleEffect)FindResource("ImageGrayscaleEffect");
             _grayscaleEffect.Strength = Instance.GrayScaleEnabled ? Instance.MaxGrayScaleStrength : 0;
@@ -1864,7 +1890,21 @@ namespace Racks
                 if (!_isLocked)
                 {
                     _dragMovingWinddow = true;
-                    this.DragMove();
+                    _dragVelX = _dragVelY = 0;
+                    _lastDragLeft = this.Left; _lastDragTop = this.Top;
+                    _lastDragTicks = DateTime.UtcNow.Ticks;
+                    this.DragMove(); // blocks until the button is released
+
+                    // Flick-to-throw: if the rack was still moving when released, hand its
+                    // velocity to the physics loop so it glides on with the same ice-rink
+                    // friction/bounce as a push.
+                    _dragMovingWinddow = false;
+                    if (_physics != null && !_isLocked && !_isTopmost)
+                    {
+                        _physics.Vx = _dragVelX;
+                        _physics.Vy = _dragVelY;
+                        if (_physics.Moving) Util.RackPhysics.Kick();
+                    }
                 }
                 return;
             }
@@ -2210,10 +2250,23 @@ namespace Racks
             }
             Debug.WriteLine($"Switched to virtual desktop: {_currentVD}");
         }
+        private bool _fileWatcherWired;
         public void InitializeFileWatchers()
         {
             if (Instance.Folder != null && Instance.Folder != "empty")
             {
+                // Wire the watcher's events to this rack ONCE so external changes to the
+                // rack's folder (add / delete / rename a file or folder in RacksWorkspace or
+                // the bound folder) refresh the rack live. Guarded so repeated calls to
+                // InitializeFileWatchers don't stack duplicate handlers.
+                if (!_fileWatcherWired)
+                {
+                    _fileWatcherService.FileChanged += OnFileChanged;
+                    _fileWatcherService.FileRenamed += OnFileRenamed;
+                    _fileWatcherService.ParentChanged += OnParentChanged;
+                    _fileWatcherService.ParentRenamed += OnParentRenamed;
+                    _fileWatcherWired = true;
+                }
                 _fileWatcherService.Initialize(Instance.Folder, _currentFolderPath);
             }
 
@@ -2292,9 +2345,14 @@ namespace Racks
                 });
             }
         }
+        // Coalesces a burst of file-system events (a copy/save can fire many in a row) into
+        // a single LoadFiles ~250ms after the last one, on the UI thread. Async (InvokeAsync)
+        // so the watcher's threadpool callback never blocks, and debounced so we never stack
+        // full folder rescans - the CPU-storm class of bug from earlier builds.
+        private DispatcherTimer? _watcherDebounce;
         private void OnFileChanged(object sender, FileSystemEventArgs e)
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.InvokeAsync(() =>
             {
                 if ((!Path.Exists(Instance.Folder) && Instance.Folder != "empty") || e.Name == Instance.Folder)
                 {
@@ -2302,12 +2360,19 @@ namespace Racks
                     missingFolderGrid.Visibility = Visibility.Visible;
                     return;
                 }
-                else
+                missingFolderGrid.Visibility = Visibility.Hidden;
+
+                if (_watcherDebounce == null)
                 {
-                    missingFolderGrid.Visibility = Visibility.Hidden;
+                    _watcherDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+                    _watcherDebounce.Tick += (_, _) =>
+                    {
+                        _watcherDebounce!.Stop();
+                        if (!Instance.isWindowClosing) LoadFiles(_currentFolderPath);
+                    };
                 }
-                Debug.WriteLine($"File changed: {e.ChangeType} - {e.FullPath}");
-                LoadFiles(_currentFolderPath);
+                _watcherDebounce.Stop();
+                _watcherDebounce.Start();
             });
         }
         private void OnFileRenamed(object sender, RenamedEventArgs e)
@@ -2822,6 +2887,7 @@ namespace Racks
             }
             if (element is ListViewItem item && item.DataContext is FileItem clickedFileItem)
             {
+                _lastRightClickedPath = clickedFileItem.FullPath;
                 var windowHelper = new WindowInteropHelper(this);
                 FileInfo[] files = new FileInfo[1];
                 files[0] = new FileInfo(clickedFileItem.FullPath!);
@@ -2833,9 +2899,60 @@ namespace Racks
                 {
                     _contextMenuIsOpen = false;
                 };
-                scm.ShowContextMenu(windowHelper.Handle, files, drawingPoint, (clickedFileItem.FullPath! == _currentFolderPath));
+                scm.ShowContextMenu(windowHelper.Handle, files, drawingPoint, (clickedFileItem.FullPath! == _currentFolderPath), RackProtectsFromDelete);
             }
         }
+
+        // Shown when a user tries to delete an item from inside a protected rack. Keeps it
+        // short and points them at the escape hatch (drag it out, or remove the whole rack).
+        private bool _deleteBlockedNoticeOpen;
+        private void OnRackDeleteBlocked()
+        {
+            if (_deleteBlockedNoticeOpen) return;
+            _deleteBlockedNoticeOpen = true;
+            Dispatcher.InvokeAsync(() =>
+            {
+                try
+                {
+                    Racks.Views.RacksMessageBox.Show(
+                        "Files inside a rack are protected and can't be deleted here.\n\nDrag the item out to your desktop first if you want to delete it, or remove the whole rack to send everything back.",
+                        "Protected");
+                }
+                finally { _deleteBlockedNoticeOpen = false; }
+            });
+        }
+
+        // Path of the item the shell menu was opened on, so "Open in File Explorer" reveals it.
+        private string? _lastRightClickedPath;
+        private void OnOpenInExplorerRequested()
+        {
+            var path = _lastRightClickedPath;
+            Dispatcher.InvokeAsync(() =>
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(path) && (File.Exists(path) || Directory.Exists(path)))
+                    {
+                        // Open the folder with the item selected.
+                        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+                    }
+                    else if (!string.IsNullOrEmpty(_currentFolderPath) && Directory.Exists(_currentFolderPath))
+                    {
+                        Process.Start(new ProcessStartInfo(_currentFolderPath) { UseShellExecute = true });
+                    }
+                }
+                catch (Exception ex) { Debug.WriteLine($"Open in Explorer failed: {ex.Message}"); }
+            });
+        }
+        // A rack is a "safe space" - its items can't be deleted from the shell menu - when
+        // it physically owns the files: a sandboxed virtual rack (shortcuts in AppData) or a
+        // desktop-filter rack (files parked in RacksWorkspace). Folder-backed racks that point
+        // at a real user folder are NOT protected: that's the user's own folder and blocking
+        // delete there would be surprising. Removing the whole rack still returns everything.
+        private bool RackProtectsFromDelete =>
+            Instance.IsDesktopFilterRack
+            || (Instance.IsShortcutsOnly && InstanceController.IsInsideVirtualFramesRoot(Instance.Folder));
+
         private void MoveItemToPosition()
         {
             if (_itemUnderCursor == null || _draggedItem == null)
@@ -3120,12 +3237,7 @@ namespace Racks
                     {
                         try
                         {
-                            new Wpf.Ui.Controls.MessageBox
-                            {
-                                Title = "Drop blocked",
-                                Content = combined,
-                                CloseButtonText = "OK",
-                            }.ShowDialogAsync();
+                            Racks.Views.RacksMessageBox.Show(combined, "Drop blocked");
                         }
                         catch (Exception ex) { Debug.WriteLine($"Drop-message dialog failed: {ex.Message}"); }
                     }));
@@ -3184,12 +3296,7 @@ namespace Racks
                             {
                                 try
                                 {
-                                    new Wpf.Ui.Controls.MessageBox
-                                    {
-                                        Title = "Dropped as shortcut",
-                                        Content = moveReason + "\n\nCreated a shortcut in the rack instead.",
-                                        CloseButtonText = "OK",
-                                    }.ShowDialogAsync();
+                                    Racks.Views.RacksMessageBox.Show(moveReason + "\n\nCreated a shortcut in the rack instead.", "Dropped as shortcut");
                                 }
                                 catch (Exception ex2) { Debug.WriteLine($"Bootstrap dialog failed: {ex2.Message}"); }
                             }));
@@ -3420,6 +3527,7 @@ namespace Racks
 
             if (sender is Border border && border.DataContext is FileItem clickedItem)
             {
+                _lastRightClickedPath = clickedItem.FullPath;
                 var windowHelper = new WindowInteropHelper(this);
 
 
@@ -3488,11 +3596,11 @@ namespace Racks
                     }
                     if (_selectedItems.Count > 1)
                     {
-                        scm.ShowContextMenu(windowHelper.Handle, files, drawingPoint, true);
+                        scm.ShowContextMenu(windowHelper.Handle, files, drawingPoint, true, RackProtectsFromDelete);
                     }
                     else
                     {
-                        scm.ShowContextMenu(windowHelper.Handle, files, drawingPoint, (clickedFileItem!.FullPath == _currentFolderPath));
+                        scm.ShowContextMenu(windowHelper.Handle, files, drawingPoint, (clickedFileItem!.FullPath == _currentFolderPath), RackProtectsFromDelete);
                     }
                 }
             }
@@ -4245,7 +4353,10 @@ namespace Racks
 
         private void Window_LocationChanged(object sender, EventArgs e)
         {
-            if (_dragMovingWinddow || _isLeftButtonDown) // Ensure it works during DragMove
+            // Only run drag/physics when the window is being MOVED, not resized. A resize also
+            // changes Left/Top (dragging the top/left edge) and would otherwise be read as a
+            // throw and start the physics loop.
+            if ((_dragMovingWinddow || _isLeftButtonDown) && !_isResizing)
             {
                 // Snap-to-grid. Hold Alt while dragging to bypass for one-off precision.
                 if (Instance.SnapToGrid && Instance.GridSize > 1
@@ -4262,62 +4373,38 @@ namespace Racks
                     }
                 }
                 
-                // --- Pushable Physics ---
-                // The dragged rack shoves any overlapping rack out along the shallower
-                // overlap axis by exactly the overlap amount, so the other rack ends up
-                // just touching, never overlapping. Each drag frame the overlap is only a
-                // few px, so this reads as a smooth 60fps push. Setting otherRack.Left/Top
-                // re-fires ITS Window_LocationChanged, but that rack isn't being dragged so
-                // its handler early-returns - no cascade, no reentrancy storm.
+                // Track drag velocity (exponential smoothing) for flick-to-throw on release.
+                long nowT = DateTime.UtcNow.Ticks;
+                double dtT = (nowT - _lastDragTicks) / (double)TimeSpan.TicksPerSecond;
+                if (_lastDragTicks != 0 && dtT > 0.0001 && dtT < 0.2)
+                {
+                    double vx = (this.Left - _lastDragLeft) / dtT;
+                    double vy = (this.Top - _lastDragTop) / dtT;
+                    _dragVelX = _dragVelX * 0.4 + vx * 0.6;
+                    _dragVelY = _dragVelY * 0.4 + vy * 0.6;
+                }
+                _lastDragLeft = this.Left; _lastDragTop = this.Top; _lastDragTicks = nowT;
+
+                // --- Ice-rink physics ---
+                // While dragging, hand VELOCITY to any rack we overlap (not an instant nudge):
+                // it then glides on its own via the shared RackPhysics loop, slowing by
+                // friction and bouncing off screen edges. The pushed rack, once moving, imparts
+                // to its own neighbours through the same loop, so pushes chain A -> B -> C.
                 var myRect = new Rect(this.Left, this.Top, this.Width, this.Height);
                 foreach (var win in Application.Current.Windows)
                 {
-                    if (win is RackWindow otherRack && otherRack != this && !otherRack._isTopmost)
-                    {
-                        var otherRect = new Rect(otherRack.Left, otherRack.Top, otherRack.Width, otherRack.Height);
-                        if (myRect.IntersectsWith(otherRect))
-                        {
-                            var intersect = Rect.Intersect(myRect, otherRect);
-                            if (intersect.IsEmpty || intersect.Width <= 0 || intersect.Height <= 0) continue;
-
-                            var myCenter = new System.Windows.Point(myRect.Left + myRect.Width / 2, myRect.Top + myRect.Height / 2);
-                            var otherCenter = new System.Windows.Point(otherRect.Left + otherRect.Width / 2, otherRect.Top + otherRect.Height / 2);
-
-                            double dx = otherCenter.X - myCenter.X;
-                            double dy = otherCenter.Y - myCenter.Y;
-
-                            if (intersect.Width < intersect.Height)
-                            {
-                                // Push horizontally, away from my center. If perfectly
-                                // centered, break the tie by pushing right.
-                                double dir = dx != 0 ? Math.Sign(dx) : 1;
-                                otherRack.Left += dir * intersect.Width;
-                            }
-                            else
-                            {
-                                // Push vertically, away from my center. If perfectly
-                                // centered, break the tie by pushing down.
-                                double dir = dy != 0 ? Math.Sign(dy) : 1;
-                                otherRack.Top += dir * intersect.Height;
-                            }
-
-                            // Keep in screen bounds
-                            var wa = System.Windows.Forms.Screen.FromHandle(new System.Windows.Interop.WindowInteropHelper(otherRack).Handle).WorkingArea;
-                            if (otherRack.Left < wa.Left) otherRack.Left = wa.Left;
-                            if (otherRack.Top < wa.Top) otherRack.Top = wa.Top;
-                            if (otherRack.Left + otherRack.Width > wa.Right) otherRack.Left = wa.Right - otherRack.Width;
-                            if (otherRack.Top + otherRack.Height > wa.Bottom) otherRack.Top = wa.Bottom - otherRack.Height;
-
-                            otherRack.Instance.PosX = otherRack.Left;
-                            otherRack.Instance.PosY = otherRack.Top;
-                        }
-                    }
+                    if (win is not RackWindow other || other == this
+                        || other._isTopmost || other._isLocked || other._physics == null) continue;
+                    var otherRect = new Rect(other.Left, other.Top, other.Width, other.Height);
+                    if (myRect.IntersectsWith(otherRect))
+                        Util.RackPhysics.Impart(other._physics, otherRect, myRect);
                 }
 
                 Instance.PosX = this.Left;
                 Instance.PosY = this.Top;
             }
         }
+
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             KeepWindowBehind();
@@ -4970,18 +5057,18 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
                     body = $"Remove this rack? The folder on disk ({Instance.Folder}) is left untouched.";
                 }
 
-                var dialog = new MessageBox
-                {
-                    Title = Lang.TitleBarContextMenu_RemoveMessageBox_Title,
-                    Content = body,
-                    PrimaryButtonText = Lang.TitleBarContextMenu_RemoveMessageBox_Yes,
-                    CloseButtonText = Lang.TitleBarContextMenu_RemoveMessageBox_No
-                };
+                bool confirmed = Racks.Views.RacksMessageBox.Confirm(
+                    body,
+                    Lang.TitleBarContextMenu_RemoveMessageBox_Title,
+                    Lang.TitleBarContextMenu_RemoveMessageBox_Yes,
+                    Lang.TitleBarContextMenu_RemoveMessageBox_No);
 
-                var result = await dialog.ShowDialogAsync();
-
-                if (result == MessageBoxResult.Primary)
+                if (confirmed)
                 {
+                    // Collect everything that lands back on the desktop so we can arrange it
+                    // into a clean grid afterwards (files just moved back land wherever
+                    // Explorer decides, which looks messy).
+                    var returnedToDesktop = new List<string>();
                     if (Instance.IsDesktopFilterRack && Instance.AssignedFiles != null)
                     {
                         string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -4991,7 +5078,8 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
                             string destPath = System.IO.Path.Combine(desktopPath, fileName);
                             if (System.IO.File.Exists(wpPath) || System.IO.Directory.Exists(wpPath))
                             {
-                                Util.SafeMove.TryMove(wpPath, destPath, out _);
+                                if (Util.SafeMove.TryMove(wpPath, destPath, out _) == Util.SafeMove.Result.Moved)
+                                    returnedToDesktop.Add(destPath);
                             }
                         }
                     }
@@ -5000,10 +5088,13 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
                         foreach (string file in System.IO.Directory.GetFileSystemEntries(Instance.Folder))
                         {
                             string dest = System.IO.Path.Combine(deskPath, System.IO.Path.GetFileName(file));
-                            Util.SafeMove.TryMove(file, dest, out _);
+                            if (Util.SafeMove.TryMove(file, dest, out _) == Util.SafeMove.Result.Moved)
+                                returnedToDesktop.Add(dest);
                         }
                         try { System.IO.Directory.Delete(Instance.Folder, false); } catch { }
                     }
+                    if (returnedToDesktop.Count > 0)
+                        Util.DesktopIconPositioner.ArrangeInGrid(returnedToDesktop);
 
                     RegistryKey key = Registry.CurrentUser.OpenSubKey(Instance.GetKeyLocation(), true)!;
                     if (key != null)
@@ -5645,7 +5736,9 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
             // Detach the static VirtualDesktop event so it can't keep this window alive
             // after close, then drop the folder watcher.
             try { VirtualDesktop.CurrentChanged -= OnVirtualDesktopChanged; } catch { }
+            try { _watcherDebounce?.Stop(); } catch { }
             try { _fileWatcherService.Dispose(); } catch { }
+            try { if (_physics != null) Util.RackPhysics.Unregister(_physics); } catch { }
             // "Disable Animations (Performance)" closes immediately with no shrink/fade.
             if (Instance.DisableAnimations)
             {

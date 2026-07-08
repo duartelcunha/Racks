@@ -10,7 +10,7 @@ using MenuItem = Wpf.Ui.Controls.MenuItem;
 using ContextMenu = System.Windows.Controls.ContextMenu;
 namespace Racks
 {
-    public partial class SettingsWindow : FluentWindow
+    public partial class SettingsWindow : Window
     {
         InstanceController _controller;
         RackWindow? _dWindows;
@@ -29,6 +29,11 @@ namespace Racks
             // if (_controller.reg.KeyExistsRoot("blurBackground")) blurToggle.IsChecked = (bool)_controller.reg.ReadKeyValueRoot("blurBackground");
             if (_controller.reg.KeyExistsRoot("AutoUpdate")) AutoUpdateToggleSwitch.IsChecked = _controller.reg.ReadKeyValueRoot("AutoUpdate") as bool? ?? false;
             if (_controller.reg.KeyExistsRoot("DoubleClickToHide")) DoubleClickToHideSwitch.IsChecked = _controller.reg.ReadKeyValueRoot("DoubleClickToHide") as bool? ?? false;
+
+            // Open on the monitor the user is actually on (where they clicked the tray),
+            // not always the primary. Centre this window in that monitor's working area.
+            this.WindowStartupLocation = WindowStartupLocation.Manual;
+            Loaded += (_, _) => Racks.Util.WindowPlacement.CenterOnCursorScreen(this);
         }
 
         private void blurToggle_CheckChanged(object sender, System.Windows.RoutedEventArgs e)
@@ -179,6 +184,13 @@ namespace Racks
                 }
             }
         }
+
+        private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (e.ButtonState == System.Windows.Input.MouseButtonState.Pressed) DragMove();
+        }
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
 
         private void FluentWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
