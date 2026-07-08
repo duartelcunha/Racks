@@ -1577,30 +1577,19 @@ namespace Racks
                 bool desktopHadFileBefore = DesktopHasFile(fileItem.Name);
                 var data = new DataObject(DataFormats.FileDrop, new[] { fileItem.FullPath });
                 var effect = DragDrop.DoDragDrop(child, data, DragDropEffects.Copy | DragDropEffects.Link | DragDropEffects.Move);
-                
+
                 if (effect != DragDropEffects.None)
                 {
-                    if (Racks.Util.Interop.GetCursorPos(out Racks.Util.Interop.POINT pt))
-                    {
-                        string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                        string expectedPath = System.IO.Path.Combine(desktopPath, System.IO.Path.GetFileName(fileItem.FullPath));
+                    // Where the pointer released - drag-out should land the item there.
+                    Racks.Util.Interop.GetCursorPos(out Racks.Util.Interop.POINT dropPt);
 
-                        // We check if the file exists on the desktop (meaning it was probably dropped there)
-                        if (System.IO.File.Exists(expectedPath) || System.IO.Directory.Exists(expectedPath))
-                        {
-                            Util.DesktopIconPositioner.SetDesktopIconPosition(expectedPath, pt.X, pt.Y);
-                        }
-                    }
+                    // Desktop rack: the item's real file lives in the RacksWorkspace sandbox.
+                    // We do the move ourselves (delete-workspace + keep-desktop / or physically
+                    // move) so it never ends up duplicated, and drop it exactly at the cursor.
+                    HandleDesktopRackDragOut(fileItem.FullPath, fileItem.Name, desktopHadFileBefore, dropPt);
 
-                    // Desktop rack: the file physically lives in the RacksWorkspace sandbox,
-                    // so when Explorer drops it back on the desktop it COPIES it there and
-                    // leaves the original in the workspace (still shown in the rack) - a
-                    // duplicate. Reconcile to the intended result: one file, on the desktop,
-                    // no longer in the rack.
-                    HandleDesktopRackDragOut(fileItem.FullPath, fileItem.Name, desktopHadFileBefore);
-
-                    // Defensive programming: If the user dragged a file out of a Virtual Rack and Explorer moved it,
-                    // we must delete the shortcut from our sandbox so it doesn't become an orphan.
+                    // Virtual (shortcut) rack: if Explorer moved the shortcut out, remove the
+                    // orphan from our sandbox.
                     if (effect == DragDropEffects.Move && Instance.IsShortcutsOnly && !string.IsNullOrEmpty(Instance.Folder))
                     {
                         string shortcutPath = System.IO.Path.Combine(Instance.Folder, fileItem.Name);
@@ -1636,22 +1625,41 @@ namespace Racks
         // there before the drag) - that's the reliable signal it was dropped on the desktop
         // rather than into another app. A same-named file that already existed before the
         // drag is NOT treated as our drop, so we never delete the wrong file.
-        private void HandleDesktopRackDragOut(string workspaceFullPath, string fileName, bool desktopHadFileBefore)
+        private void HandleDesktopRackDragOut(string workspaceFullPath, string fileName, bool desktopHadFileBefore, Racks.Util.Interop.POINT dropPt)
         {
             if (!Instance.IsDesktopFilterRack || string.IsNullOrEmpty(workspaceFullPath)) return;
             try
             {
-                if (desktopHadFileBefore) return; // ambiguous: a same-named file predates this drag; do nothing
-                if (!DesktopHasFile(fileName)) return; // nothing new landed on the desktop - dropped elsewhere
+                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                string desktopTarget = Path.Combine(desktopPath, fileName);
+                bool newOnDesktop = !desktopHadFileBefore && DesktopHasFile(fileName);
 
-                // Remove the now-orphaned workspace original (Explorer left it there when it
-                // copied to the desktop). If Explorer did a move, it's already gone.
-                try
+                if (newOnDesktop)
                 {
-                    if (File.Exists(workspaceFullPath)) File.Delete(workspaceFullPath);
-                    else if (Directory.Exists(workspaceFullPath)) Directory.Delete(workspaceFullPath, true);
+                    // Explorer already COPIED it to the desktop. Delete the sandbox original so
+                    // only the desktop copy remains (no duplicate), then drop the rack's claim.
+                    try
+                    {
+                        if (File.Exists(workspaceFullPath)) File.Delete(workspaceFullPath);
+                        else if (Directory.Exists(workspaceFullPath)) Directory.Delete(workspaceFullPath, true);
+                    }
+                    catch (Exception ex) { Debug.WriteLine($"Drag-out workspace cleanup failed: {ex.Message}"); }
                 }
-                catch (Exception ex) { Debug.WriteLine($"Drag-out workspace cleanup failed: {ex.Message}"); }
+                else
+                {
+                    // Nothing new landed on the desktop. If the drop was ON the desktop area
+                    // (not into another app), physically move the file out of the sandbox to
+                    // the desktop ourselves; otherwise leave it in the rack untouched.
+                    if (!DroppedOnDesktop(dropPt)) return;
+                    if (File.Exists(desktopTarget) || Directory.Exists(desktopTarget)) return; // name clash: bail safely
+
+                    if (Util.SafeMove.TryMove(workspaceFullPath, desktopTarget, out _) != Util.SafeMove.Result.Moved)
+                        return;
+                }
+
+                // Position the returned item exactly where the pointer released.
+                try { Util.DesktopIconPositioner.SetDesktopIconPosition(desktopTarget, dropPt.X, dropPt.Y); }
+                catch { }
 
                 // Drop the rack's claim so the item stops showing in the rack.
                 if (Instance.AssignedFiles != null && Instance.AssignedFiles.Remove(fileName))
@@ -1662,6 +1670,27 @@ namespace Racks
                 LoadFiles(_currentFolderPath);
             }
             catch (Exception ex) { Debug.WriteLine($"HandleDesktopRackDragOut failed: {ex.Message}"); }
+        }
+
+        // True if the drop point is over the desktop (the wallpaper / SHELLDLL_DefView),
+        // not over another application window. Used so drag-out only "returns to desktop"
+        // when the user actually dropped on the desktop.
+        private static bool DroppedOnDesktop(Racks.Util.Interop.POINT pt)
+        {
+            try
+            {
+                IntPtr hwnd = Interop.WindowFromPoint(pt);
+                if (hwnd == IntPtr.Zero) return false;
+                var sb = new System.Text.StringBuilder(64);
+                for (IntPtr h = hwnd; h != IntPtr.Zero; h = Interop.GetParent(h))
+                {
+                    Interop.GetClassName(h, sb, sb.Capacity);
+                    string cls = sb.ToString();
+                    if (cls == "SHELLDLL_DefView" || cls == "Progman" || cls == "WorkerW") return true;
+                }
+                return false;
+            }
+            catch { return false; }
         }
 
         // Called synchronously by the panel as the dragged tile crosses into a new
@@ -2846,7 +2875,8 @@ namespace Racks
                             // Same desktop-rack duplicate reconciliation as the tile drag path.
                             if (effect != DragDropEffects.None)
                             {
-                                HandleDesktopRackDragOut(dragPath, dragName, desktopHadFileBefore);
+                                Racks.Util.Interop.GetCursorPos(out Racks.Util.Interop.POINT dropPt);
+                                HandleDesktopRackDragOut(dragPath, dragName, desktopHadFileBefore, dropPt);
                             }
                         });
                     });

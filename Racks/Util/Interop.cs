@@ -56,6 +56,8 @@ namespace Racks.Util
         public static extern bool SetForegroundWindow(IntPtr hWnd);
         [DllImport("user32.dll")]
         public static extern IntPtr WindowFromPoint(POINT Point);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
         [DllImport("user32.dll", SetLastError = true)]
         public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
         [DllImport("user32.dll")]
