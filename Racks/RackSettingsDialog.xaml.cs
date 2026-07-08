@@ -52,6 +52,7 @@ namespace Racks
         public RackSettingsDialog(RackWindow frame)
         {
             InitializeComponent();
+            Racks.Util.WindowFade.Attach(this);
 
             this.Owner = frame;
 
@@ -275,15 +276,7 @@ namespace Racks
             _frame.LocationChanged += Frame_LocationChanged;
             _frame.SizeChanged += Frame_SizeChanged;
             _rackTracked = true;
-
-            var fade = new DoubleAnimation
-            {
-                From = 0,
-                To = 1,
-                Duration = TimeSpan.FromMilliseconds(180),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-            };
-            this.BeginAnimation(UIElement.OpacityProperty, fade);
+            // Fade-in is handled centrally by WindowFade.Attach(this) in the constructor.
         }
 
         private void Window_Closed(object sender, EventArgs e)
@@ -470,7 +463,16 @@ namespace Racks
                 _frame.title.Foreground = new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(_instance.TitleTextColor));
                 _frame.title.Text = TitleTextBox.Text == "" ? _instance.Name : _instance.TitleText;
 
-                _frame.WindowBackground.Background = new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(_instance.ListViewBackgroundColor));
+                // Re-render the rack background through the single source of truth. This
+                // applies Transparent / Gradient / Drop Shadow / image / solid-color
+                // exactly the way startup does, so those "Premium UI" toggles actually take
+                // effect live. Previously this line just painted a flat solid color over
+                // WindowBackground, which silently overrode all four of those options.
+                _frame.ChangeBackgroundOpacity(_instance.Opacity);
+                // Re-evaluate the border / active-border branch so "Show a border" and
+                // "Use a different color when active" reflect their new state immediately
+                // instead of waiting for the next hover.
+                _frame.AnimateActiveColor(_instance.AnimationSpeed);
 
                 TitleBarColorTextBox.Icon!.Foreground = new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(_instance.TitleBarColor));
                 TitleTextColorTextBox.Icon!.Foreground = new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(_instance.TitleTextColor));

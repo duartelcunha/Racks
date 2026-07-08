@@ -316,7 +316,12 @@ public class InstanceController
         subWindow.ChangeBackgroundOpacity(inst.Opacity);
         _subWindows.Add(subWindow);
         subWindow.Show();
-        subWindow.StartPlacementMode();
+        // The rack appears fully placed at the cursor-centered PosX/PosY computed above.
+        // The old StartPlacementMode() "follow the cursor then click to drop" flow was
+        // removed: it wrote screen coords to a window that SetAsDesktopChild reparents as
+        // a desktop child (whose Left/Top are parent-client coords), so it mis-positioned
+        // the rack, and its per-frame CompositionTarget.Rendering loop fought the push
+        // physics on the UI thread, freezing the app. Drag the title bar to reposition.
         _subWindowsPtr.Add(new WindowInteropHelper(subWindow).Handle);
         InitDetails();
         RefreshMirror();
@@ -441,9 +446,9 @@ public class InstanceController
         subWindow.ChangeBackgroundOpacity(inst.Opacity);
         _subWindows.Add(subWindow);
         subWindow.Show();
-        // Since we already calculated a cascading position, we don't necessarily need StartPlacementMode,
-        // but we can call it to let the user place it if that's the intended behavior.
-        // Let's use the calculated position so they don't overlap if they click multiple times fast.
+        // The rack appears fully placed at the cursor-centered PosX/PosY computed above
+        // (SetAsDesktopChild converts that to the desktop-child client coords). Drag the
+        // title bar to move it afterwards.
         _subWindowsPtr.Add(new WindowInteropHelper(subWindow).Handle);
         InitDetails();
         RefreshMirror();
@@ -983,13 +988,10 @@ public class InstanceController
                         }
                     }
                 }
-                else
-                {
-                    Debug.WriteLine("try add an empty");
-                    Instances.Add(new Instance("empty", false));
-                    MainWindow._controller.WriteInstanceToKey(Instances[0]);
-
-                }
+                // No Instances key yet: this is a first run (fresh install). Start with a
+                // clean desktop - no rack is created or shown. The user opens one from the
+                // tray menu ("New rack") whenever they want. (Previously a starter rack was
+                // auto-created and popped onto the screen on install.)
             }
             Debug.WriteLine("Showing windows...");
             foreach (var Instance in Instances)
@@ -1003,22 +1005,12 @@ public class InstanceController
             }
             foreach (var window in _subWindows)
             {
+                // Position each rack against the screen edge on startup. Neighbor docking
+                // (WonRight/WonLeft) was removed in favor of drag-time push physics.
                 window.HandleWindowMove(true);
-                if (window.WonRight != null)
-                {
-                    window.WonRight.HandleWindowMove(false);
-                }
-                if (window.WonLeft != null)
-                {
-                    window.WonLeft.HandleWindowMove(false);
-                }
             }
-            if (Instances.Count == 0)
-            {
-                // First-launch experience matches the tray default: virtual rack so the
-                // user can immediately drag a shortcut without picking a folder.
-                AddVirtualInstance();
-            }
+            // No auto-created starter rack on first launch: the user should see a clean
+            // desktop after install and create a rack from the tray menu when they want one.
             // Mark the LinkOnDrop revert migration as done so a later user-driven
             // LinkOnDrop=true toggle isn't undone next launch.
             if (needsRevertMigration)

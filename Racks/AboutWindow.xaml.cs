@@ -8,6 +8,7 @@ namespace Racks
         public AboutWindow(double top, double left, double height, double width)
         {
             InitializeComponent();
+            Racks.Util.WindowFade.Attach(this);
             this.Width = width / 2;
             this.Left = left + (width - this.Width) / 2;
             this.Top = top + (height - this.Height) / 2;

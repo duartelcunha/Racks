@@ -131,7 +131,6 @@ namespace Racks
         private bool _isLeftButtonDown = false;
         bool _canAnimate = true;
         private double _originalHeight;
-        public int neighborFrameCount = 0;
         public int _previousItemPerRow = 0;
         private double _previousHeight = -1;
         public bool isMouseDown = false;
@@ -140,42 +139,14 @@ namespace Racks
         private CancellationTokenSource loadFilesCancellationToken = new CancellationTokenSource();
         private CancellationTokenSource _changeIconSizeCts = new CancellationTokenSource();
         private CancellationTokenSource _adjustPositionCts;
-        public RackWindow WonRight = null;
-        public RackWindow WonLeft = null;
 
-        private bool _placementWaitForRelease = true;
-
-        public void StartPlacementMode()
-        {
-            this.Opacity = 0.7;
-            _placementWaitForRelease = (GetAsyncKeyState(0x01) & 0x8000) != 0;
-            System.Windows.Media.CompositionTarget.Rendering += PlacementMode_Rendering;
-        }
-
-        private void PlacementMode_Rendering(object sender, EventArgs e)
-        {
-            var curPos = System.Windows.Forms.Cursor.Position;
-            this.Left = curPos.X - (this.Width / 2);
-            this.Top = curPos.Y - (this.Height / 2);
-            
-            bool isDown = (GetAsyncKeyState(0x01) & 0x8000) != 0;
-            
-            if (_placementWaitForRelease)
-            {
-                if (!isDown)
-                {
-                    _placementWaitForRelease = false;
-                }
-            }
-            else if (isDown)
-            {
-                System.Windows.Media.CompositionTarget.Rendering -= PlacementMode_Rendering;
-                this.Opacity = Instance.IdleOpacity;
-                Instance.PosX = this.Left;
-                Instance.PosY = this.Top;
-                MainWindow._controller.WriteInstanceToKey(Instance);
-            }
-        }
+        // Placement mode (follow-the-cursor-then-click-to-drop) was removed. It wrote
+        // screen coordinates to a window that SetAsDesktopChild reparents as a WS_CHILD of
+        // the desktop (whose Left/Top are parent-client coords), so the rack never tracked
+        // the cursor correctly, and its per-frame CompositionTarget.Rendering loop fought
+        // the push physics and HandleWindowMove on the single UI thread, freezing the app.
+        // New racks now simply appear at the cursor-centered position the creator sets in
+        // Instance.PosX/PosY (converted to client coords by SetAsDesktopChild).
 
         ContextMenu contextMenu = new ContextMenu();
         MenuItem nameMenuItem;
@@ -587,59 +558,11 @@ namespace Racks
                     return -1;
                 }
             }
-            if (msg == 0x0046 && _isLeftButtonDown) // WM_WINDOWPOSCHANGING
-            {
-                Interop.WINDOWPOS structure = Marshal.PtrToStructure<Interop.WINDOWPOS>(lParam);
-                if ((structure.flags & 0x0002) == 0) // SWP_NOMOVE is NOT set
-                {
-                    int proposedLeft = (int)structure.x;
-                    int proposedTop = (int)structure.y;
-                    int proposedWidth = structure.cx != 0 ? (int)structure.cx : (int)this.ActualWidth;
-                    int proposedHeight = structure.cy != 0 ? (int)structure.cy : (int)this.ActualHeight;
-
-                    bool overlapped = false;
-                    foreach (var otherWindow in MainWindow._controller._subWindows)
-                    {
-                        if (otherWindow == this || otherWindow._isTopmost) continue;
-
-                        IntPtr otherHwnd = new WindowInteropHelper(otherWindow).Handle;
-                        Interop.RECT otherWindowRect;
-                        Interop.GetWindowRect(otherHwnd, out otherWindowRect);
-
-                        int otherLeft = otherWindowRect.Left;
-                        int otherTop = otherWindowRect.Top;
-                        int otherRight = otherWindowRect.Right;
-                        int otherBottom = otherWindowRect.Bottom;
-
-                        int pRight = proposedLeft + proposedWidth;
-                        int pBottom = proposedTop + proposedHeight;
-
-                        if (proposedLeft < otherRight && pRight > otherLeft &&
-                            proposedTop < otherBottom && pBottom > otherTop)
-                        {
-                            overlapped = true;
-                            int overlapLeft = pRight - otherLeft;
-                            int overlapRight = otherRight - proposedLeft;
-                            int overlapTop = pBottom - otherTop;
-                            int overlapBottom = otherBottom - proposedTop;
-
-                            int minOverlap = Math.Min(Math.Min(overlapLeft, overlapRight), Math.Min(overlapTop, overlapBottom));
-
-                            if (minOverlap == overlapLeft) proposedLeft = otherLeft - proposedWidth;
-                            else if (minOverlap == overlapRight) proposedLeft = otherRight;
-                            else if (minOverlap == overlapTop) proposedTop = otherTop - proposedHeight;
-                            else if (minOverlap == overlapBottom) proposedTop = otherBottom;
-                        }
-                    }
-
-                    if (overlapped)
-                    {
-                        structure.x = (uint)proposedLeft;
-                        structure.y = (uint)proposedTop;
-                        Marshal.StructureToPtr(structure, lParam, false);
-                    }
-                }
-            }
+            // The old WM_WINDOWPOSCHANGING handler here clamped the dragged rack to a
+            // neighbor's edge (a solid collision wall). That directly prevented the
+            // pushable-physics model (Window_LocationChanged) from ever seeing an
+            // overlap, so racks bumped into an invisible wall instead of pushing each
+            // other apart. Removed: push physics is now the single rack-vs-rack system.
 
             if (_isLeftButtonDown && _bringForwardForMove && msg == 0x0003) // WM_MOVE
             {
@@ -1012,15 +935,11 @@ namespace Racks
             {
                 _isIngrid = false;
 
+                // Only this rack repositions itself here; neighbors are moved (if at all)
+                // by the push physics in Window_LocationChanged. Propagating HandleWindowMove
+                // to neighbors was part of the removed docking system and caused the
+                // mid-drag reentrancy storm that froze the app.
                 HandleWindowMove(false);
-                if (WonRight != null)
-                {
-                    WonRight.HandleWindowMove(false);
-                }
-                if (WonLeft != null)
-                {
-                    WonLeft.HandleWindowMove(false);
-                }
             }
             if (_isLeftButtonDown &&
                 ((GetAsyncKeyState(0xA4) & 0x8000) != 0 || (GetAsyncKeyState(0xA5) & 0x8000) != 0) && // left or right is alt down
@@ -1131,12 +1050,10 @@ namespace Racks
         }
         public void HandleWindowMove(bool initWindow)
         {
-            // WM_MOVE below calls HandleWindowMove on this window AND directly on its
-            // WonRight/WonLeft neighbors; SetWindowPos further down synchronously fires
-            // another WM_MOVE for whichever window it repositions. Without this guard,
-            // two docked racks can retrigger each other's HandleWindowMove in a nested
-            // A-calls-B-calls-A chain that never bottoms out (visible as the racks
-            // jittering non-stop and the app pegging a core / going unresponsive).
+            // Screen-edge snapping + this rack's own corner radii. SetWindowPos below can
+            // synchronously re-fire WM_MOVE and re-enter this method; the guard bottoms
+            // that out. (Rack-to-rack docking that used to also live here was removed;
+            // racks now push each other apart via Window_LocationChanged instead.)
             if (_isTopmost || _inHandleWindowMove)
             {
                 return;
@@ -1227,165 +1144,26 @@ namespace Racks
                     newWindowLeft = (int)(workingArea.Right - this.ActualWidth);
                 }
             }
-            neighborFrameCount = 0;
-
-            bool onLeft = false;
-            bool onRight = false;
-            foreach (var otherWindow in MainWindow._controller._subWindows)
-            {
-                if (otherWindow == this) continue;
-                if (otherWindow._isTopmost) // prevent unintentional dragging of neighboring window
-                {
-                    return;
-                }
-                IntPtr otherHwnd = new WindowInteropHelper(otherWindow).Handle;
-                Interop.RECT otherWindowRect;
-                Interop.GetWindowRect(otherHwnd, out otherWindowRect);
-
-                int otherLeft = otherWindowRect.Left;
-                int otherTop = otherWindowRect.Top;
-                int otherRight = otherWindowRect.Right;
-                int otherBottom = otherWindowRect.Bottom;
-
-                if (Math.Abs(windowLeft - otherRight) <= _snapDistance && Math.Abs(windowTop - otherTop) <= _snapDistance)
-                {
-                    newWindowLeft = otherRight;
-                    newWindowTop = otherTop;
-                    WonRight = otherWindow;
-                    onLeft = true;
-                    neighborFrameCount++;
-                }
-                else if (Math.Abs(windowRight - otherLeft) <= _snapDistance && Math.Abs(windowTop - otherTop) <= _snapDistance)
-                {
-                    newWindowLeft = otherLeft - (windowRight - windowLeft);
-                    newWindowTop = otherTop;
-                    WonLeft = otherWindow;
-                    onRight = true;
-                    neighborFrameCount++;
-                }
-
-                if (Math.Abs(windowLeft - otherRight) <= _snapDistance && Math.Abs(windowBottom - otherBottom) <= _snapDistance)
-                {
-                    newWindowLeft = otherRight;
-                    newWindowBottom = (int)workingArea.Bottom;
-                    WonRight = otherWindow;
-                    onLeft = true;
-                    neighborFrameCount++;
-                }
-                else if (Math.Abs(windowRight - otherLeft) <= _snapDistance && Math.Abs(windowBottom - otherBottom) <= _snapDistance)
-                {
-                    newWindowLeft = otherLeft - (windowRight - windowLeft);
-                    newWindowBottom = (int)workingArea.Bottom;
-                    WonLeft = otherWindow;
-                    onRight = true;
-                    neighborFrameCount++;
-                }
-
-                if (Math.Abs(windowTop - otherBottom) <= _snapDistance && Math.Abs(windowLeft - otherLeft) <= _snapDistance)
-                {
-                    newWindowTop = otherBottom;
-                }
-                else if (Math.Abs(windowBottom - otherTop) <= _snapDistance && Math.Abs(windowLeft - otherLeft) <= _snapDistance)
-                {
-                    newWindowTop = otherTop - (windowBottom - windowTop);
-                }
-            }
-            if (neighborFrameCount >= 2)
-            {
-                WindowBackground.CornerRadius = new CornerRadius(0);
-                titleBar.CornerRadius = new CornerRadius(0);
-            }
-            if (neighborFrameCount == 0)
-            {
-                if (WonRight != null && !onLeft)
-                {
-                    if (!WonRight._isMinimized)
-                    {
-                        WonRight.WindowBorder.CornerRadius = new CornerRadius(
-                            topLeft: WonRight._isOnTop ? 0 : WonRight.WonRight == null ? 5 : 0,
-                            topRight: WonRight._isOnTop ? 0 : (WonRight._isOnBottom ? 0 : 5),
-                            bottomRight: WonRight._isOnBottom ? 0 : 5,
-                            bottomLeft: WonRight._isOnBottom ? 0 : 5
-                        );
-                        WonRight.titleBar.CornerRadius = new CornerRadius(
-                            topLeft: WonRight.WindowBorder.CornerRadius.TopLeft,
-                            topRight: WonRight.WindowBorder.CornerRadius.TopRight,
-                            bottomRight: 0,
-                            bottomLeft: 0
-                        );
-                    }
-                    else
-                    {
-                        WonRight.WindowBorder.CornerRadius = new CornerRadius(
-                            topLeft: WonRight._isOnTop ? 0 : WonRight.WonRight == null ? 5 : 0,
-                            topRight: WonRight._isOnTop ? 0 : (WonRight._isOnBottom ? 0 : 5),
-                            bottomRight: WonRight._isOnBottom ? 0 : 5,
-                            bottomLeft: WonRight.WonRight == null ? (WonRight._isOnBottom ? 0 : 5) : 0
-                        );
-                        WonRight.titleBar.CornerRadius = WonRight.WindowBorder.CornerRadius;
-
-                    }
-                    WonRight.WindowBackground.CornerRadius = WonRight.WindowBorder.CornerRadius;
-                    WonRight.WonLeft = null;
-                    WonRight = null;
-                }
-                if (WonLeft != null && !onRight)
-                {
-                    if (!WonLeft._isMinimized)
-                    {
-                        WonLeft.WindowBorder.CornerRadius = new CornerRadius(
-                            topLeft: WonLeft._isOnTop ? 0 : (WonLeft._isOnBottom ? 0 : 5),
-                            topRight: WonLeft._isOnTop ? 0 : WonLeft.WonLeft == null ? 5 : 0,
-                            bottomRight: WonLeft._isOnBottom ? 0 : 5,
-                            bottomLeft: WonLeft._isOnBottom ? 0 : 5
-                        );
-                        WonLeft.titleBar.CornerRadius = new CornerRadius(
-                            topLeft: WonLeft.WindowBorder.CornerRadius.TopLeft,
-                            topRight: WonLeft.WindowBorder.CornerRadius.TopRight,
-                            bottomRight: 0,
-                            bottomLeft: 0
-                        );
-                    }
-                    else
-                    {
-                        WonLeft.WindowBorder.CornerRadius = new CornerRadius(
-                            topLeft: WonLeft._isOnTop ? 0 : (WonLeft._isOnBottom ? 0 : 5),
-                            topRight: WonLeft._isOnTop ? 0 : WonLeft.WonLeft == null ? 5 : 0,
-                            bottomRight: WonLeft.WonLeft == null ? (WonLeft._isOnBottom ? 0 : 5) : 0,
-                            bottomLeft: WonLeft._isOnBottom ? 0 : 5
-                        );
-                        WonLeft.titleBar.CornerRadius = WonLeft.WindowBorder.CornerRadius;
-
-                    }
-                    WonLeft.WindowBackground.CornerRadius = WonLeft.WindowBorder.CornerRadius;
-                    WonLeft.WonRight = null;
-                    WonLeft = null;
-                }
-
-            }
+            // Rack-to-rack edge docking used to live here: it snapped the dragged rack's
+            // edges to nearby racks (WonRight/WonLeft) and merged their corner radii into
+            // a seamless panel. It fought the pushable-physics model (each dock moved a
+            // neighbor, which re-fired WM_MOVE and re-ran this whole pass on every rack,
+            // saturating the UI thread mid-drag so the app couldn't even be quit). Removed:
+            // racks now push each other apart (Window_LocationChanged) and never dock, so
+            // this only has to keep THIS rack's own corners correct against the screen edge.
             if (!_isMinimized)
             {
                 if (_isOnBottom)
                 {
-                    WindowBorder.CornerRadius = new CornerRadius(
-                        topLeft: 5,
-                        topRight: 5,
-                        bottomRight: 0,
-                        bottomLeft: 0
-                    );
+                    WindowBorder.CornerRadius = new CornerRadius(5, 5, 0, 0);
                     WindowBackground.CornerRadius = WindowBorder.CornerRadius;
-                    titleBar.CornerRadius = new CornerRadius(
-                        topLeft: WindowBorder.CornerRadius.TopLeft,
-                        topRight: WindowBorder.CornerRadius.TopRight,
-                        bottomRight: 5,
-                        bottomLeft: 5
-                    );
+                    titleBar.CornerRadius = new CornerRadius(5, 5, 5, 5);
                 }
                 else
                 {
                     WindowBorder.CornerRadius = new CornerRadius(
-                        topLeft: _isOnTop ? 0 : WonRight == null ? 5 : 0,
-                        topRight: _isOnTop ? 0 : WonLeft == null ? 5 : 0,
+                        topLeft: _isOnTop ? 0 : 5,
+                        topRight: _isOnTop ? 0 : 5,
                         bottomRight: 5,
                         bottomLeft: 5
                     );
@@ -1402,20 +1180,15 @@ namespace Racks
             {
                 if (_isOnBottom)
                 {
-                    WindowBorder.CornerRadius = new CornerRadius(
-                        topLeft: WonRight == null ? 5 : 0,
-                        topRight: WonLeft == null ? 5 : 0,
-                        bottomRight: 0,
-                        bottomLeft: 0
-                   );
+                    WindowBorder.CornerRadius = new CornerRadius(5, 5, 0, 0);
                 }
                 else
                 {
                     WindowBorder.CornerRadius = new CornerRadius(
-                        topLeft: _isOnTop ? 0 : WonRight == null ? 5 : 0,
-                        topRight: _isOnTop ? 0 : WonLeft == null ? 5 : 0,
-                        bottomRight: WonLeft == null ? 5 : 0,
-                        bottomLeft: WonRight == null ? 5 : 0
+                        topLeft: _isOnTop ? 0 : 5,
+                        topRight: _isOnTop ? 0 : 5,
+                        bottomRight: 5,
+                        bottomLeft: 5
                     );
                 }
                 WindowBackground.CornerRadius = WindowBorder.CornerRadius;
@@ -1787,6 +1560,7 @@ namespace Racks
             try
             {
                 _isDragging = true;
+                bool desktopHadFileBefore = DesktopHasFile(fileItem.Name);
                 var data = new DataObject(DataFormats.FileDrop, new[] { fileItem.FullPath });
                 var effect = DragDrop.DoDragDrop(child, data, DragDropEffects.Copy | DragDropEffects.Link | DragDropEffects.Move);
                 
@@ -1796,13 +1570,20 @@ namespace Racks
                     {
                         string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                         string expectedPath = System.IO.Path.Combine(desktopPath, System.IO.Path.GetFileName(fileItem.FullPath));
-                        
+
                         // We check if the file exists on the desktop (meaning it was probably dropped there)
                         if (System.IO.File.Exists(expectedPath) || System.IO.Directory.Exists(expectedPath))
                         {
                             Util.DesktopIconPositioner.SetDesktopIconPosition(expectedPath, pt.X, pt.Y);
                         }
                     }
+
+                    // Desktop rack: the file physically lives in the RacksWorkspace sandbox,
+                    // so when Explorer drops it back on the desktop it COPIES it there and
+                    // leaves the original in the workspace (still shown in the rack) - a
+                    // duplicate. Reconcile to the intended result: one file, on the desktop,
+                    // no longer in the rack.
+                    HandleDesktopRackDragOut(fileItem.FullPath, fileItem.Name, desktopHadFileBefore);
 
                     // Defensive programming: If the user dragged a file out of a Virtual Rack and Explorer moved it,
                     // we must delete the shortcut from our sandbox so it doesn't become an orphan.
@@ -1818,6 +1599,55 @@ namespace Racks
             }
             catch (Exception ex) { Debug.WriteLine($"Outgoing drag failed: {ex.Message}"); }
             finally { _isDragging = false; }
+        }
+
+        // Snapshot, taken BEFORE an outgoing drag starts, of whether a same-named file
+        // already sat on the desktop. Passed to HandleDesktopRackDragOut so a pre-existing
+        // desktop file can't be mistaken for "the item was dropped here".
+        private bool DesktopHasFile(string fileName)
+        {
+            try
+            {
+                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                string p = Path.Combine(desktopPath, fileName);
+                return File.Exists(p) || Directory.Exists(p);
+            }
+            catch { return false; }
+        }
+
+        // Reconcile a drag-out from a desktop rack. For a DesktopFilterRack the item's real
+        // file lives in RacksWorkspace; dropping it on the desktop makes Explorer copy it
+        // there, leaving a duplicate (desktop copy + workspace original still claimed by the
+        // rack). We only reconcile when the item NEWLY appeared on the desktop (it wasn't
+        // there before the drag) - that's the reliable signal it was dropped on the desktop
+        // rather than into another app. A same-named file that already existed before the
+        // drag is NOT treated as our drop, so we never delete the wrong file.
+        private void HandleDesktopRackDragOut(string workspaceFullPath, string fileName, bool desktopHadFileBefore)
+        {
+            if (!Instance.IsDesktopFilterRack || string.IsNullOrEmpty(workspaceFullPath)) return;
+            try
+            {
+                if (desktopHadFileBefore) return; // ambiguous: a same-named file predates this drag; do nothing
+                if (!DesktopHasFile(fileName)) return; // nothing new landed on the desktop - dropped elsewhere
+
+                // Remove the now-orphaned workspace original (Explorer left it there when it
+                // copied to the desktop). If Explorer did a move, it's already gone.
+                try
+                {
+                    if (File.Exists(workspaceFullPath)) File.Delete(workspaceFullPath);
+                    else if (Directory.Exists(workspaceFullPath)) Directory.Delete(workspaceFullPath, true);
+                }
+                catch (Exception ex) { Debug.WriteLine($"Drag-out workspace cleanup failed: {ex.Message}"); }
+
+                // Drop the rack's claim so the item stops showing in the rack.
+                if (Instance.AssignedFiles != null && Instance.AssignedFiles.Remove(fileName))
+                {
+                    MainWindow._controller.WriteInstanceToKey(Instance);
+                }
+
+                LoadFiles(_currentFolderPath);
+            }
+            catch (Exception ex) { Debug.WriteLine($"HandleDesktopRackDragOut failed: {ex.Message}"); }
         }
 
         // Called synchronously by the panel as the dragged tile crosses into a new
@@ -2207,7 +2037,7 @@ namespace Racks
             };
             _grayscaleEffect.BeginAnimation(GrayscaleEffect.StrengthProperty, animation);
         }
-        private void AnimateActiveColor(double animationSpeed)
+        public void AnimateActiveColor(double animationSpeed)
         {
             if (Instance.DisableAnimations) animationSpeed = 0;
             if (Instance.ActiveBackgroundEnabled
@@ -2939,12 +2769,20 @@ namespace Racks
                 if (e.LeftButton == MouseButtonState.Pressed && e.ClickCount != 2)
                 {
                     DataObject data = new DataObject(DataFormats.FileDrop, new string[] { clickedItem.FullPath! });
+                    string dragPath = clickedItem.FullPath!;
+                    string dragName = clickedItem.Name;
+                    bool desktopHadFileBefore = DesktopHasFile(dragName);
                     Task.Run(() =>
                     {
                         Thread.Sleep(5);
                         Application.Current.Dispatcher.Invoke(() =>
                         {
-                            DragDrop.DoDragDrop(listView, data, DragDropEffects.Copy | DragDropEffects.Link | DragDropEffects.Move);
+                            var effect = DragDrop.DoDragDrop(listView, data, DragDropEffects.Copy | DragDropEffects.Link | DragDropEffects.Move);
+                            // Same desktop-rack duplicate reconciliation as the tile drag path.
+                            if (effect != DragDropEffects.None)
+                            {
+                                HandleDesktopRackDragOut(dragPath, dragName, desktopHadFileBefore);
+                            }
                         });
                     });
                 }
@@ -4425,44 +4263,51 @@ namespace Racks
                 }
                 
                 // --- Pushable Physics ---
+                // The dragged rack shoves any overlapping rack out along the shallower
+                // overlap axis by exactly the overlap amount, so the other rack ends up
+                // just touching, never overlapping. Each drag frame the overlap is only a
+                // few px, so this reads as a smooth 60fps push. Setting otherRack.Left/Top
+                // re-fires ITS Window_LocationChanged, but that rack isn't being dragged so
+                // its handler early-returns - no cascade, no reentrancy storm.
                 var myRect = new Rect(this.Left, this.Top, this.Width, this.Height);
                 foreach (var win in Application.Current.Windows)
                 {
-                    if (win is RackWindow otherRack && otherRack != this)
+                    if (win is RackWindow otherRack && otherRack != this && !otherRack._isTopmost)
                     {
                         var otherRect = new Rect(otherRack.Left, otherRack.Top, otherRack.Width, otherRack.Height);
                         if (myRect.IntersectsWith(otherRect))
                         {
                             var intersect = Rect.Intersect(myRect, otherRect);
                             if (intersect.IsEmpty || intersect.Width <= 0 || intersect.Height <= 0) continue;
-                            
+
                             var myCenter = new System.Windows.Point(myRect.Left + myRect.Width / 2, myRect.Top + myRect.Height / 2);
                             var otherCenter = new System.Windows.Point(otherRect.Left + otherRect.Width / 2, otherRect.Top + otherRect.Height / 2);
-                            
+
                             double dx = otherCenter.X - myCenter.X;
                             double dy = otherCenter.Y - myCenter.Y;
-                            if (dx == 0 && dy == 0) dx = 1; // arbitrary nudge
-                            
+
                             if (intersect.Width < intersect.Height)
                             {
-                                // push horizontally
-                                double pushX = Math.Sign(dx) * intersect.Width;
-                                otherRack.Left += pushX;
+                                // Push horizontally, away from my center. If perfectly
+                                // centered, break the tie by pushing right.
+                                double dir = dx != 0 ? Math.Sign(dx) : 1;
+                                otherRack.Left += dir * intersect.Width;
                             }
                             else
                             {
-                                // push vertically
-                                double pushY = Math.Sign(dy) * intersect.Height;
-                                otherRack.Top += pushY;
+                                // Push vertically, away from my center. If perfectly
+                                // centered, break the tie by pushing down.
+                                double dir = dy != 0 ? Math.Sign(dy) : 1;
+                                otherRack.Top += dir * intersect.Height;
                             }
-                            
+
                             // Keep in screen bounds
                             var wa = System.Windows.Forms.Screen.FromHandle(new System.Windows.Interop.WindowInteropHelper(otherRack).Handle).WorkingArea;
                             if (otherRack.Left < wa.Left) otherRack.Left = wa.Left;
                             if (otherRack.Top < wa.Top) otherRack.Top = wa.Top;
                             if (otherRack.Left + otherRack.Width > wa.Right) otherRack.Left = wa.Right - otherRack.Width;
                             if (otherRack.Top + otherRack.Height > wa.Bottom) otherRack.Top = wa.Bottom - otherRack.Height;
-                            
+
                             otherRack.Instance.PosX = otherRack.Left;
                             otherRack.Instance.PosY = otherRack.Top;
                         }
@@ -4476,7 +4321,19 @@ namespace Racks
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             KeepWindowBehind();
-            
+
+            double idleOpacity = Instance.IdleOpacity > 0 ? Instance.IdleOpacity : 1.0;
+
+            // "Disable Animations (Performance)" skips the pop-in entirely: snap straight
+            // to full scale and idle opacity so the rack just appears.
+            if (Instance.DisableAnimations)
+            {
+                RootScaleTransform.ScaleX = 1.0;
+                RootScaleTransform.ScaleY = 1.0;
+                this.Opacity = idleOpacity;
+            }
+            else
+            {
             // Pop-in: a gentle spring from a near-full scale reads as confident and
             // premium rather than a cartoonish 0.5->1.0 bounce. Opacity eases in over a
             // slightly shorter window so the rack "arrives" before it finishes settling.
@@ -4492,13 +4349,14 @@ namespace Racks
             };
             var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation
             {
-                To = Instance.IdleOpacity > 0 ? Instance.IdleOpacity : 1.0,
+                To = idleOpacity,
                 Duration = TimeSpan.FromSeconds(0.22),
                 EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
             };
             RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
             RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
             this.BeginAnimation(OpacityProperty, opacityAnim);
+            }
             //WindowChrome.SetWindowChrome(this, Instance.IsLocked ?
             //new WindowChrome
             //{
@@ -5788,6 +5646,11 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
             // after close, then drop the folder watcher.
             try { VirtualDesktop.CurrentChanged -= OnVirtualDesktopChanged; } catch { }
             try { _fileWatcherService.Dispose(); } catch { }
+            // "Disable Animations (Performance)" closes immediately with no shrink/fade.
+            if (Instance.DisableAnimations)
+            {
+                return; // let the close proceed without cancelling for an animation
+            }
             if (!_isClosingAnimPlaying)
             {
                 e.Cancel = true;

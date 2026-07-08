@@ -20,6 +20,7 @@ namespace Racks
         public SettingsWindow(InstanceController controller, MainWindow window)
         {
             InitializeComponent();
+            Racks.Util.WindowFade.Attach(this);
             this.LocationChanged += Window_LocationChanged;
             this.MinHeight = 0;
             this.MinWidth = 200;

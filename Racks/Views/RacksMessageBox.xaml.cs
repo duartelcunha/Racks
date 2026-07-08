@@ -8,6 +8,7 @@ namespace Racks.Views
         public RacksMessageBox(string message, string title = "Racks")
         {
             InitializeComponent();
+            Racks.Util.WindowFade.Attach(this);
             MessageText.Text = message;
             TitleText.Text = title.ToUpper();
             Title = title;

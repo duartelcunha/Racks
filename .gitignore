@@ -373,3 +373,6 @@ CLAUDE.md
 .aider*
 .github/copilot-instructions.md
 blur-screenshots.ps1
+# Throwaway WPF scratch/verification project (not part of the app)
+WpfTest/
+installer-build.log

@@ -9,6 +9,7 @@ namespace Racks
         public HelpWindow()
         {
             InitializeComponent();
+            Racks.Util.WindowFade.Attach(this);
             this.KeyDown += (s, e) => { if (e.Key == Key.Escape) this.Close(); };
         }
     }

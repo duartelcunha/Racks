@@ -657,37 +657,27 @@ namespace Racks
             }
             return IntPtr.Zero;
         }
-        // WM_DISPLAYCHANGE/WM_WININICHANGE can arrive repeatedly in quick succession
-        // (observed on multi-monitor setups with GPU overlay software running). Both
-        // CheckFrameWindowsLive() (which loops every open rack and repositions it) and
-        // DummyWindow() used to run once per message with no guard, so a burst spawned
-        // dozens of reposition passes and throwaway RackWindows a few hundred ms apart,
-        // pegging a core and leaking windows. This collapses an entire burst into at
-        // most one CheckFrameWindowsLive() + one pending dummy window at a time.
+        // On a real display or settings change (resolution, monitor plugged/unplugged,
+        // DPI, theme) reposition every rack against the new working area.
+        //
+        // This used to also spawn a throwaway "DummyWindow" (a real desktop-child
+        // RackWindow shown and immediately closed) 200ms after each message. That was the
+        // root cause of a runaway freeze: creating a desktop-child window itself emits
+        // WM_DISPLAYCHANGE/WM_WININICHANGE, so each dummy triggered another change, which
+        // spawned another dummy - a self-sustaining message storm (~4/sec) that pegged the
+        // UI thread and made the app unresponsive (couldn't even quit) right after a rack
+        // was created. CheckFrameWindowsLive already repositions and repaints the racks, so
+        // the dummy did nothing useful. Removed. The _dummyWindowPending flag still
+        // debounces bursts of genuine display messages into a single reposition pass.
         private void HandleDisplayOrSettingsChange()
         {
             if (_dummyWindowPending) return;
             _dummyWindowPending = true;
-            _controller.CheckFrameWindowsLive();
-            Application.Current.Dispatcher.InvokeAsync(async () =>
+            Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                await Task.Delay(200);
-                try { DummyWindow(); }
+                try { _controller.CheckFrameWindowsLive(); }
                 finally { _dummyWindowPending = false; }
             });
-        }
-        private void DummyWindow()
-        {
-            var window = new RackWindow(new Instance("empty", false))
-            {
-                MinHeight = 1,
-                MinWidth = 1,
-                Height = 1,
-                Width = 1,
-                Opacity = 0,
-            };
-            window.Show();
-            window.Close();
         }
         protected override void OnClosed(EventArgs e)
         {

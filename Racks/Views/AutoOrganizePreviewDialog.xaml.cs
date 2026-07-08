@@ -22,6 +22,7 @@ namespace Racks.Views
         public AutoOrganizePreviewDialog(List<ClusterGroup> clusters)
         {
             InitializeComponent();
+            Racks.Util.WindowFade.Attach(this);
             _clusters = clusters;
             
             // Format FilePaths to just show filenames for a cleaner UI

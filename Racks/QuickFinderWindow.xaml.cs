@@ -27,6 +27,7 @@ namespace Racks
         public QuickFinderWindow(InstanceController controller)
         {
             InitializeComponent();
+            Racks.Util.WindowFade.Attach(this);
             _all = new List<Row>();
             foreach (var w in controller._subWindows)
             {

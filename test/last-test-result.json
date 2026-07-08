@@ -1,0 +1,68 @@
+{
+  "exe": "Racks/bin/Debug/net10.0-windows10.0.26100.0/Racks.exe",
+  "timestamp": "2026-07-08T01:12:54",
+  "allPass": false,
+  "idleCpu": 0.0,
+  "steps": [
+    {
+      "step": "process alive after startup",
+      "pass": true,
+      "detail": "pid 27596"
+    },
+    {
+      "step": "process responding",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "step": "tray icon present at startup",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "step": "tray icon still present after startup-window race",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "step": "idle CPU not runaway",
+      "pass": true,
+      "detail": "avg 0 core-sec/sec (threshold 0.5)"
+    },
+    {
+      "step": "clicked 'New rack' menu item",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "step": "process survived 'New rack'",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "step": "a new rack window appeared",
+      "pass": false,
+      "detail": "before=0 after=0"
+    },
+    {
+      "step": "CPU not runaway after rack creation",
+      "pass": true,
+      "detail": "avg 0.127 core-sec/sec"
+    },
+    {
+      "step": "app exited cleanly via tray Exit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "step": "no new crash.log entries",
+      "pass": true,
+      "detail": "0 -> 0 bytes"
+    },
+    {
+      "step": "no new .NET Runtime crash events",
+      "pass": true,
+      "detail": "0 event(s)"
+    }
+  ]
+}
