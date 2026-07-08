@@ -36,16 +36,19 @@ namespace Racks.Core
         {
             try
             {
+                // The real multi-resolution logo .ico, deployed next to the exe (csproj copies
+                // Icon\Ico.ico to the output). Use the file directly - extracting from the exe
+                // gave a low-res, ugly shell icon.
+                string srcIcon = Path.Combine(AppContext.BaseDirectory, "Icon", "Ico.ico");
+                if (!File.Exists(srcIcon)) return;
+
                 string iconInFolder = Path.Combine(RacksWorkspacePath, ".RacksIcon.ico");
-                // Write the app's own icon (embedded in the exe) into the folder once. Extract
-                // from the running exe so we don't depend on a loose icon file being deployed.
-                if (!File.Exists(iconInFolder))
+                if (!File.Exists(iconInFolder)
+                    || File.GetLastWriteTimeUtc(srcIcon) > File.GetLastWriteTimeUtc(iconInFolder))
                 {
-                    string exePath = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Racks.exe");
-                    using var ico = System.Drawing.Icon.ExtractAssociatedIcon(exePath);
-                    if (ico == null) return;
-                    using var fs = new FileStream(iconInFolder, FileMode.Create, FileAccess.Write);
-                    ico.Save(fs);
+                    // Clear hidden/system so we can overwrite, then copy the real logo in.
+                    if (File.Exists(iconInFolder)) File.SetAttributes(iconInFolder, FileAttributes.Normal);
+                    File.Copy(srcIcon, iconInFolder, true);
                     File.SetAttributes(iconInFolder, FileAttributes.Hidden | FileAttributes.System);
                 }
 

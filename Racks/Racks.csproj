@@ -44,7 +44,9 @@
     <PackageReference Include="WPF-UI.Tray" Version="4.3.0" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Icon\Ico.ico" />
+    <Content Include="Icon\Ico.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="VirtualDesktop">
