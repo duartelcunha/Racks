@@ -96,8 +96,8 @@ Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait
 [UninstallRun]
 ; Kill running instance silently so the uninstaller instance can run without hitting the Mutex
 Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExeName} /F"; Flags: runhidden; RunOnceId: "KillRacks"
-; Run the uninstall animation
-Filename: "{app}\{#AppExeName}"; Parameters: "--uninstall-anim"; Flags: waituntilterminated skipifdoesntexist; RunOnceId: "UninstallAnim"
+; The farewell animation is played from [Code] at usPostUninstall (after everything is
+; removed), from a temp copy of the exe, so it appears when uninstall FINISHES.
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{userappdata}\{#AppName}"
@@ -107,3 +107,38 @@ Type: filesandordirs; Name: "{localappdata}\{#AppName}"
 Root: HKCU; Subkey: "Software\{#AppName}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "DesktopRacks"; Flags: uninsdeletevalue
+
+[Code]
+// Play the farewell animation AFTER the uninstall has finished. The app exe is
+// self-contained (needs its sibling .NET files), and Inno removes {app} during
+// uninstall - so at usUninstall we copy the whole app folder to a temp location,
+// then at usPostUninstall (everything already removed) we launch the animation from
+// that copy. The copy self-deletes via a delayed cmd so nothing is left behind.
+var
+  AnimDir: String;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+  Exe: String;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    // Snapshot the app folder before it's deleted.
+    AnimDir := ExpandConstant('{tmp}\RacksFarewell');
+    Exec(ExpandConstant('{cmd}'), '/C xcopy "' + ExpandConstant('{app}') + '" "' + AnimDir + '" /E /I /Q /Y', '',
+      SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end
+  else if CurUninstallStep = usPostUninstall then
+  begin
+    Exe := AnimDir + '\{#AppExeName}';
+    if FileExists(Exe) then
+    begin
+      // Run the animation, wait for it, then schedule the temp copy for deletion.
+      Exec(Exe, '--uninstall-anim', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
+      Exec(ExpandConstant('{cmd}'),
+        '/C ping 127.0.0.1 -n 2 > nul & rmdir /S /Q "' + AnimDir + '"', '',
+        SW_HIDE, ewNoWait, ResultCode);
+    end;
+  end;
+end;

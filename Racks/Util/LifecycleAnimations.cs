@@ -272,119 +272,92 @@ namespace Racks.Util
         }
 
 
+        // Uninstall farewell: the logo fades in at center with a soft glow, holds a beat,
+        // then gently disintegrates - a "Goodbye" line fades in beneath it as the logo
+        // dissolves upward (fade + blur + drift). Calm and classy, not a jarring burst.
         public static void RunUninstallAnimation(Action onComplete)
         {
             try
             {
                 var (win, image, scale, rotate, translate, canvas) = CreateAnimationWindow();
+                win.Background = new SolidColorBrush(Color.FromArgb(150, 0, 0, 0)); // darker for a clear farewell
                 var screen = SystemParameters.WorkArea;
-                
-                const double size = 128;
-                double centerX = screen.Width / 2;
-                double centerY = screen.Height / 2;
 
+                const double size = 150;
+                double centerX = screen.Width / 2.0;
+                double centerY = screen.Height / 2.0;
                 image.Width = size;
                 image.Height = size;
-                
+                image.Opacity = 0;
                 Canvas.SetLeft(image, centerX - size / 2);
                 Canvas.SetTop(image, centerY - size / 2);
-                
-                // Add a shockwave element (initially hidden/collapsed)
-                var shockwave = new System.Windows.Shapes.Ellipse
+
+                var glow = new DropShadowEffect { Color = Colors.White, BlurRadius = 0, ShadowDepth = 0, Opacity = 0 };
+                image.Effect = glow;
+
+                // "Goodbye" text below the logo, hidden at first.
+                var bye = new System.Windows.Controls.TextBlock
                 {
-                    Width = size,
-                    Height = size,
-                    Stroke = Brushes.Cyan,
-                    StrokeThickness = 4,
+                    Text = "Goodbye — thanks for using Racks",
+                    Foreground = Brushes.White,
+                    FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Display, Segoe UI"),
+                    FontSize = 22,
                     Opacity = 0,
-                    RenderTransformOrigin = new Point(0.5, 0.5)
+                    TextAlignment = TextAlignment.Center
                 };
-                
-                var shockwaveScale = new ScaleTransform(1, 1);
-                shockwave.RenderTransform = shockwaveScale;
+                bye.Measure(new System.Windows.Size(screen.Width, screen.Height));
+                Canvas.SetLeft(bye, centerX - bye.DesiredSize.Width / 2);
+                Canvas.SetTop(bye, centerY + size / 2 + 24);
+                canvas.Children.Add(bye);
 
-                Canvas.SetLeft(shockwave, centerX - size / 2);
-                Canvas.SetTop(shockwave, centerY - size / 2);
-                canvas.Children.Insert(0, shockwave); // Behind image
-                
                 win.Show();
-                ForceTopmost(win);
+                var keep = KeepOnTop(win);
 
-                // Phase 1: Singularity (Spin and suck into center)
-                var suckTime = TimeSpan.FromMilliseconds(600);
-                
-                var suckScaleAnim = new DoubleAnimation
-                {
-                    From = 1.0,
-                    To = 0.0,
-                    Duration = suckTime,
-                    EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseIn }
-                };
-                
-                var spinAnim = new DoubleAnimation
-                {
-                    From = 0,
-                    To = 720, // 2 full rotations
-                    Duration = suckTime,
-                    EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseIn }
-                };
+                // --- 1. Fade + spring in at center with glow (0 -> 520ms) ---
+                var inScale = new DoubleAnimation { From = 0.6, To = 1.0, Duration = TimeSpan.FromMilliseconds(520), EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } };
+                var inFade = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromMilliseconds(360), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var glowIn = new DoubleAnimation { From = 0, To = 26, BeginTime = TimeSpan.FromMilliseconds(250), Duration = TimeSpan.FromMilliseconds(400) };
+                var glowInOp = new DoubleAnimation { From = 0, To = 0.6, BeginTime = TimeSpan.FromMilliseconds(250), Duration = TimeSpan.FromMilliseconds(400) };
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, inScale);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, inScale);
+                image.BeginAnimation(UIElement.OpacityProperty, inFade);
+                glow.BeginAnimation(DropShadowEffect.BlurRadiusProperty, glowIn);
+                glow.BeginAnimation(DropShadowEffect.OpacityProperty, glowInOp);
 
-                // Phase 2: Shockwave (Burst into nothing)
-                var burstTime = TimeSpan.FromMilliseconds(400);
-                
-                var shockwaveScaleAnim = new DoubleAnimation
-                {
-                    From = 0.1,
-                    To = 10.0,
-                    Duration = burstTime,
-                    EasingFunction = new CircleEase { EasingMode = EasingMode.EaseOut }
-                };
-                
-                var shockwaveFadeAnim = new DoubleAnimation
-                {
-                    From = 1.0,
-                    To = 0.0,
-                    Duration = burstTime,
-                    EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
-                };
-                
-                var shockwaveThickAnim = new DoubleAnimation
-                {
-                    From = 15.0,
-                    To = 0.0,
-                    Duration = burstTime,
-                    EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
-                };
+                // --- 2. Reveal the goodbye text (520 -> 900ms) ---
+                bye.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation { From = 0, To = 0.9, BeginTime = TimeSpan.FromMilliseconds(520), Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
 
-                // Execute Singularity
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, suckScaleAnim);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, suckScaleAnim);
-                rotate.BeginAnimation(RotateTransform.AngleProperty, spinAnim);
-                
-                Task.Delay(suckTime).ContinueWith(_ =>
+                // --- 3. Hold, then dissolve upward: fade + blur + drift + text fade (1500 -> 2200ms) ---
+                Task.Delay(1500).ContinueWith(_ => Application.Current.Dispatcher.Invoke(() =>
                 {
-                    Application.Current.Dispatcher.Invoke(() =>
+                    try
                     {
-                        // Hide image
-                        image.Visibility = Visibility.Collapsed;
-                        
-                        // Execute Shockwave
-                        shockwave.Opacity = 1;
-                        shockwaveScale.BeginAnimation(ScaleTransform.ScaleXProperty, shockwaveScaleAnim);
-                        shockwaveScale.BeginAnimation(ScaleTransform.ScaleYProperty, shockwaveScaleAnim);
-                        shockwave.BeginAnimation(System.Windows.Shapes.Ellipse.OpacityProperty, shockwaveFadeAnim);
-                        shockwave.BeginAnimation(System.Windows.Shapes.Ellipse.StrokeThicknessProperty, shockwaveThickAnim);
-                        
-                        Task.Delay(burstTime).ContinueWith(__ =>
+                        var blur = new BlurEffect { Radius = 0 };
+                        image.Effect = blur;
+                        var driftUp = new DoubleAnimation { To = -80, Duration = TimeSpan.FromMilliseconds(700), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                        var expand = new DoubleAnimation { To = 1.4, Duration = TimeSpan.FromMilliseconds(700), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                        var outFade = new DoubleAnimation { To = 0, Duration = TimeSpan.FromMilliseconds(640), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                        var blurOut = new DoubleAnimation { To = 22, Duration = TimeSpan.FromMilliseconds(700) };
+                        var byeOut = new DoubleAnimation { To = 0, Duration = TimeSpan.FromMilliseconds(500), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                        var winFade = new DoubleAnimation { To = 0, BeginTime = TimeSpan.FromMilliseconds(380), Duration = TimeSpan.FromMilliseconds(320) };
+
+                        translate.BeginAnimation(TranslateTransform.YProperty, driftUp);
+                        scale.BeginAnimation(ScaleTransform.ScaleXProperty, expand);
+                        scale.BeginAnimation(ScaleTransform.ScaleYProperty, expand);
+                        image.BeginAnimation(UIElement.OpacityProperty, outFade);
+                        blur.BeginAnimation(BlurEffect.RadiusProperty, blurOut);
+                        bye.BeginAnimation(UIElement.OpacityProperty, byeOut);
+                        win.BeginAnimation(UIElement.OpacityProperty, winFade);
+
+                        Task.Delay(740).ContinueWith(__ => Application.Current.Dispatcher.Invoke(() =>
                         {
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                try { win.Close(); } catch { }
-                                onComplete?.Invoke();
-                            });
-                        });
-                    });
-                });
+                            CompositionTarget.Rendering -= keep;
+                            try { win.Close(); } catch { }
+                            onComplete?.Invoke();
+                        }));
+                    }
+                    catch { CompositionTarget.Rendering -= keep; try { win.Close(); } catch { } onComplete?.Invoke(); }
+                }));
             }
             catch (Exception ex)
             {
