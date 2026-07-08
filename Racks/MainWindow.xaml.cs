@@ -1,7 +1,11 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Linq;
 using System.Security.Policy;
 using System.Windows;
+using Microsoft.Win32;
 using Racks.Util;
 using Wpf.Ui.Controls;
 using Application = System.Windows.Application;
@@ -195,6 +199,7 @@ namespace Racks
                 {
                     if (dialog.Result == Racks.Views.OrganizeChoice.Racks)
                     {
+                        var undo = Racks.Core.MagicOrganizeUndo.Begin(Racks.Core.MagicOrganizeUndo.Mode.Racks);
                         // User approved, create racks and move files!
                         var workingArea = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
                         
@@ -256,9 +261,11 @@ namespace Racks
                                 {
                                     Racks.Util.Interop.NotifyShellMove(fp, destPath, System.IO.Directory.Exists(fp));
                                     inst.AssignedFiles.Add(fileName);
+                                    undo.RecordMove(fp, destPath); // fp = original desktop path
                                     movedFilesCount++;
                                 }
                             }
+                            undo.CreatedRackNames.Add(inst.Name);
 
                             try
                             {
@@ -280,42 +287,95 @@ namespace Racks
                             _controller._subWindowsPtr.Add(new System.Windows.Interop.WindowInteropHelper(subWindow).Handle);
                         }
 
-                        Racks.Views.RacksMessageBox.Show($"Magic Organize Complete!\nMoved {movedFilesCount} items into {clusters.Count} racks.\nIf the racks are hidden behind other windows, you can bring them to the front from the tray icon.", "Success");
+                        bool undoRacks = Racks.Views.RacksMessageBox.Confirm(
+                            $"Moved {movedFilesCount} item(s) into {clusters.Count} rack(s).\n\nKeep this, or undo and send everything back to your desktop?",
+                            "Magic Organize complete", "Keep", "Undo");
+                        if (!undoRacks) UndoMagicOrganize();
                     }
                     else if (dialog.Result == Racks.Views.OrganizeChoice.Folders)
                     {
+                        var undo = Racks.Core.MagicOrganizeUndo.Begin(Racks.Core.MagicOrganizeUndo.Mode.Folders);
                         // Just move them to physical folders on the Desktop
                         int movedFilesCount = 0;
                         foreach (var cluster in clusters)
                         {
                             if (cluster.FilePaths.Count == 0) continue;
-                            
+
                             string folderPath = System.IO.Path.Combine(desktopPath, cluster.Name);
                             if (!System.IO.Directory.Exists(folderPath))
                             {
                                 System.IO.Directory.CreateDirectory(folderPath);
+                                undo.CreatedFolders.Add(folderPath);
                             }
 
                             foreach (var fp in cluster.FilePaths)
                             {
                                 string fileName = System.IO.Path.GetFileName(fp);
                                 string destPath = System.IO.Path.Combine(folderPath, fileName);
-                                
+
                                 var moveResult = Racks.Util.SafeMove.TryMove(fp, destPath, out string reason);
                                 if (moveResult == Racks.Util.SafeMove.Result.Moved)
                                 {
                                     Racks.Util.Interop.NotifyShellMove(fp, destPath, System.IO.Directory.Exists(fp));
+                                    undo.RecordMove(fp, destPath);
                                     movedFilesCount++;
                                 }
                             }
                         }
-                        Racks.Views.RacksMessageBox.Show($"Magic Organize Complete!\nMoved {movedFilesCount} items into {clusters.Count} folders on your Desktop.", "Success");
+                        bool undoFolders = Racks.Views.RacksMessageBox.Confirm(
+                            $"Moved {movedFilesCount} item(s) into {clusters.Count} folder(s) on your desktop.\n\nKeep this, or undo and send everything back?",
+                            "Magic Organize complete", "Keep", "Undo");
+                        if (!undoFolders) UndoMagicOrganize();
                     }
                 }
             }
             catch (Exception ex)
             {
                 Racks.Views.RacksMessageBox.Show($"An error occurred during Magic Organize:\n{ex.Message}\n{ex.StackTrace}", "Fatal Error");
+            }
+        }
+
+        // Undo the last Magic Organize: tear down the racks/folders it created and move every
+        // file back to its original desktop spot, then tidy the desktop into a grid.
+        private void UndoMagicOrganize()
+        {
+            var undo = Racks.Core.MagicOrganizeUndo.Last;
+            if (undo == null || !undo.HasAnything) return;
+            try
+            {
+                if (undo.OrganizeMode == Racks.Core.MagicOrganizeUndo.Mode.Racks)
+                {
+                    // Close and delete the racks this run created (before moving files back, so
+                    // their file-watchers/claims are gone).
+                    foreach (var name in undo.CreatedRackNames)
+                    {
+                        var inst = _controller.Instances.FirstOrDefault(i => i.Name == name);
+                        if (inst == null) continue;
+                        inst.isWindowClosing = true;
+                        var win = _controller._subWindows.FirstOrDefault(w => w.Instance == inst);
+                        try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(inst.GetKeyLocation(), false); } catch { }
+                        if (win != null) { try { win.Close(); } catch { } _controller.RemoveInstance(inst, win); }
+                        else _controller.Instances.Remove(inst);
+                    }
+                }
+
+                int restored = undo.RestoreFiles();
+                undo.RemoveCreatedFolders();
+
+                // Lay the returned files out in a clean grid on the desktop.
+                var back = new List<string>();
+                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                foreach (var m in undo.Moved)
+                    if (System.IO.File.Exists(m.OriginalPath) || System.IO.Directory.Exists(m.OriginalPath))
+                        back.Add(m.OriginalPath);
+                if (back.Count > 0) Racks.Util.DesktopIconPositioner.ArrangeInGrid(back);
+
+                Racks.Core.MagicOrganizeUndo.Clear();
+                Racks.Views.RacksMessageBox.Show($"Undone. {restored} item(s) are back on your desktop.", "Magic Organize");
+            }
+            catch (Exception ex)
+            {
+                Racks.Views.RacksMessageBox.Show($"Couldn't fully undo:\n{ex.Message}", "Magic Organize");
             }
         }
 

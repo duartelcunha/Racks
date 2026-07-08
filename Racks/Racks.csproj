@@ -44,7 +44,8 @@
     <PackageReference Include="WPF-UI.Tray" Version="4.3.0" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Icon\Ico.ico">
+    <Content Include="Icon\Ico.ico" />
+    <Content Include="Icon\WorkspaceFolder.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

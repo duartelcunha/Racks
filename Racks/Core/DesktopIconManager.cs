@@ -36,10 +36,9 @@ namespace Racks.Core
         {
             try
             {
-                // The real multi-resolution logo .ico, deployed next to the exe (csproj copies
-                // Icon\Ico.ico to the output). Use the file directly - extracting from the exe
-                // gave a low-res, ugly shell icon.
-                string srcIcon = Path.Combine(AppContext.BaseDirectory, "Icon", "Ico.ico");
+                // Dedicated high-res icon for the workspace folder (separate from the app's
+                // own tray/window icon). Deployed next to the exe by the csproj.
+                string srcIcon = Path.Combine(AppContext.BaseDirectory, "Icon", "WorkspaceFolder.ico");
                 if (!File.Exists(srcIcon)) return;
 
                 string iconInFolder = Path.Combine(RacksWorkspacePath, ".RacksIcon.ico");

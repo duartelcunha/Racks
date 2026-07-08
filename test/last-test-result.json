@@ -1,13 +1,13 @@
 {
   "exe": "Racks/bin/Debug/net10.0-windows10.0.26100.0/Racks.exe",
-  "timestamp": "2026-07-08T03:55:56",
+  "timestamp": "2026-07-08T04:42:24",
   "allPass": false,
   "idleCpu": 0.0,
   "steps": [
     {
       "step": "process alive after startup",
       "pass": true,
-      "detail": "pid 6848"
+      "detail": "pid 2168"
     },
     {
       "step": "process responding",
@@ -47,7 +47,7 @@
     {
       "step": "no new crash.log entries",
       "pass": true,
-      "detail": "0 -> 0 bytes"
+      "detail": "751 -> 751 bytes"
     },
     {
       "step": "no new .NET Runtime crash events",
