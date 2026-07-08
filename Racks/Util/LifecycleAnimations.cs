@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
@@ -38,6 +39,18 @@ namespace Racks.Util
                 }
             }
             catch { }
+        }
+
+        // Keep an animation window pinned above everything for its whole lifetime - racks
+        // reparent to the desktop and other windows can steal the top spot, hiding it. The
+        // returned handler must be detached before the window closes.
+        private static EventHandler KeepOnTop(Window w)
+        {
+            w.Activate();
+            ForceTopmost(w);
+            EventHandler h = (_, _) => ForceTopmost(w);
+            CompositionTarget.Rendering += h;
+            return h;
         }
 
         private static (Window win, Image image, ScaleTransform scale, RotateTransform rotate, TranslateTransform translate, Canvas canvas) CreateAnimationWindow()
@@ -91,84 +104,165 @@ namespace Racks.Util
             return (win, image, scale, rotate, translate, canvas);
         }
 
+        // NORMAL launch "wake up": the logo blooms in near the tray corner (scale-up from
+        // small with a soft overshoot) and settles, then quickly fades. No full-screen dim,
+        // no roll, no travel across the screen - deliberately different from both the install
+        // animation (rolls in and drops) and the quit animation (rises from the tray to
+        // center). Short (~750ms) and unobtrusive so it's pleasant on every login.
+        public static void RunLaunchAnimation()
+        {
+            try
+            {
+                var (win, image, scale, rotate, translate, canvas) = CreateAnimationWindow();
+                win.Background = Brushes.Transparent; // never dim the screen on a normal launch
+                var screen = SystemParameters.WorkArea;
+
+                const double size = 92;
+                image.Width = size;
+                image.Height = size;
+                image.Opacity = 0;
+                // Start near the tray corner; a soft glow makes it feel like it lights up.
+                double x = screen.Width - size - 22;
+                double y = screen.Height - size - 18;
+                Canvas.SetLeft(image, x);
+                Canvas.SetTop(image, y);
+                var glow = new DropShadowEffect { Color = Colors.White, BlurRadius = 0, ShadowDepth = 0, Opacity = 0 };
+                image.Effect = glow;
+
+                win.Show();
+                var keep = KeepOnTop(win);
+
+                // Spring up from small with a gentle overshoot, a tiny lift, a glow flash, then
+                // settle and fade. Quick (~700ms) and elegant - the daily "Racks is awake".
+                var s = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(700) };
+                s.KeyFrames.Add(new EasingDoubleKeyFrame(0.5, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                s.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(330)),
+                    new ElasticEase { Oscillations = 1, Springiness = 7, EasingMode = EasingMode.EaseOut }));
+                s.KeyFrames.Add(new EasingDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(520))));
+                s.KeyFrames.Add(new EasingDoubleKeyFrame(0.75, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(700)), new CubicEase { EasingMode = EasingMode.EaseIn }));
+
+                var lift = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(700) };
+                lift.KeyFrames.Add(new EasingDoubleKeyFrame(14, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                lift.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(330)), new CubicEase { EasingMode = EasingMode.EaseOut }));
+                lift.KeyFrames.Add(new EasingDoubleKeyFrame(10, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(700)), new CubicEase { EasingMode = EasingMode.EaseIn }));
+
+                var op = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(700) };
+                op.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                op.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(200)), new CubicEase { EasingMode = EasingMode.EaseOut }));
+                op.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(500))));
+                op.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(700)), new CubicEase { EasingMode = EasingMode.EaseIn }));
+
+                var glowBlur = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(700) };
+                glowBlur.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                glowBlur.KeyFrames.Add(new EasingDoubleKeyFrame(20, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(330)), new CubicEase { EasingMode = EasingMode.EaseOut }));
+                glowBlur.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(700))));
+                var glowOp = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(700) };
+                glowOp.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                glowOp.KeyFrames.Add(new EasingDoubleKeyFrame(0.5, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(330))));
+                glowOp.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(700))));
+
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, s);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, s);
+                translate.BeginAnimation(TranslateTransform.YProperty, lift);
+                image.BeginAnimation(UIElement.OpacityProperty, op);
+                glow.BeginAnimation(DropShadowEffect.BlurRadiusProperty, glowBlur);
+                glow.BeginAnimation(DropShadowEffect.OpacityProperty, glowOp);
+
+                Task.Delay(760).ContinueWith(_ =>
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        CompositionTarget.Rendering -= keep;
+                        try { win.Close(); } catch { }
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"RunLaunchAnimation failed: {ex.Message}");
+            }
+        }
+
+        // Quit: the logo lifts out of the system tray, floats up in a smooth arc to the
+        // center growing as it rises, holds a beat with a soft glow, then dissolves - drifting
+        // upward while fading and blurring out, like it evaporates. Calm, premium goodbye.
         public static void RunQuitAnimation(Action onComplete)
         {
             try
             {
                 var (win, image, scale, rotate, translate, canvas) = CreateAnimationWindow();
+                win.Background = new SolidColorBrush(Color.FromArgb(110, 0, 0, 0)); // gentle dim
                 var screen = SystemParameters.WorkArea;
-                
-                const double startSize = 22; // Starts from tray size
-                const double endSize = 96;
-                double trayX = screen.Width - startSize - 14;
-                double trayY = screen.Height - startSize - 8;
-                double centerX = screen.Width / 2;
-                double centerY = screen.Height / 2;
 
-                image.Width = startSize;
-                image.Height = startSize;
-                
-                Canvas.SetLeft(image, trayX);
-                Canvas.SetTop(image, trayY);
+                const double size = 150;
+                double centerX = screen.Width / 2.0;
+                double centerY = screen.Height / 2.0;
+                // Anchor the image at center; animate the TranslateTransform from the tray to 0.
+                Canvas.SetLeft(image, centerX - size / 2);
+                Canvas.SetTop(image, centerY - size / 2);
+                image.Width = size;
+                image.Height = size;
+                image.Opacity = 0;
+
+                double trayX = (screen.Width - 30) - centerX;   // start offset: tray corner
+                double trayY = (screen.Height - 30) - centerY;
+
+                var glow = new DropShadowEffect { Color = Colors.White, BlurRadius = 0, ShadowDepth = 0, Opacity = 0 };
+                image.Effect = glow;
+
                 win.Show();
-                ForceTopmost(win);
+                var keepQuit = KeepOnTop(win);
 
-                double dx = (centerX - endSize / 2) - trayX;
-                double dy = (centerY - endSize / 2) - trayY;
-                double targetScale = endSize / startSize;
+                // --- 1. Rise from tray to center in a slow, clearly visible arc (0 -> 900ms) ---
+                var riseX = new DoubleAnimation { From = trayX, To = 0, Duration = TimeSpan.FromMilliseconds(900), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var riseY = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(900) };
+                riseY.KeyFrames.Add(new EasingDoubleKeyFrame(trayY, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+                riseY.KeyFrames.Add(new EasingDoubleKeyFrame(-40, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(620)), new SineEase { EasingMode = EasingMode.EaseOut }));
+                riseY.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(900)), new SineEase { EasingMode = EasingMode.EaseInOut }));
+                var grow = new DoubleAnimation { From = 0.16, To = 1.0, Duration = TimeSpan.FromMilliseconds(900), EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.3 } };
+                var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromMilliseconds(340), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var glowIn = new DoubleAnimation { From = 0, To = 30, BeginTime = TimeSpan.FromMilliseconds(450), Duration = TimeSpan.FromMilliseconds(450) };
+                var glowInOp = new DoubleAnimation { From = 0, To = 0.7, BeginTime = TimeSpan.FromMilliseconds(450), Duration = TimeSpan.FromMilliseconds(450) };
 
-                // 0-600ms: Arc to center while scaling up and spinning
-                // 600-900ms: Shrink to 0 and fade out
+                translate.BeginAnimation(TranslateTransform.XProperty, riseX);
+                translate.BeginAnimation(TranslateTransform.YProperty, riseY);
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+                image.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+                glow.BeginAnimation(DropShadowEffect.BlurRadiusProperty, glowIn);
+                glow.BeginAnimation(DropShadowEffect.OpacityProperty, glowInOp);
 
-                var scaleX = new DoubleAnimationUsingKeyFrames();
-                scaleX.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                scaleX.KeyFrames.Add(new EasingDoubleKeyFrame(targetScale, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(600)), new CubicEase { EasingMode = EasingMode.EaseOut }));
-                scaleX.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(900)), new BackEase { EasingMode = EasingMode.EaseIn, Amplitude = 0.8 }));
-                scaleX.Duration = TimeSpan.FromMilliseconds(900);
-
-                var scaleY = new DoubleAnimationUsingKeyFrames();
-                scaleY.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                scaleY.KeyFrames.Add(new EasingDoubleKeyFrame(targetScale, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(600)), new CubicEase { EasingMode = EasingMode.EaseOut }));
-                scaleY.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(900)), new BackEase { EasingMode = EasingMode.EaseIn, Amplitude = 0.8 }));
-                scaleY.Duration = TimeSpan.FromMilliseconds(900);
-
-                var transX = new DoubleAnimationUsingKeyFrames();
-                transX.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                transX.KeyFrames.Add(new EasingDoubleKeyFrame(dx, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(600)), new SineEase { EasingMode = EasingMode.EaseOut }));
-                transX.Duration = TimeSpan.FromMilliseconds(900);
-
-                var transY = new DoubleAnimationUsingKeyFrames();
-                transY.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                transY.KeyFrames.Add(new EasingDoubleKeyFrame(dy, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(600)), new CubicEase { EasingMode = EasingMode.EaseOut }));
-                transY.Duration = TimeSpan.FromMilliseconds(900);
-
-                var spin = new DoubleAnimationUsingKeyFrames();
-                spin.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                spin.KeyFrames.Add(new EasingDoubleKeyFrame(-360, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(600)), new CubicEase { EasingMode = EasingMode.EaseOut }));
-                spin.Duration = TimeSpan.FromMilliseconds(900);
-
-                var winOpacity = new DoubleAnimationUsingKeyFrames();
-                winOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-                winOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(200))));
-                winOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(800))));
-                winOpacity.KeyFrames.Add(new EasingDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(1000))));
-                winOpacity.Duration = TimeSpan.FromMilliseconds(1000);
-
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleX);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleY);
-                translate.BeginAnimation(TranslateTransform.XProperty, transX);
-                translate.BeginAnimation(TranslateTransform.YProperty, transY);
-                rotate.BeginAnimation(RotateTransform.AngleProperty, spin);
-                win.BeginAnimation(UIElement.OpacityProperty, winOpacity);
-
-                Task.Delay(1100).ContinueWith(_ =>
+                // --- 2. Hold a clear beat at center, then dissolve upward (1300 -> 2000ms) ---
+                Task.Delay(1300).ContinueWith(_ => Application.Current.Dispatcher.Invoke(() =>
                 {
-                    Application.Current.Dispatcher.Invoke(() =>
+                    try
                     {
-                        try { win.Close(); } catch { }
-                        onComplete?.Invoke();
-                    });
-                });
+                        var driftUp = new DoubleAnimation { To = -90, Duration = TimeSpan.FromMilliseconds(700), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                        var expand = new DoubleAnimation { To = 1.5, Duration = TimeSpan.FromMilliseconds(700), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                        var dissolveFade = new DoubleAnimation { To = 0, Duration = TimeSpan.FromMilliseconds(660), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                        var blurOut = new DoubleAnimation { To = 20, Duration = TimeSpan.FromMilliseconds(700) };
+                        var winFade = new DoubleAnimation { To = 0, BeginTime = TimeSpan.FromMilliseconds(360), Duration = TimeSpan.FromMilliseconds(340) };
+
+                        // Swap the sharp glow for a blur so it visually "evaporates".
+                        var blur = new BlurEffect { Radius = 0 };
+                        image.Effect = blur;
+
+                        translate.BeginAnimation(TranslateTransform.YProperty, driftUp);
+                        scale.BeginAnimation(ScaleTransform.ScaleXProperty, expand);
+                        scale.BeginAnimation(ScaleTransform.ScaleYProperty, expand);
+                        image.BeginAnimation(UIElement.OpacityProperty, dissolveFade);
+                        blur.BeginAnimation(BlurEffect.RadiusProperty, blurOut);
+                        win.BeginAnimation(UIElement.OpacityProperty, winFade);
+
+                        Task.Delay(740).ContinueWith(__ => Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            CompositionTarget.Rendering -= keepQuit;
+                            try { win.Close(); } catch { }
+                            onComplete?.Invoke();
+                        }));
+                    }
+                    catch { CompositionTarget.Rendering -= keepQuit; try { win.Close(); } catch { } onComplete?.Invoke(); }
+                }));
             }
             catch (Exception ex)
             {
@@ -176,6 +270,7 @@ namespace Racks.Util
                 onComplete?.Invoke();
             }
         }
+
 
         public static void RunUninstallAnimation(Action onComplete)
         {

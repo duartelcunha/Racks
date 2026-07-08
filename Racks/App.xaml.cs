@@ -105,10 +105,20 @@ namespace Racks
             PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Critical;
             base.OnStartup(e);
 
-            // Play the signature startup animation
-            var startupAnim = new Racks.Views.StartupAnimationWindow();
-            startupAnim.Show();
-            
+            // Two distinct animations:
+            //  - FIRST run after install: the signature "logo rolls in and drops into the
+            //    tray" welcome (StartupAnimationWindow). Shown once per machine.
+            //  - Every normal launch: a shorter "wake up" animation (the logo fades/pulses
+            //    in at center and glides to the tray) - different from both the install
+            //    animation and the quit animation.
+            bool firstRun = false;
+            try
+            {
+                const string AnimMarker = "InstallAnimationShownV2";
+                if (!reg.KeyExistsRoot(AnimMarker)) { firstRun = true; reg.WriteToRegistryRoot(AnimMarker, true); }
+            }
+            catch { }
+
             // Fences-style Desktop Integration
             Racks.Core.DesktopIconManager.Initialize();
             Racks.Core.DesktopIconManager.StartHook();
@@ -128,6 +138,24 @@ namespace Racks
                 }
             }
             catch (Exception ex) { Debug.WriteLine($"Quick Access pin failed: {ex.Message}"); }
+
+            // Play the startup animation AFTER the heavy startup work above and after the
+            // MainWindow has painted. A real delay (not just a dispatcher priority, which the
+            // app's always-busy timers/hooks can starve) then a UI-thread invoke, so the
+            // animation window is created when the thread is free to actually render it.
+            bool playInstall = firstRun;
+            Task.Delay(500).ContinueWith(_ =>
+            {
+                Current.Dispatcher.Invoke(() =>
+                {
+                    try
+                    {
+                        if (playInstall) new Racks.Views.StartupAnimationWindow().Show();
+                        else Racks.Util.LifecycleAnimations.RunLaunchAnimation();
+                    }
+                    catch (Exception ex) { Debug.WriteLine($"Startup animation failed: {ex.Message}"); }
+                });
+            });
         }
 
         protected override void OnExit(ExitEventArgs e)

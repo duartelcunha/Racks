@@ -6,11 +6,11 @@
         Topmost="True" ShowInTaskbar="False" IsHitTestVisible="False"
         WindowStartupLocation="CenterScreen">
     <Grid>
-        <Image x:Name="AppLogo" Source="pack://application:,,,/Racks;component/Icon/Ico.ico" 
-               Width="150" Height="150" RenderTransformOrigin="0.5,0.5">
+        <Image x:Name="AppLogo" Source="pack://application:,,,/ico.png"
+               Width="160" Height="160" Opacity="0" RenderTransformOrigin="0.5,0.5">
             <Image.RenderTransform>
                 <TransformGroup>
-                    <ScaleTransform x:Name="LogoScale" ScaleX="0" ScaleY="0" />
+                    <ScaleTransform x:Name="LogoScale" ScaleX="0.2" ScaleY="0.2" />
                     <RotateTransform x:Name="LogoRotate" Angle="0" />
                     <TranslateTransform x:Name="LogoTranslate" X="0" Y="0" />
                 </TransformGroup>
