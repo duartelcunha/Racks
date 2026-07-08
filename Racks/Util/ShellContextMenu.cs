@@ -119,6 +119,46 @@ namespace Racks.Util
         // if it's the Delete verb. Uses the ANSI GetCommandString on IContextMenu; the shell
         // returns "delete" for both "Delete" and "Delete permanently" (Shift+Delete), so this
         // catches both. Returns false on any failure so protection never blocks a real action.
+        // Build (once) a 16x16 32-bpp HBITMAP of the Racks logo for the custom menu item.
+        // Uses a WPF render of the packed ico.png so it keeps its alpha. Returns Zero on any
+        // failure so the menu item just falls back to text.
+        private static IntPtr GetMenuLogoBitmap()
+        {
+            if (_menuLogoBitmap != IntPtr.Zero) return _menuLogoBitmap;
+            try
+            {
+                var src = new System.Windows.Media.Imaging.BitmapImage();
+                src.BeginInit();
+                src.UriSource = new Uri("pack://application:,,,/ico.png", UriKind.Absolute);
+                src.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                src.EndInit();
+
+                int size = 16;
+                var target = new System.Windows.Media.Imaging.RenderTargetBitmap(
+                    size, size, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                var visual = new System.Windows.Media.DrawingVisual();
+                using (var dc = visual.RenderOpen())
+                {
+                    dc.DrawImage(src, new System.Windows.Rect(0, 0, size, size));
+                }
+                target.Render(visual);
+
+                int stride = size * 4;
+                byte[] pixels = new byte[stride * size];
+                target.CopyPixels(pixels, stride, 0);
+
+                var bmp = new System.Drawing.Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                var data = bmp.LockBits(new System.Drawing.Rectangle(0, 0, size, size),
+                    System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                Marshal.Copy(pixels, 0, data.Scan0, pixels.Length);
+                bmp.UnlockBits(data);
+
+                _menuLogoBitmap = bmp.GetHbitmap(System.Drawing.Color.FromArgb(0, 0, 0, 0));
+                return _menuLogoBitmap;
+            }
+            catch { return IntPtr.Zero; }
+        }
+
         private bool IsDeleteVerb(IContextMenu oContextMenu, uint nSelected)
         {
             try
@@ -448,6 +488,13 @@ namespace Racks.Util
                 // always be revealed in their real folder, above the shell's own verbs.
                 InsertMenu(pMenu, 0, MF_BYPOSITION | MF_SEPARATOR, 0, null);
                 InsertMenu(pMenu, 0, MF_BYPOSITION | MF_STRING, CMD_OPEN_IN_EXPLORER, "Open in File Explorer");
+                // Add the Racks logo next to it (best-effort; text-only if the bitmap fails).
+                IntPtr logo = GetMenuLogoBitmap();
+                if (logo != IntPtr.Zero)
+                {
+                    var mii = new MENUITEMINFO { cbSize = Marshal.SizeOf<MENUITEMINFO>(), fMask = MIIM.BITMAP, hbmpItem = logo };
+                    SetMenuItemInfo(pMenu, 0, true, ref mii);
+                }
 
                 hook.Install();
 
@@ -590,11 +637,16 @@ namespace Racks.Util
         // Insert our own "Open in File Explorer" item at the top of the shell menu.
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern bool InsertMenu(IntPtr hMenu, uint uPosition, uint uFlags, uint uIDNewItem, string lpNewItem);
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern bool SetMenuItemInfo(IntPtr hMenu, uint item, bool fByPosition, ref MENUITEMINFO lpmii);
+        [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr hObject);
         private const uint MF_BYPOSITION = 0x400;
         private const uint MF_STRING = 0x0;
         private const uint MF_SEPARATOR = 0x800;
         // Custom command id, kept well above the shell's CMD range (CMD_LAST = 30000).
         private const uint CMD_OPEN_IN_EXPLORER = 40001;
+        // Racks logo bitmap shown beside our custom menu item (built once, lazily).
+        private static IntPtr _menuLogoBitmap = IntPtr.Zero;
 
         // The DestroyMenu function destroys the specified menu and frees any memory that the menu occupies.
         [DllImport("user32", SetLastError = true, CharSet = CharSet.Auto)]

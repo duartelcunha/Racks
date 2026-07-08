@@ -31,106 +31,154 @@ namespace Racks.Core
 
     public static class AutoOrganizer
     {
+        // Hybrid strategy that reads as "smart" for any desktop size:
+        //   1. Bucket everything by type category (Images, Documents, Videos, ...). This is
+        //      what people actually expect and it's deterministic - no weird 2-file clusters.
+        //   2. For a big bucket (> SubdivideThreshold), use ML to split it by filename theme
+        //      (e.g. "Invoices" vs "Screenshots" inside Images), so large piles get useful
+        //      sub-racks instead of one giant one.
+        //   3. Fold tiny leftover buckets (1 item) into a single "Misc" rack so we don't
+        //      spawn a rack per stray file.
+        private const int SubdivideThreshold = 8; // buckets larger than this get ML sub-clustering
+        private const int MinBucketToKeep = 2;    // buckets smaller than this go to Misc
+
         public static List<ClusterGroup> AnalyzeDesktop(string desktopPath)
         {
             if (!Directory.Exists(desktopPath))
                 return new List<ClusterGroup>();
 
             var files = Directory.GetFileSystemEntries(desktopPath)
-                .Where(f => !new FileInfo(f).Attributes.HasFlag(FileAttributes.Hidden) && !f.EndsWith("desktop.ini", StringComparison.OrdinalIgnoreCase))
+                .Where(f => !new FileInfo(f).Attributes.HasFlag(FileAttributes.Hidden)
+                            && !f.EndsWith("desktop.ini", StringComparison.OrdinalIgnoreCase))
+                .Select(ToFileData)
                 .ToList();
 
             if (files.Count == 0) return new List<ClusterGroup>();
-            if (files.Count < 3)
-            {
-                // Not enough files to cluster meaningfully.
-                return new List<ClusterGroup> { new ClusterGroup { Name = "Misc", FilePaths = files } };
-            }
 
-            var fileDataList = new List<FileData>();
-            foreach (var f in files)
-            {
-                bool isFolder = Directory.Exists(f);
-                var name = isFolder ? Path.GetFileName(f) : Path.GetFileNameWithoutExtension(f);
-                var ext = isFolder ? "folder" : Path.GetExtension(f).ToLowerInvariant().TrimStart('.');
-                
-                string semanticText = $"{name} {GetSemanticTagsForExtension(ext)}";
-                
-                fileDataList.Add(new FileData 
-                { 
-                    FilePath = f, 
-                    FileName = name, 
-                    Extension = ext,
-                    SemanticText = semanticText 
-                });
-            }
-
-            var mlContext = new MLContext(seed: 0);
-            var dataView = mlContext.Data.LoadFromEnumerable(fileDataList);
-
-            // TF-IDF pipeline: Tokenize -> Featurize -> PCA -> KMeans
-            var pipeline = mlContext.Transforms.Text.FeaturizeText("Features", "SemanticText")
-                .Append(mlContext.Clustering.Trainers.KMeans(
-                    featureColumnName: "Features",
-                    numberOfClusters: Math.Min(5, Math.Max(2, files.Count / 4))));
-
-            var model = pipeline.Fit(dataView);
-            var predictions = mlContext.Data.CreateEnumerable<FileClusterPrediction>(model.Transform(dataView), reuseRowObject: false).ToList();
-
-            var clusters = new Dictionary<uint, List<FileData>>();
-            for (int i = 0; i < fileDataList.Count; i++)
-            {
-                var pred = predictions[i];
-                if (!clusters.ContainsKey(pred.PredictedClusterId))
-                    clusters[pred.PredictedClusterId] = new List<FileData>();
-                
-                clusters[pred.PredictedClusterId].Add(fileDataList[i]);
-            }
+            // Step 1: bucket by human category.
+            var byCategory = files
+                .GroupBy(f => GetCategoryNameForExtension(f.Extension))
+                .ToList();
 
             var result = new List<ClusterGroup>();
-            foreach (var kvp in clusters)
+            var misc = new List<FileData>();
+
+            foreach (var bucket in byCategory)
             {
-                var clusterFiles = kvp.Value;
-                var commonExt = clusterFiles.GroupBy(f => f.Extension)
-                                            .OrderByDescending(g => g.Count())
-                                            .First().Key;
-                
-                string categoryName = GetCategoryNameForExtension(commonExt);
-                
-                // If it's generic or empty, try to find a common word in the filenames
-                if (categoryName == "Misc")
+                var items = bucket.ToList();
+
+                // Tiny buckets aren't worth their own rack - collect them into Misc.
+                if (items.Count < MinBucketToKeep)
                 {
-                    var allWords = clusterFiles.SelectMany(f => f.FileName.Split(new[] { ' ', '_', '-' }, StringSplitOptions.RemoveEmptyEntries))
-                                               .Where(w => w.Length > 3)
-                                               .GroupBy(w => w.ToLowerInvariant())
-                                               .OrderByDescending(g => g.Count())
-                                               .Select(g => g.First())
-                                               .ToList();
-                    
-                    if (allWords.Count > 0)
+                    misc.AddRange(items);
+                    continue;
+                }
+
+                // Big buckets: try to split by filename theme.
+                if (items.Count > SubdivideThreshold)
+                {
+                    var sub = SubdivideByTheme(items);
+                    if (sub.Count > 1)
                     {
-                        var bestWord = allWords[0];
-                        categoryName = char.ToUpper(bestWord[0]) + bestWord.Substring(1);
+                        foreach (var group in sub)
+                            AddGroup(result, $"{bucket.Key} · {group.Key}", group.Value);
+                        continue;
                     }
                 }
 
-                // Deduplicate names
-                int suffix = 1;
-                string finalName = categoryName;
-                while (result.Any(r => r.Name == finalName))
-                {
-                    suffix++;
-                    finalName = $"{categoryName} {suffix}";
-                }
-
-                result.Add(new ClusterGroup 
-                { 
-                    Name = finalName, 
-                    FilePaths = clusterFiles.Select(f => f.FilePath).ToList() 
-                });
+                AddGroup(result, bucket.Key, items);
             }
 
-            return result;
+            if (misc.Count > 0)
+                AddGroup(result, misc.Count == 1 ? SingleName(misc[0]) : "Misc", misc);
+
+            // Largest racks first so the preview leads with the most useful ones.
+            return result.OrderByDescending(r => r.FilePaths.Count).ToList();
+        }
+
+        private static FileData ToFileData(string f)
+        {
+            bool isFolder = Directory.Exists(f);
+            var name = isFolder ? Path.GetFileName(f) : Path.GetFileNameWithoutExtension(f);
+            var ext = isFolder ? "folder" : Path.GetExtension(f).ToLowerInvariant().TrimStart('.');
+            return new FileData
+            {
+                FilePath = f,
+                FileName = name,
+                Extension = ext,
+                SemanticText = $"{name} {GetSemanticTagsForExtension(ext)}"
+            };
+        }
+
+        // Split one large category into filename-theme groups via ML KMeans over the file
+        // names. Returns theme-name -> files. Falls back to a single group if ML can't find
+        // a meaningful split.
+        private static Dictionary<string, List<FileData>> SubdivideByTheme(List<FileData> items)
+        {
+            var outGroups = new Dictionary<string, List<FileData>>();
+            try
+            {
+                int k = Math.Min(4, Math.Max(2, items.Count / 6));
+                var mlContext = new MLContext(seed: 0);
+                var dataView = mlContext.Data.LoadFromEnumerable(items);
+                var pipeline = mlContext.Transforms.Text.FeaturizeText("Features", nameof(FileData.FileName))
+                    .Append(mlContext.Clustering.Trainers.KMeans("Features", numberOfClusters: k));
+                var model = pipeline.Fit(dataView);
+                var preds = mlContext.Data
+                    .CreateEnumerable<FileClusterPrediction>(model.Transform(dataView), reuseRowObject: false)
+                    .ToList();
+
+                var byCluster = new Dictionary<uint, List<FileData>>();
+                for (int i = 0; i < items.Count; i++)
+                {
+                    var id = preds[i].PredictedClusterId;
+                    if (!byCluster.ContainsKey(id)) byCluster[id] = new List<FileData>();
+                    byCluster[id].Add(items[i]);
+                }
+
+                foreach (var c in byCluster.Values)
+                {
+                    string theme = CommonThemeWord(c) ?? "Other";
+                    // Merge same-theme clusters.
+                    if (outGroups.ContainsKey(theme)) outGroups[theme].AddRange(c);
+                    else outGroups[theme] = c;
+                }
+            }
+            catch
+            {
+                outGroups.Clear();
+            }
+            return outGroups.Count > 0 ? outGroups : new Dictionary<string, List<FileData>> { ["All"] = items };
+        }
+
+        // Most common meaningful word across a set of filenames, Title-cased. Null if none.
+        private static string? CommonThemeWord(List<FileData> items)
+        {
+            var stop = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { "the", "and", "for", "new", "copy", "final", "version", "file", "document", "img", "image", "screenshot" };
+            var word = items
+                .SelectMany(f => f.FileName.Split(new[] { ' ', '_', '-', '.', '(', ')' }, StringSplitOptions.RemoveEmptyEntries))
+                .Where(w => w.Length > 3 && !stop.Contains(w) && !w.All(char.IsDigit))
+                .GroupBy(w => w.ToLowerInvariant())
+                .Where(g => g.Count() > 1)
+                .OrderByDescending(g => g.Count())
+                .Select(g => g.Key)
+                .FirstOrDefault();
+            return word == null ? null : char.ToUpper(word[0]) + word.Substring(1);
+        }
+
+        private static string SingleName(FileData f)
+        {
+            var cat = GetCategoryNameForExtension(f.Extension);
+            return cat == "Misc" ? "Misc" : cat;
+        }
+
+        private static void AddGroup(List<ClusterGroup> result, string name, List<FileData> items)
+        {
+            int suffix = 1;
+            string finalName = name;
+            while (result.Any(r => r.Name == finalName)) finalName = $"{name} {++suffix}";
+            result.Add(new ClusterGroup { Name = finalName, FilePaths = items.Select(f => f.FilePath).ToList() });
         }
 
         private static string GetSemanticTagsForExtension(string ext)
