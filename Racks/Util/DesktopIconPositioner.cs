@@ -24,7 +24,35 @@ namespace Racks.Util
         [ComImport, Guid("6D5140C1-7436-11CE-8034-00AA006009FA"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         private interface IServiceProvider
         {
-            void QueryService(ref Guid guidService, ref Guid riid, [MarshalAs(UnmanagedType.IUnknown)] out object ppvObject);
+            // Return the raw interface pointer and let us marshal it ourselves. Letting the
+            // CLR auto-marshal the out object was throwing "Specified cast is not valid" on
+            // this shell object; a manual GetObjectForIUnknown + QI is more forgiving.
+            [PreserveSig]
+            int QueryService(ref Guid guidService, ref Guid riid, out IntPtr ppvObject);
+        }
+
+        // Desktop doesn't hand out IFolderView directly (QueryService returns E_NOINTERFACE),
+        // so we go through the browser: QueryService -> IShellBrowser, ask it for the active
+        // IShellView, then QI that to IFolderView. Only QueryActiveShellView is needed, but the
+        // preceding vtable slots (IOleWindow + earlier IShellBrowser methods) must be declared
+        // in order so the slot lands correctly - they're placeholders, never called.
+        [ComImport, Guid("000214E2-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IShellBrowser
+        {
+            void GetWindow_placeholder();
+            void ContextSensitiveHelp_placeholder();
+            void InsertMenusSB_placeholder();
+            void SetMenuSB_placeholder();
+            void RemoveMenusSB_placeholder();
+            void SetStatusTextSB_placeholder();
+            void EnableModelessSB_placeholder();
+            void TranslateAcceleratorSB_placeholder();
+            void BrowseObject_placeholder();
+            void GetViewStateStream_placeholder();
+            void GetControlWindow_placeholder();
+            void SendControlMsg_placeholder();
+            [PreserveSig]
+            int QueryActiveShellView([MarshalAs(UnmanagedType.IUnknown)] out object ppshv);
         }
 
         [ComImport, Guid("CDE725B0-CCC9-4519-917E-325D72FAB4CE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -106,7 +134,13 @@ namespace Racks.Util
             }
         }
 
-        // Resolve the live desktop IFolderView once, shared by the position helpers.
+        // Resolve the live desktop IFolderView. The desktop doesn't expose IFolderView directly
+        // (QueryService for it returns E_NOINTERFACE), so we go through the browser:
+        // QueryService -> IShellBrowser -> QueryActiveShellView -> IShellView, then QI to
+        // IFolderView. NOTE: calling methods on this view across the process boundary is
+        // unreliable (the interface isn't marshaled), so ArrangeInGrid is strictly best-effort
+        // and its failures are swallowed. Exact icon placement from an outside process isn't
+        // achievable this way - that's a Windows limitation, not a bug here.
         private static IFolderView? GetDesktopFolderView()
         {
             var shellWindows = (IShellWindows)new ShellWindows();
@@ -117,53 +151,18 @@ namespace Racks.Util
             if (window == null) return null;
             var sp = (IServiceProvider)window;
             Guid SID_STopLevelBrowser = new Guid("4C96BE40-915C-11CF-99D3-00AA004AE837");
-            Guid IID_IFolderView = new Guid("CDE725B0-CCC9-4519-917E-325D72FAB4CE");
-            sp.QueryService(ref SID_STopLevelBrowser, ref IID_IFolderView, out object folderViewObj);
-            return folderViewObj as IFolderView;
-        }
+            Guid IID_IShellBrowser = new Guid("000214E2-0000-0000-C000-000000000046");
+            int hr = sp.QueryService(ref SID_STopLevelBrowser, ref IID_IShellBrowser, out IntPtr pBrowser);
+            if (hr != 0 || pBrowser == IntPtr.Zero) return null;
 
-        // Place a just-returned desktop icon at (x, y) in PHYSICAL screen pixels. The old
-        // version fired once after a fixed 300ms wait; when Explorer hadn't materialized the
-        // icon yet (a drop and a programmatic move both create it asynchronously), the shell
-        // call found no item and silently did nothing, so the icon stayed wherever Explorer
-        // first dropped it - "doesn't land where I let go". Now we poll until the item is in
-        // the view, position it, verify the position took (GetItemPosition), and re-apply a
-        // few times. All idempotent, best-effort, and bounded to ~2s.
-        public static async void SetDesktopIconPosition(string filename, int x, int y)
-        {
-            try
-            {
-                for (int attempt = 0; attempt < 12; attempt++)
-                {
-                    await Task.Delay(150);
+            IShellBrowser sb;
+            try { sb = (IShellBrowser)Marshal.GetObjectForIUnknown(pBrowser); }
+            finally { Marshal.Release(pBrowser); }
 
-                    var view = GetDesktopFolderView();
-                    if (view == null) continue;
+            int hr2 = sb.QueryActiveShellView(out object shellView);
+            if (hr2 != 0 || shellView == null) return null;
 
-                    IntPtr pidl = ILCreateFromPath(filename);
-                    if (pidl == IntPtr.Zero) continue;
-                    try
-                    {
-                        Interop.POINT pt = new Interop.POINT { X = x, Y = y };
-                        IntPtr[] apidl = new IntPtr[] { pidl };
-                        // SVSI_SELECT (1) | SVSI_POSITIONITEM (0x10).
-                        view.SelectAndPositionItems(1, apidl, ref pt, 0x11);
-
-                        // Did it take? If the item now sits within one grid cell of the target,
-                        // we're done. If it's not in the view yet, GetItemPosition throws and we
-                        // retry. If auto-arrange is on, the shell ignores us and we simply give
-                        // up after the loop (there's nothing we can do about that setting).
-                        view.GetItemPosition(pidl, out Interop.POINT got);
-                        if (Math.Abs(got.X - x) <= 90 && Math.Abs(got.Y - y) <= 100) return;
-                    }
-                    catch { /* item not ready yet - retry */ }
-                    finally { ILFree(pidl); }
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Failed to position icon: {ex.Message}");
-            }
+            return shellView as IFolderView;
         }
     }
 }

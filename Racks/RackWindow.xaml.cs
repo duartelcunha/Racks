@@ -1636,8 +1636,10 @@ namespace Racks
 
                 if (newOnDesktop)
                 {
-                    // Explorer already COPIED it to the desktop. Delete the sandbox original so
-                    // only the desktop copy remains (no duplicate), then drop the rack's claim.
+                    // Explorer already moved/copied it to the desktop. Delete the sandbox original
+                    // so only the desktop copy remains (no duplicate), then drop the rack's claim.
+                    // Windows places the returned icon itself (near the drop / next free grid cell);
+                    // pixel-exact placement from an outside process isn't reliably possible.
                     try
                     {
                         if (File.Exists(workspaceFullPath)) File.Delete(workspaceFullPath);
@@ -1656,15 +1658,6 @@ namespace Racks
                     if (Util.SafeMove.TryMove(workspaceFullPath, desktopTarget, out _) != Util.SafeMove.Result.Moved)
                         return;
                 }
-
-                // Position the returned item exactly where the pointer released. The shell
-                // positions icons in PHYSICAL pixels, so use GetPhysicalCursorPos (equals the
-                // drop point at 100% scale, corrects it on a scaled monitor). The cursor is
-                // still at the release spot - this runs right after the drop returns.
-                int posX = dropPt.X, posY = dropPt.Y;
-                if (Racks.Util.Interop.GetPhysicalCursorPos(out var physPt)) { posX = physPt.X; posY = physPt.Y; }
-                try { Util.DesktopIconPositioner.SetDesktopIconPosition(desktopTarget, posX, posY); }
-                catch { }
 
                 // Drop the rack's claim so the item stops showing in the rack.
                 if (Instance.AssignedFiles != null && Instance.AssignedFiles.Remove(fileName))
@@ -2645,7 +2638,6 @@ namespace Racks
                 }
                 var fileNames = new HashSet<string>(fileEntries.Select(f => f.Name));
 
-
                 await Dispatcher.InvokeAsync(async () =>
                 {
                     if (loadFiles_cts.IsCancellationRequested)
@@ -2751,7 +2743,15 @@ namespace Racks
                             existingItem.Thumbnail = thumbnail;
                         }
                     }
-                    var sortedList = FileItems.ToList();
+                    // Dedup by FullPath before committing. Two LoadFiles runs can overlap
+                    // (Reassign triggers one on every rack, a FileSystemWatcher fires another),
+                    // and the await between the "does this item already exist?" check and
+                    // FileItems.Add lets both pass the check and both add the same file - the
+                    // visual duplicate. Collapsing by FullPath here makes that race harmless.
+                    var sortedList = FileItems
+                        .GroupBy(fi => fi.FullPath, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.First())
+                        .ToList();
 
                     FileItems.Clear();
                     foreach (var fileItem in sortedList)
