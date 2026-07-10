@@ -36,6 +36,11 @@ namespace Racks.Util
         private static bool _running;
         private static long _lastTicks;
 
+        // Global on/off for the ice-rink feel. When false, dragging a rack into another does
+        // nothing (no push, no glide, no flick-to-throw): racks just overlap freely. Set from
+        // the saved "IcePhysics" setting at startup and toggled live from Settings. Default on.
+        public static bool Enabled = true;
+
         // Register a rack's body once (on creation). Safe to call again; ignores duplicates.
         public static void Register(PhysicsBody body)
         {
@@ -53,6 +58,7 @@ namespace Racks.Util
         // overlaps a neighbour. Kicks the shared loop into life.
         public static void Impart(PhysicsBody target, Rect targetRect, Rect pusherRect)
         {
+            if (!Enabled) return;
             if (target.IsAnchored()) return;
             var intersect = Rect.Intersect(targetRect, pusherRect);
             if (intersect.IsEmpty || intersect.Width <= 0 || intersect.Height <= 0) return;
@@ -80,7 +86,7 @@ namespace Racks.Util
         }
 
         // Start the loop after velocity was set directly on a body (flick-to-throw).
-        public static void Kick() => EnsureRunning();
+        public static void Kick() { if (Enabled) EnsureRunning(); }
 
         private static void EnsureRunning()
         {

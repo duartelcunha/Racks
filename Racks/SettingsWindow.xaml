@@ -56,6 +56,7 @@
 
                 <ui:ToggleSwitch x:Name="AutoUpdateToggleSwitch" Content="{x:Static prop:Lang.RacksSettings_AutoUpdate}" Margin="10,20,0,0" Click="AutoUpdateToggleSwitch_Click"/>
                 <ui:ToggleSwitch x:Name="DoubleClickToHideSwitch" Content="{x:Static prop:Lang.RacksSettings_DoubleClickHide}" Margin="10,20,0,0" Click="DoubleClickToHideSwitch_Click"/>
+                <ui:ToggleSwitch x:Name="IcePhysicsSwitch" Content="Ice-rink physics (racks glide when pushed)" Margin="10,20,0,0" Click="IcePhysicsSwitch_Click"/>
 
                 <Separator HorizontalAlignment="Center" Margin="20,10,20,10" Width="461"/>
 

@@ -29,6 +29,10 @@ namespace Racks
             // if (_controller.reg.KeyExistsRoot("blurBackground")) blurToggle.IsChecked = (bool)_controller.reg.ReadKeyValueRoot("blurBackground");
             if (_controller.reg.KeyExistsRoot("AutoUpdate")) AutoUpdateToggleSwitch.IsChecked = _controller.reg.ReadKeyValueRoot("AutoUpdate") as bool? ?? false;
             if (_controller.reg.KeyExistsRoot("DoubleClickToHide")) DoubleClickToHideSwitch.IsChecked = _controller.reg.ReadKeyValueRoot("DoubleClickToHide") as bool? ?? false;
+            // Ice-rink physics: default on, reflect whatever the engine currently has loaded.
+            IcePhysicsSwitch.IsChecked = _controller.reg.KeyExistsRoot("IcePhysics")
+                ? (_controller.reg.ReadKeyValueRoot("IcePhysics") as bool? ?? true)
+                : Racks.Util.RackPhysics.Enabled;
 
             // Open on the monitor the user is actually on (where they clicked the tray),
             // not always the primary. Centre this window in that monitor's working area.
@@ -203,6 +207,13 @@ namespace Racks
         {
             _controller.reg.WriteToRegistryRoot("DoubleClickToHide", DoubleClickToHideSwitch.IsChecked!);
             _window.DoubleClickToHide = (bool)DoubleClickToHideSwitch.IsChecked!;
+        }
+
+        private void IcePhysicsSwitch_Click(object sender, RoutedEventArgs e)
+        {
+            bool on = (bool)IcePhysicsSwitch.IsChecked!;
+            _controller.reg.WriteToRegistryRoot("IcePhysics", on);
+            Racks.Util.RackPhysics.Enabled = on; // takes effect live, no restart
         }
 
         private void KofiButtonImage_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)

@@ -1930,6 +1930,13 @@ namespace Racks
                     _dragMovingWinddow = false;
                     if (_physics != null && !_isLocked && !_isTopmost)
                     {
+                        // Only throw if the rack was ACTUALLY moving at the moment of release.
+                        // _dragVelX/Y is only refreshed in Window_LocationChanged, which stops
+                        // firing when the mouse holds still - so it keeps the last non-zero speed
+                        // from before the pause and would fling a rack the user just parked. If
+                        // there's been no movement for a beat, the rack is at rest: zero it out.
+                        double sinceMove = (DateTime.UtcNow.Ticks - _lastDragTicks) / (double)TimeSpan.TicksPerSecond;
+                        if (sinceMove > 0.07) { _dragVelX = _dragVelY = 0; }
                         _physics.Vx = _dragVelX;
                         _physics.Vy = _dragVelY;
                         if (_physics.Moving) Util.RackPhysics.Kick();

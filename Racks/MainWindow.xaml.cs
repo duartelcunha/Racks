@@ -120,6 +120,8 @@ namespace Racks
             AutorunToggle.IsChecked = startOnLogin;
             // if (_controller.reg.KeyExistsRoot("blurBackground")) BlurToggle.IsChecked = (bool)_controller.reg.ReadKeyValueRoot("blurBackground");
             if (_controller.reg.KeyExistsRoot("DoubleClickToHide")) DoubleClickToHide = _controller.reg.ReadKeyValueRoot("DoubleClickToHide") as bool? ?? false;
+            // Ice-rink physics default on; only off if the user turned it off before.
+            if (_controller.reg.KeyExistsRoot("IcePhysics")) Util.RackPhysics.Enabled = _controller.reg.ReadKeyValueRoot("IcePhysics") as bool? ?? true;
             if (_controller.reg.KeyExistsRoot("HideDesktopIcons"))
             {
                 bool hide = _controller.reg.ReadKeyValueRoot("HideDesktopIcons") as bool? ?? false;
