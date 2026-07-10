@@ -122,6 +122,7 @@ namespace Racks
             if (_controller.reg.KeyExistsRoot("DoubleClickToHide")) DoubleClickToHide = _controller.reg.ReadKeyValueRoot("DoubleClickToHide") as bool? ?? false;
             // Ice-rink physics default on; only off if the user turned it off before.
             if (_controller.reg.KeyExistsRoot("IcePhysics")) Util.RackPhysics.Enabled = _controller.reg.ReadKeyValueRoot("IcePhysics") as bool? ?? true;
+            IcePhysicsToggle.IsChecked = Util.RackPhysics.Enabled;
             if (_controller.reg.KeyExistsRoot("HideDesktopIcons"))
             {
                 bool hide = _controller.reg.ReadKeyValueRoot("HideDesktopIcons") as bool? ?? false;
@@ -527,6 +528,25 @@ namespace Racks
                 try { w.ApplyLockedState(); }
                 catch (Exception ex) { Debug.WriteLine($"ApplyLockedState failed: {ex.Message}"); }
             }
+        }
+
+        // Global on/off for the ice-rink physics. Persists and applies live (no restart):
+        // off means racks no longer push, glide, or bounce when dragged together.
+        private void IcePhysicsToggle_CheckChanged(object sender, RoutedEventArgs e)
+        {
+            bool on = IcePhysicsToggle.IsChecked == true;
+            _controller.reg.WriteToRegistryRoot("IcePhysics", on);
+            Util.RackPhysics.Enabled = on;
+        }
+
+        // Manual "Check for updates": queries the GitHub releases API and shows a toast
+        // (either "new release" with an Install button, or "up to date"). Same code path the
+        // auto-update toast uses; Install is handled in App.ToastActivatedHandler.
+        private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            const string latestReleaseApi = "https://api.github.com/repos/duartelcunha/Racks/releases/latest";
+            try { await Updater.CheckUpdateAsync(latestReleaseApi, showToastIfNoUpdate: true); }
+            catch (Exception ex) { Debug.WriteLine($"Manual update check failed: {ex.Message}"); }
         }
 
         // Hot-corner peek: poll cursor position every 100ms. When it enters a small

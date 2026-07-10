@@ -6,8 +6,6 @@ using Microsoft.Toolkit.Uwp.Notifications;
 using Windows.UI.Notifications;
 using System.Net.Http;
 using System.Globalization;
-using System.Text;
-using Racks.Properties;
 namespace Racks
 {
     public class Updater
@@ -45,7 +43,7 @@ namespace Racks
                             _ => "🚀"
                         };
 
-                        if (!latestVersion.Contains(currentVersion))
+                        if (IsNewer(latestVersion, currentVersion))
                         {
                             var toastBuilder = new ToastContentBuilder()
                                  .AddText($"{emoji} New release! {name}", AdaptiveTextStyle.Header)
@@ -83,6 +81,29 @@ namespace Racks
                 Debug.WriteLine($"Update error: {e.Message}");
             }
         }
+        // Is the released tag newer than what's running? The GitHub tag is like "v1.1.4" while
+        // FileVersion is a 4-part "1.1.4.0" - a plain string Contains() compare misfires (it
+        // reported an update even when identical). Normalize both to major.minor.build and
+        // compare numerically so "up to date" is actually detected.
+        private static bool IsNewer(string latestTag, string currentRaw)
+        {
+            return Version.TryParse(Norm3(latestTag), out var latest)
+                && Version.TryParse(Norm3(currentRaw), out var current)
+                && latest > current;
+        }
+
+        private static string Norm3(string s)
+        {
+            s = (s ?? "").Trim();
+            if (s.StartsWith("v", StringComparison.OrdinalIgnoreCase)) s = s.Substring(1);
+            int i = 0;
+            while (i < s.Length && (char.IsDigit(s[i]) || s[i] == '.')) i++;
+            s = s.Substring(0, i);
+            var parts = s.Split('.');
+            int Get(int idx) => parts.Length > idx && int.TryParse(parts[idx], out var v) ? v : 0;
+            return $"{Get(0)}.{Get(1)}.{Get(2)}";
+        }
+
         public static async Task InstallUpdate()
         {
             string tag = "update";
@@ -156,78 +177,32 @@ namespace Racks
                 await RestartApplication(tempFilePath);
             }
         }
-        private static bool HasPermissionToWrite(string currentExecutablePath)
+        private static async Task RestartApplication(string installerPath)
         {
-            string path = Path.GetDirectoryName(currentExecutablePath)!;
-            ProcessStartInfo psi = new ProcessStartInfo
+            // installerPath is the freshly downloaded Racks-Setup-x.y.z.exe. Run it and quit.
+            // The installer upgrades in place (same AppId), force-closes this running instance
+            // (CloseApplications=force) and relaunches Racks from its finished page - per-user
+            // install, so no admin prompt. We deliberately do NOT overwrite our own exe: the
+            // old approach moved the installer on top of Racks.exe, which left a broken install
+            // (Racks.exe = the installer) if setup was cancelled.
+            await Task.CompletedTask;
+            try
             {
-                FileName = "cmd.exe",
-                Arguments = $"/C cd /d \"{path}\" && echo. > RacksUpdatePermissionCheck",
-                UseShellExecute = false,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            };
-
-            using Process proc = Process.Start(psi)!;
-            proc.WaitForExit();
-            if (proc.ExitCode == 0)
-            {
-                using (Process.Start(new ProcessStartInfo
+                Process.Start(new ProcessStartInfo
                 {
-                    FileName = "cmd.exe",
-                    Arguments = $"/C cd /d \"{path}\" && del RacksUpdatePermissionCheck",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                })) {}
-                return true;
+                    FileName = installerPath,
+                    UseShellExecute = true
+                });
             }
-            return false;
-        }
-
-        private static void ExecuteCommand(string command, bool needAdmin)
-        {
-            Debug.WriteLine("Starting CMD...");
-            string tempCmd = "";
-            if (needAdmin)
+            catch (Exception ex)
             {
-                tempCmd = Path.Combine(Path.GetTempPath(), "deskframe_update.cmd");
-                File.WriteAllText(Path.Combine(Path.GetTempPath(), "deskframe_update.cmd"), command, Encoding.UTF8);
-            }
-            ProcessStartInfo psi = new ProcessStartInfo
-            {
-                FileName = needAdmin ? tempCmd : "cmd.exe",
-                Arguments = needAdmin ? null : $"/C {command}",
-                UseShellExecute = needAdmin,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden,
-                Verb = "runas"
-            };
-            using (Process.Start(psi)) {}
-
-        }
-
-        private static async Task RestartApplication(string tempPath)
-        {
-            string currentExecutablePath = Process.GetCurrentProcess().MainModule!.FileName;
-            string command = $"timeout /t 2 && move /y \"{tempPath}\" \"{currentExecutablePath}\" & \"{currentExecutablePath}\" && exit ";
-
-            if (HasPermissionToWrite(currentExecutablePath))
-            {
-                ExecuteCommand(command, false);
-            }
-            else
-            {
-                bool proceed = Racks.Views.RacksMessageBox.Confirm(
-                    Lang.Racks_Update_DialogContent, "Racks", "OK", "Cancel");
-                if (proceed)
-                {
-                    ExecuteCommand(command, true);
-                }
-                else
-                {
-                    return;
-                }
+                // Couldn't even launch the installer - stay alive rather than exit into nothing.
+                Debug.WriteLine($"Launching updater failed: {ex.Message}");
+                var toastBuilder = new ToastContentBuilder()
+                    .AddText("Update failed to start", AdaptiveTextStyle.Header)
+                    .AddText(ex.Message, AdaptiveTextStyle.Body);
+                toastBuilder.Show();
+                return;
             }
             Environment.Exit(0);
         }

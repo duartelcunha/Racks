@@ -81,6 +81,9 @@
                 <ui:ToggleSwitch x:Name="LockAllToggle" Content="Lock all racks"
                              ToolTip="Prevents accidentally moving or resizing any rack. Per-rack lock is still available from the title-bar menu."
                              Checked="LockAllToggle_CheckChanged" Unchecked="LockAllToggle_CheckChanged" />
+                <ui:ToggleSwitch x:Name="IcePhysicsToggle" Content="Ice-rink physics"
+                             ToolTip="Racks glide, bounce off edges and push each other when dragged together. Turn off to keep racks perfectly still."
+                             Checked="IcePhysicsToggle_CheckChanged" Unchecked="IcePhysicsToggle_CheckChanged" />
                 <!--<ui:ToggleSwitch x:Name="BlurToggle" Content="Enable blur"
                 Checked="BlurToggle_CheckChanged"  Unchecked="BlurToggle_CheckChanged" />-->
                 
@@ -97,6 +100,7 @@
                 <MenuItem Name="exportLayout" Height="34" Header="Export racks…" ToolTip="Save the entire rack layout to a single JSON file (backup or transfer)." Click="ExportLayout_Click" Icon="{ui:SymbolIcon Symbol=ArrowUpload20}"/>
                 <MenuItem Name="importLayout" Height="34" Header="Import racks…" ToolTip="Load a rack layout from JSON. Replaces all current racks. Restart required." Click="ImportLayout_Click" Icon="{ui:SymbolIcon Symbol=ArrowDownload20}"/>
                 <Separator Margin="0,3,0,3"/>
+                <MenuItem Name="checkUpdatesMenuItem" Height="34" Header="Check for updates…" ToolTip="Check GitHub for a newer version of Racks and install it." Click="CheckUpdates_Click" Icon="{ui:SymbolIcon Symbol=ArrowSync20}"/>
                 <MenuItem Name="helpMenuItem" Height="34" Header="Help / cheatsheet…" ToolTip="Keybindings, gestures, and feature overview." Click="HelpMenuItem_Click" Icon="{ui:SymbolIcon Symbol=QuestionCircle20}"/>
                 <MenuItem x:Name="Exit_Button" Height="34" 
                           Header="{x:Static prop:Lang.TrayContextMenu_Exit}" Click="ExitApp" Icon="{ui:SymbolIcon Symbol=ArrowExit20}" />
