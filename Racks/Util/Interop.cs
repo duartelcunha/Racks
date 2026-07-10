@@ -69,6 +69,12 @@ namespace Racks.Util
         [DllImport("user32.dll")]
         public static extern bool GetCursorPos(out POINT lpPoint);
 
+        // True physical-pixel cursor position, independent of the caller's DPI-awareness.
+        // The desktop shell view positions icons in physical pixels, so this is what we feed
+        // it; on a 100%-scale monitor it equals GetCursorPos, on a scaled one it corrects it.
+        [DllImport("user32.dll")]
+        public static extern bool GetPhysicalCursorPos(out POINT lpPoint);
+
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool IsWindow(IntPtr hWnd);

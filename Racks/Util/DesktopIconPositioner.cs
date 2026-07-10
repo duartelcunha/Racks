@@ -122,40 +122,42 @@ namespace Racks.Util
             return folderViewObj as IFolderView;
         }
 
+        // Place a just-returned desktop icon at (x, y) in PHYSICAL screen pixels. The old
+        // version fired once after a fixed 300ms wait; when Explorer hadn't materialized the
+        // icon yet (a drop and a programmatic move both create it asynchronously), the shell
+        // call found no item and silently did nothing, so the icon stayed wherever Explorer
+        // first dropped it - "doesn't land where I let go". Now we poll until the item is in
+        // the view, position it, verify the position took (GetItemPosition), and re-apply a
+        // few times. All idempotent, best-effort, and bounded to ~2s.
         public static async void SetDesktopIconPosition(string filename, int x, int y)
         {
-            await Task.Delay(300); // Give Explorer time to create the icon
-
             try
             {
-                var shellWindows = (IShellWindows)new ShellWindows();
-                object loc = 0; // CSIDL_DESKTOP
-                object empty = Type.Missing;
-                int hwnd;
-                object window = shellWindows.FindWindowSW(ref loc, ref empty, 8 /* SWC_DESKTOP */, out hwnd, 1 /* SWFO_NEEDDISPATCH */);
-                
-                if (window != null)
+                for (int attempt = 0; attempt < 12; attempt++)
                 {
-                    var sp = (IServiceProvider)window;
-                    Guid SID_STopLevelBrowser = new Guid("4C96BE40-915C-11CF-99D3-00AA004AE837");
-                    Guid IID_IFolderView = new Guid("CDE725B0-CCC9-4519-917E-325D72FAB4CE");
-                    object folderViewObj;
-                    sp.QueryService(ref SID_STopLevelBrowser, ref IID_IFolderView, out folderViewObj); 
-                    
-                    if (folderViewObj != null)
+                    await Task.Delay(150);
+
+                    var view = GetDesktopFolderView();
+                    if (view == null) continue;
+
+                    IntPtr pidl = ILCreateFromPath(filename);
+                    if (pidl == IntPtr.Zero) continue;
+                    try
                     {
-                        var view = (IFolderView)folderViewObj;
-                        
-                        IntPtr pidl = ILCreateFromPath(filename);
-                        if (pidl != IntPtr.Zero)
-                        {
-                            Interop.POINT pt = new Interop.POINT { X = x, Y = y };
-                            IntPtr[] apidl = new IntPtr[] { pidl };
-                            // SVSI_SELECT = 1, SVSI_POSITIONITEM = 0x10
-                            view.SelectAndPositionItems(1, apidl, ref pt, 0x11);
-                            ILFree(pidl);
-                        }
+                        Interop.POINT pt = new Interop.POINT { X = x, Y = y };
+                        IntPtr[] apidl = new IntPtr[] { pidl };
+                        // SVSI_SELECT (1) | SVSI_POSITIONITEM (0x10).
+                        view.SelectAndPositionItems(1, apidl, ref pt, 0x11);
+
+                        // Did it take? If the item now sits within one grid cell of the target,
+                        // we're done. If it's not in the view yet, GetItemPosition throws and we
+                        // retry. If auto-arrange is on, the shell ignores us and we simply give
+                        // up after the loop (there's nothing we can do about that setting).
+                        view.GetItemPosition(pidl, out Interop.POINT got);
+                        if (Math.Abs(got.X - x) <= 90 && Math.Abs(got.Y - y) <= 100) return;
                     }
+                    catch { /* item not ready yet - retry */ }
+                    finally { ILFree(pidl); }
                 }
             }
             catch (Exception ex)

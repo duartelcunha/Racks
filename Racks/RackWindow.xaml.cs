@@ -1657,8 +1657,13 @@ namespace Racks
                         return;
                 }
 
-                // Position the returned item exactly where the pointer released.
-                try { Util.DesktopIconPositioner.SetDesktopIconPosition(desktopTarget, dropPt.X, dropPt.Y); }
+                // Position the returned item exactly where the pointer released. The shell
+                // positions icons in PHYSICAL pixels, so use GetPhysicalCursorPos (equals the
+                // drop point at 100% scale, corrects it on a scaled monitor). The cursor is
+                // still at the release spot - this runs right after the drop returns.
+                int posX = dropPt.X, posY = dropPt.Y;
+                if (Racks.Util.Interop.GetPhysicalCursorPos(out var physPt)) { posX = physPt.X; posY = physPt.Y; }
+                try { Util.DesktopIconPositioner.SetDesktopIconPosition(desktopTarget, posX, posY); }
                 catch { }
 
                 // Drop the rack's claim so the item stops showing in the rack.
