@@ -50,11 +50,6 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="VirtualDesktop">
-      <HintPath>VirtualDesktop\VirtualDesktop.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="ico.png" />
     <Resource Include="Icon\ico.png" />
     <Resource Include="Shaders\GrayscaleEffect.ps" />
