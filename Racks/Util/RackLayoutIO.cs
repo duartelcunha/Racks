@@ -55,20 +55,77 @@ namespace Racks.Util
             return Serialize(layout);
         }
 
+        // Restore a layout from JSON. Atomic-ish: nothing existing is touched until the file is
+        // parsed AND every rack name is validated, and if a mid-write failure occurs after the
+        // destructive delete, the previous racks are rolled back from a snapshot. A malformed or
+        // hostile file therefore can never leave the user with no racks. Throws InvalidDataException
+        // on bad input; the caller shows the reason.
         public static int Import(string json, bool replaceExisting)
         {
-            var layout = JsonSerializer.Deserialize<LayoutFile>(json,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            LayoutFile? layout;
+            try
+            {
+                layout = JsonSerializer.Deserialize<LayoutFile>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (JsonException)
+            {
+                throw new InvalidDataException("The layout file is not valid JSON.");
+            }
             if (layout?.Racks == null || layout.Racks.Count == 0) return 0;
 
-            string root = $@"SOFTWARE\{InstanceController.appName}\Instances";
-            if (replaceExisting)
+            // Validate every rack name BEFORE touching existing state. A rack name becomes a
+            // registry subkey, so it must be a single safe segment: no separators (which would
+            // write keys outside Instances\<name>) and no traversal. Reject the whole import if
+            // any is bad - a partially-valid file must not wipe the user's racks.
+            foreach (var rack in layout.Racks)
             {
-                Registry.CurrentUser.DeleteSubKeyTree(root, throwOnMissingSubKey: false);
+                if (!IsValidRackName(rack.Name))
+                    throw new InvalidDataException($"Layout contains an unsafe rack name: '{rack.Name}'.");
             }
 
+            string root = $@"SOFTWARE\{InstanceController.appName}\Instances";
+
+            // Snapshot current racks so a failure after the delete can be rolled back exactly.
+            string backup = replaceExisting ? Export() : "";
+
+            try
+            {
+                if (replaceExisting)
+                    Registry.CurrentUser.DeleteSubKeyTree(root, throwOnMissingSubKey: false);
+
+                return WriteRacks(root, layout.Racks);
+            }
+            catch
+            {
+                // Roll back to the snapshot so a failed import never leaves the user empty.
+                if (replaceExisting)
+                {
+                    try
+                    {
+                        Registry.CurrentUser.DeleteSubKeyTree(root, throwOnMissingSubKey: false);
+                        var prev = JsonSerializer.Deserialize<LayoutFile>(backup,
+                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        if (prev?.Racks != null) WriteRacks(root, prev.Racks);
+                    }
+                    catch { /* best-effort restore; original error still propagates */ }
+                }
+                throw;
+            }
+        }
+
+        // A rack name is used verbatim as a registry subkey: it must be one safe segment.
+        private static bool IsValidRackName(string? name)
+            => !string.IsNullOrWhiteSpace(name)
+               && name.IndexOf('\\') < 0
+               && name.IndexOf('/') < 0
+               && name != "." && name != ".."
+               && name.Length <= 255;
+
+        private static int WriteRacks(string root, List<RackDto> racks)
+        {
             int written = 0;
-            foreach (var rack in layout.Racks)
+            foreach (var rack in racks)
             {
                 if (string.IsNullOrEmpty(rack.Name)) continue;
                 using var rk = Registry.CurrentUser.CreateSubKey($@"{root}\{rack.Name}");

@@ -70,8 +70,10 @@ namespace Racks.Util
                     if (string.IsNullOrWhiteSpace(inst.AutoRouteRegex)) continue;
                     if (string.IsNullOrEmpty(inst.Folder) || !Directory.Exists(inst.Folder)) continue;
                     bool match;
-                    try { match = Regex.IsMatch(name, inst.AutoRouteRegex, RegexOptions.IgnoreCase); }
-                    catch { continue; /* bad regex — skip silently rather than spam */ }
+                    // Bounded timeout so a ReDoS auto-route pattern can't pin this dispatcher
+                    // tick. A bad or timing-out pattern is skipped (already inside try/catch).
+                    try { match = Regex.IsMatch(name, inst.AutoRouteRegex, RegexOptions.IgnoreCase, SafeRegex.MatchTimeout); }
+                    catch { continue; /* bad or too-slow regex — skip silently rather than spam */ }
                     if (!match) continue;
 
                     try { _routeShortcut(path, inst.Folder); } catch { }

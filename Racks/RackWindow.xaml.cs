@@ -2521,13 +2521,9 @@ namespace Racks
         // Treat an invalid pattern as "no filter" rather than crashing.
         private static Regex? TryCompileRegex(string? pattern)
         {
-            if (string.IsNullOrEmpty(pattern)) return null;
-            try { return new Regex(pattern); }
-            catch (ArgumentException ex)
-            {
-                Debug.WriteLine($"Invalid saved filter regex '{pattern}': {ex.Message}");
-                return null;
-            }
+            // Compiles with a bounded match timeout so a pathological (ReDoS) pattern can't
+            // freeze the UI thread on file load. See Util.SafeRegex.
+            return Util.SafeRegex.TryCompile(pattern);
         }
 
         public async void LoadFiles(string path)
@@ -2597,7 +2593,7 @@ namespace Racks
                     var fileFilterRegex = TryCompileRegex(Instance.FileFilterRegex);
                     if (fileFilterRegex != null)
                     {
-                        filteredFiles = filteredFiles.Where(entry => fileFilterRegex.IsMatch(entry.Name)).ToList();
+                        filteredFiles = filteredFiles.Where(entry => Util.SafeRegex.IsMatch(fileFilterRegex, entry.Name, onTimeout: true)).ToList();
                     }
 
                     if (Instance.IsDesktopFilterRack)
@@ -2702,7 +2698,7 @@ namespace Racks
                         string actualExt = isFile ? Path.GetExtension(entry.Name) : string.Empty;
                         if (existingItem == null)
                         {
-                            if (fileFilterHideRegex != null && fileFilterHideRegex.IsMatch(entry.Name))
+                            if (Util.SafeRegex.IsMatch(fileFilterHideRegex, entry.Name, onTimeout: false))
                             {
                                 continue;
                             }
@@ -2756,7 +2752,7 @@ namespace Racks
                     FileItems.Clear();
                     foreach (var fileItem in sortedList)
                     {
-                        if (fileFilterHideRegex != null && fileFilterHideRegex.IsMatch(fileItem.Name))
+                        if (Util.SafeRegex.IsMatch(fileFilterHideRegex, fileItem.Name, onTimeout: false))
                         {
                             continue;
                         }

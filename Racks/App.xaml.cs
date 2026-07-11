@@ -76,6 +76,11 @@ namespace Racks
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            // Belt for ReDoS: cap the runtime of ANY regex without an explicit timeout, so a
+            // catastrophic-backtracking pattern (from the registry or an imported layout) can
+            // never pin a thread. Explicit-timeout call sites (Util.SafeRegex) still win; this
+            // only backstops anything that slips through. Must be set before any Regex runs.
+            AppDomain.CurrentDomain.SetData("REGEX_DEFAULT_MATCH_TIMEOUT", Racks.Util.SafeRegex.MatchTimeout);
             // One-time migration of HKCU\SOFTWARE\DeskFrame → HKCU\SOFTWARE\Racks so
             // users upgrading from the original DeskFrame build keep their frames.
             InstanceController.MigrateLegacyRegistry();
@@ -87,10 +92,14 @@ namespace Racks
             if (!isUninstallAnim)
             {
                 bool createdNew;
-                _singleInstanceMutex = new Mutex(true, @"Global\Racks-SingleInstance-2C9D", out createdNew);
+                // Local\ (session-scoped), not Global\: single-instance is a per-user-session
+                // concept. Global\ let any process in ANY session pre-create the name and silently
+                // block every Racks launch (a squatting DoS), and wrongly stopped two different
+                // users from each running their own Racks. Local\ scopes it to this session.
+                _singleInstanceMutex = new Mutex(true, @"Local\Racks-SingleInstance-2C9D", out createdNew);
                 if (!createdNew)
                 {
-                    // Another Racks is already running — its tray icon is live. Just exit.
+                    // Another Racks is already running in this session — its tray icon is live. Just exit.
                     Application.Current.Shutdown();
                     return;
                 }

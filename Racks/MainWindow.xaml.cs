@@ -404,6 +404,11 @@ namespace Racks
                 int count = Racks.Util.RackLayoutIO.PromptImport(replaceExisting: true);
                 if (count > 0) _controller.CheckFrameWindowsLive(true);
             }
+            catch (System.IO.InvalidDataException ex)
+            {
+                // Bad/hostile layout file: existing racks were left intact (or rolled back).
+                Racks.Views.RacksMessageBox.Show($"Import cancelled: {ex.Message}\n\nYour existing racks are unchanged.", "Import racks");
+            }
             catch (System.Exception ex) { System.Diagnostics.Debug.WriteLine($"Import failed: {ex.Message}"); }
         }
         private void Window_Initialized(object sender, EventArgs e)

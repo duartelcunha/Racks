@@ -115,10 +115,6 @@ namespace Racks.Util
             oContextMenu.InvokeCommand(ref invoke);
         }
 
-        // Resolve a selected command to its canonical (language-independent) verb and check
-        // if it's the Delete verb. Uses the ANSI GetCommandString on IContextMenu; the shell
-        // returns "delete" for both "Delete" and "Delete permanently" (Shift+Delete), so this
-        // catches both. Returns false on any failure so protection never blocks a real action.
         // Build (once) a 16x16 32-bpp HBITMAP of the Racks logo for the custom menu item.
         // Uses a WPF render of the packed ico.png so it keeps its alpha. Returns Zero on any
         // failure so the menu item just falls back to text.
@@ -159,16 +155,31 @@ namespace Racks.Util
             catch { return IntPtr.Zero; }
         }
 
+        // Resolve a selected command to its canonical (language-independent) verb and check if
+        // it's the Delete verb. The shell returns "delete" for both "Delete" and Shift+Delete
+        // ("Delete permanently"), so this catches both. We query BOTH the Unicode (VERBW) and
+        // ANSI (VERBA) forms: newer Win11 shell items expose only the wide verb, so an ANSI-only
+        // check (the previous behavior) could miss a real Delete and let it through. If either
+        // form resolves to "delete", we block. Unresolvable verbs are still allowed through so
+        // legitimate third-party menu items that don't implement GetCommandString keep working.
         private bool IsDeleteVerb(IContextMenu oContextMenu, uint nSelected)
+        {
+            return VerbEquals(oContextMenu, nSelected, GCS.VERBW, unicode: true, "delete")
+                || VerbEquals(oContextMenu, nSelected, GCS.VERBA, unicode: false, "delete");
+        }
+
+        private bool VerbEquals(IContextMenu menu, uint nSelected, GCS flag, bool unicode, string expected)
         {
             try
             {
-                byte[] buffer = new byte[256];
-                int hr = oContextMenu.GetCommandString(nSelected - CMD_FIRST, GCS.VERBA, 0, buffer, buffer.Length);
-                int len = Array.IndexOf(buffer, (byte)0);
-                if (len < 0) len = buffer.Length;
-                string verb = (hr == S_OK && len > 0) ? Encoding.ASCII.GetString(buffer, 0, len) : "";
-                return string.Equals(verb, "delete", StringComparison.OrdinalIgnoreCase);
+                byte[] buffer = new byte[512];
+                // cch is the buffer size in CHARACTERS: wide chars are 2 bytes each.
+                int cch = unicode ? buffer.Length / 2 : buffer.Length;
+                int hr = menu.GetCommandString(nSelected - CMD_FIRST, flag, 0, buffer, cch);
+                if (hr != S_OK) return false;
+                string verb = (unicode ? Encoding.Unicode.GetString(buffer) : Encoding.ASCII.GetString(buffer))
+                    .Split('\0')[0];
+                return string.Equals(verb, expected, StringComparison.OrdinalIgnoreCase);
             }
             catch { return false; }
         }
