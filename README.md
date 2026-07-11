@@ -9,6 +9,8 @@
 <sub>Lives in your tray. Drop files into racks on your wallpaper instead of onto your desktop. Zero clutter, zero cloud.</sub>
 
 <p>
+  <a href="https://github.com/duartelcunha/Racks/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/duartelcunha/Racks/build.yml?style=for-the-badge&label=Build" alt="Build" /></a>
+  &nbsp;
   <a href="https://github.com/duartelcunha/Racks/releases/latest"><img src="https://img.shields.io/github/v/release/duartelcunha/Racks?style=for-the-badge&label=Download&color=2ea043" alt="Download" /></a>
   &nbsp;
   <a href="https://github.com/duartelcunha/Racks/stargazers"><img src="https://img.shields.io/github/stars/duartelcunha/Racks?style=for-the-badge&color=f5a623" alt="Stars" /></a>
