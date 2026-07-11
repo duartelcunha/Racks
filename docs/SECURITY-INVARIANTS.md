@@ -3,7 +3,7 @@
 Registo de segurança do Racks. Cada invariante é uma regra que previne uma classe inteira.
 Origem: sweep multi-agente read-only (5 lentes + síntese) em 2026-07-11.
 
-Estado dos fixes: **Lote A aplicado** (commit desta ronda). Lotes B/C/D em aberto, à espera de decisão.
+Estado dos fixes: **Lotes A e B aplicados**. Lotes C/D em aberto, à espera de decisão.
 
 Modelo de ameaça: app desktop nativa (sem servidor/HTTP/backend). A fronteira de confiança é
 outros processos locais (mesmo utilizador), o sistema de ficheiros, o caminho de rede até ao
@@ -58,8 +58,8 @@ Gravidade / estado. `file:line` do sweep (podem ter drift de 1-2 linhas).
 
 ### HIGH
 
-**H1 — Updater executa `assets[0]` do release sem verificação** `Racks/Util/Updater.cs:36,131,191` · ABERTO (Lote B)
-Descarrega e corre o primeiro asset do último release. Sem Authenticode, sem hash, sem validar host/repo/nome. TLS OK (vetor = release comprometido / takeover de conta, não MITM). Ponto mais crítico. → INV-UPDATE-1.
+**H1 — Updater executa `assets[0]` do release sem verificação** `Racks/Util/Updater.cs` · ✅ CORRIGIDO PARCIAL (Lote B)
+Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), URL validada (HTTPS + host `github.com` + path `/duartelcunha/Racks/releases/download/`), tamanho verificado vs a API, e re-validação antes de descarregar. **Resíduo aceite:** a app não é code-signed, portanto não há verificação Authenticode; o vetor fica reduzido a um compromisso genuíno do repo/conta GitHub (mesma confiança de `git clone` + build). Fecho total exige code-signing. → INV-UPDATE-1.
 
 **H2 — Import de layout JSON sem validação, persistido no registo** `Racks/Util/RackLayoutIO.cs` · PARCIAL (nome validado em Lote A; falta canonicalizar Folder/BackgroundImagePath, allowlist de valores) → INV-IMPORT-1.
 
@@ -77,7 +77,7 @@ Descarrega e corre o primeiro asset do último release. Sem Authenticode, sem ha
 
 ### LOW
 
-**L1 — Installer no temp com nome previsível `%TEMP%\Racks.exe`** `Updater.cs:137` · ABERTO (Lote D) → INV-EXEC-1.
+**L1 — Installer no temp com nome previsível `%TEMP%\Racks.exe`** `Updater.cs` · ✅ CORRIGIDO (Lote B, nome aleatório `Racks-update-{guid}.exe` + verificação de tamanho) → INV-EXEC-1.
 **L2 — Uninstaller corre cópia de `{tmp}\RacksFarewell` (TOCTOU same-user)** `installer/Racks.iss:128-138` · ABERTO (Lote D).
 **L3 — `SafeDelete` check-then-recurse TOCTOU em junctions** `SafeDelete.cs:25-35` · ABERTO (Lote D) → INV-DELETE-2.
 **L4 — `CopyDirectory` cross-volume segue junctions (recursão/explosão)** `SafeMove.cs:151-162` · ABERTO (Lote D).

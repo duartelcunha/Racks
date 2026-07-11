@@ -12,8 +12,14 @@ namespace Racks
     {
         private static string _url = "";
         private static string _downloadUrl = "";
+        private static long _expectedSize = -1;
         private static string tag_name = "";
         private static int updateCount = 0;
+
+        // The only host/path the update binary may come from. TLS proves it's really GitHub;
+        // this proves it's OUR repo's release asset and not an arbitrary URL from the JSON.
+        private const string TrustedAssetHost = "github.com";
+        private const string TrustedAssetPathPrefix = "/duartelcunha/Racks/releases/download/";
         public static async Task CheckUpdateAsync(string url, bool showToastIfNoUpdate)
         {
             _url = url;
@@ -33,8 +39,6 @@ namespace Racks
                         string description = root.GetProperty("body").GetString()!;
                         string published_at = root.GetProperty("published_at").GetString()!;
                         string name = root.GetProperty("name").GetString()!;
-                        string downloadUrl = root.GetProperty("assets")[0].GetProperty("browser_download_url").GetString()!;
-                        _downloadUrl = downloadUrl;
                         string emoji = (name.ToLower().Contains("fix"), name.ToLower().Contains("feature")) switch
                         {
                             (true, true) => "🚀",
@@ -43,8 +47,13 @@ namespace Racks
                             _ => "🚀"
                         };
 
-                        if (IsNewer(latestVersion, currentVersion))
+                        // Select the installer asset BY NAME (not blind assets[0], which an extra
+                        // asset uploaded first could hijack) and only if its URL is our GitHub
+                        // release path over HTTPS. If none qualifies, we don't offer the update.
+                        if (IsNewer(latestVersion, currentVersion) && TrySelectTrustedAsset(root, out string durl, out long dsize))
                         {
+                            _downloadUrl = durl;
+                            _expectedSize = dsize;
                             var toastBuilder = new ToastContentBuilder()
                                  .AddText($"{emoji} New release! {name}", AdaptiveTextStyle.Header)
                                  .AddText(description, AdaptiveTextStyle.Body)
@@ -104,8 +113,52 @@ namespace Racks
             return $"{Get(0)}.{Get(1)}.{Get(2)}";
         }
 
+        // Pick the release's installer asset by name (Racks-Setup-*.exe) and validate its URL.
+        // Returns false if no asset matches or the URL isn't our trusted GitHub release path.
+        private static bool TrySelectTrustedAsset(JsonElement root, out string url, out long size)
+        {
+            url = ""; size = -1;
+            if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
+                return false;
+            foreach (var asset in assets.EnumerateArray())
+            {
+                string aname = asset.TryGetProperty("name", out var n) ? (n.GetString() ?? "") : "";
+                if (!aname.StartsWith("Racks-Setup-", StringComparison.OrdinalIgnoreCase)
+                    || !aname.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
+                string durl = asset.TryGetProperty("browser_download_url", out var d) ? (d.GetString() ?? "") : "";
+                if (!IsTrustedDownloadUrl(durl)) continue;
+                url = durl;
+                size = asset.TryGetProperty("size", out var s) && s.TryGetInt64(out var sv) ? sv : -1;
+                return true;
+            }
+            return false;
+        }
+
+        // HTTPS + github.com + our repo's /releases/download/ path. The GitHub API always returns
+        // such a URL; the 302 to objects.githubusercontent.com happens at download time and is
+        // covered by TLS. Note: the app is not code-signed, so we can't verify Authenticode; this
+        // shrinks the risk to a genuine compromise of the GitHub repo/release itself.
+        private static bool IsTrustedDownloadUrl(string url)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+            if (uri.Scheme != Uri.UriSchemeHttps) return false;
+            return string.Equals(uri.Host, TrustedAssetHost, StringComparison.OrdinalIgnoreCase)
+                && uri.AbsolutePath.StartsWith(TrustedAssetPathPrefix, StringComparison.OrdinalIgnoreCase);
+        }
+
         public static async Task InstallUpdate()
         {
+            // Defense in depth: never download/run a URL that isn't our trusted release asset,
+            // even if _downloadUrl was somehow set without going through TrySelectTrustedAsset.
+            if (!IsTrustedDownloadUrl(_downloadUrl))
+            {
+                new ToastContentBuilder()
+                    .AddText("Update blocked", AdaptiveTextStyle.Header)
+                    .AddText("The update source could not be verified as an official Racks release.", AdaptiveTextStyle.Body)
+                    .Show();
+                return;
+            }
+
             string tag = "update";
             string group = "downloads";
 
@@ -134,7 +187,10 @@ namespace Racks
                 var totalBytes = response.Content.Headers.ContentLength ?? -1L;
                 var canReportProgress = totalBytes != -1;
 
-                string tempFilePath = Path.Combine(Path.GetTempPath(), $"{Assembly.GetExecutingAssembly().GetName().Name}.exe");
+                // Random per-download name (not a fixed %TEMP%\Racks.exe): closes the window
+                // where another same-user process could pre-place a binary at a predictable path
+                // and have the trusted updater launch it.
+                string tempFilePath = Path.Combine(Path.GetTempPath(), $"Racks-update-{Guid.NewGuid():N}.exe");
 
                 using (var inputStream = await response.Content.ReadAsStreamAsync())
                 using (var outputStream = new FileStream(tempFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -174,6 +230,23 @@ namespace Racks
                     }
                 }
                 ToastNotificationManagerCompat.CreateToastNotifier().Hide(notif);
+
+                // Verify the downloaded size matches what the release API reported. Guards against
+                // a truncated/incomplete download (disk full, dropped connection) being executed.
+                if (_expectedSize > 0)
+                {
+                    long actual = new FileInfo(tempFilePath).Length;
+                    if (actual != _expectedSize)
+                    {
+                        try { File.Delete(tempFilePath); } catch { }
+                        new ToastContentBuilder()
+                            .AddText("Update download incomplete", AdaptiveTextStyle.Header)
+                            .AddText("The downloaded installer did not match the expected size and was discarded.", AdaptiveTextStyle.Body)
+                            .Show();
+                        return;
+                    }
+                }
+
                 await RestartApplication(tempFilePath);
             }
         }
