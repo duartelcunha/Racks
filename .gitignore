@@ -376,3 +376,9 @@ blur-screenshots.ps1
 # Throwaway WPF scratch/verification project (not part of the app)
 WpfTest/
 installer-build.log
+
+# Private marketing/launch notes (do not publish)
+MARKETING-PLAYBOOK.md
+
+# Per-release notes drafts (kept local; the published notes live on GitHub Releases)
+release-notes-*.md
