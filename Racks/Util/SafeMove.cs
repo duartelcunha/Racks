@@ -164,9 +164,12 @@ namespace Racks.Util
         private static bool IsProtectedPath(string path, out string kind)
         {
             kind = "";
-            string full;
-            try { full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar); }
-            catch { return false; }
+            // Canonicalize (resolve 8.3 short names, \\?\ prefixes, subst drives, junctions/
+            // symlinks) BEFORE comparing. A literal string compare could be bypassed by an alias
+            // of a protected folder (e.g. an 8.3 name, a UNC admin-share form, or a junction whose
+            // target is the Desktop), letting SafeMove move/delete the real protected folder.
+            string full = Canonicalize(path);
+            if (string.IsNullOrEmpty(full)) return false;
 
             // Drive root: "C:" or "C:\".
             if (full.Length <= 3 && full.Length >= 2 && full[1] == ':')
@@ -181,8 +184,7 @@ namespace Racks.Util
                 try { sfPath = Environment.GetFolderPath(sf); }
                 catch { continue; }
                 if (string.IsNullOrEmpty(sfPath)) continue;
-                if (string.Equals(full, sfPath.TrimEnd(Path.DirectorySeparatorChar),
-                                  StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(full, Canonicalize(sfPath), StringComparison.OrdinalIgnoreCase))
                 {
                     kind = $"protected system folder ({sf})";
                     return true;
@@ -194,8 +196,7 @@ namespace Racks.Util
             {
                 string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                 string downloads = Path.Combine(profile, "Downloads");
-                if (string.Equals(full, downloads.TrimEnd(Path.DirectorySeparatorChar),
-                                  StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(full, Canonicalize(downloads), StringComparison.OrdinalIgnoreCase))
                 {
                     kind = "user folder (Downloads)";
                     return true;
@@ -206,6 +207,54 @@ namespace Racks.Util
             return false;
         }
 
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr CreateFileW(string lpFileName, uint dwDesiredAccess, uint dwShareMode,
+            IntPtr lpSecurityAttributes, uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern uint GetFinalPathNameByHandleW(IntPtr hFile, [Out] char[] lpszFilePath, uint cchFilePath, uint dwFlags);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr hObject);
+        private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000; // required to open a directory handle
+        private const uint FILE_SHARE_ALL = 0x7;                    // read | write | delete
+        private const uint OPEN_EXISTING = 3;
+        private static readonly IntPtr INVALID_HANDLE = new IntPtr(-1);
+
+        // Resolve a path to its canonical, volume-rooted final form. Falls back to GetFullPath
+        // for paths that can't be opened (e.g. don't exist yet). Returns without a trailing
+        // separator and without the \\?\ prefix so results compare cleanly.
+        private static string Canonicalize(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            try
+            {
+                IntPtr h = CreateFileW(path, 0, FILE_SHARE_ALL, IntPtr.Zero, OPEN_EXISTING,
+                    FILE_FLAG_BACKUP_SEMANTICS, IntPtr.Zero);
+                if (h == INVALID_HANDLE) return NormalizeFallback(path);
+                try
+                {
+                    var buf = new char[1024];
+                    uint len = GetFinalPathNameByHandleW(h, buf, (uint)buf.Length, 0);
+                    if (len == 0 || len > buf.Length) return NormalizeFallback(path);
+                    return StripPrefix(new string(buf, 0, (int)len));
+                }
+                finally { CloseHandle(h); }
+            }
+            catch { return NormalizeFallback(path); }
+        }
+
+        private static string NormalizeFallback(string path)
+        {
+            try { return StripPrefix(Path.GetFullPath(path)); }
+            catch { return path.TrimEnd(Path.DirectorySeparatorChar); }
+        }
+
+        private static string StripPrefix(string p)
+        {
+            if (p.StartsWith(@"\\?\UNC\", StringComparison.Ordinal)) p = @"\\" + p.Substring(8);
+            else if (p.StartsWith(@"\\?\", StringComparison.Ordinal)) p = p.Substring(4);
+            return p.TrimEnd(Path.DirectorySeparatorChar);
+        }
+
         // True when dest is the same as src, or sits beneath src in the tree.
         // Prevents Directory.Move from being asked to move a folder into one of
         // its own children — which throws midway and leaves a half-moved tree.
@@ -213,8 +262,11 @@ namespace Racks.Util
         {
             try
             {
-                string srcFull = Path.GetFullPath(src).TrimEnd(Path.DirectorySeparatorChar);
-                string destFull = Path.GetFullPath(dest).TrimEnd(Path.DirectorySeparatorChar);
+                // Canonicalize so an alias of src (8.3 name, junction, subst) can't sneak dest
+                // "outside" src in a literal compare while really sitting inside it.
+                string srcFull = Canonicalize(src);
+                string destFull = Canonicalize(dest);
+                if (string.IsNullOrEmpty(srcFull) || string.IsNullOrEmpty(destFull)) return false;
                 if (string.Equals(srcFull, destFull, StringComparison.OrdinalIgnoreCase)) return true;
                 return destFull.StartsWith(srcFull + Path.DirectorySeparatorChar,
                                            StringComparison.OrdinalIgnoreCase);

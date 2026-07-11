@@ -1636,16 +1636,21 @@ namespace Racks
 
                 if (newOnDesktop)
                 {
-                    // Explorer already moved/copied it to the desktop. Delete the sandbox original
-                    // so only the desktop copy remains (no duplicate), then drop the rack's claim.
-                    // Windows places the returned icon itself (near the drop / next free grid cell);
-                    // pixel-exact placement from an outside process isn't reliably possible.
-                    try
+                    // Explorer copied the item to the desktop (if it had MOVED it, the sandbox
+                    // original would already be gone). Remove the sandbox original so it isn't a
+                    // duplicate - but ONLY once the desktop copy is confirmed COMPLETE, and only
+                    // to the Recycle Bin, never a permanent delete. Explorer copies large folders
+                    // asynchronously, so a name-existence heuristic alone could delete the source
+                    // mid-copy and lose data - the app's core promise is that a rack never loses a
+                    // file. If we can't confirm the copy finished, we keep the original (a brief
+                    // duplicate is fine; data loss is not).
+                    if (!CopyLooksComplete(workspaceFullPath, desktopTarget))
                     {
-                        if (File.Exists(workspaceFullPath)) File.Delete(workspaceFullPath);
-                        else if (Directory.Exists(workspaceFullPath)) Directory.Delete(workspaceFullPath, true);
+                        Debug.WriteLine("Drag-out: desktop copy not confirmed complete; keeping sandbox original.");
+                        return; // keep the rack's claim and the original - no data loss
                     }
-                    catch (Exception ex) { Debug.WriteLine($"Drag-out workspace cleanup failed: {ex.Message}"); }
+                    if (!Util.SafeDelete.ToRecycleBin(workspaceFullPath))
+                        Debug.WriteLine("Drag-out: could not recycle sandbox original; leaving it in place.");
                 }
                 else
                 {
@@ -1668,6 +1673,42 @@ namespace Racks
                 LoadFiles(_currentFolderPath);
             }
             catch (Exception ex) { Debug.WriteLine($"HandleDesktopRackDragOut failed: {ex.Message}"); }
+        }
+
+        // Confirm the desktop copy of `source` is a COMPLETE copy before we remove the sandbox
+        // original. Explorer copies asynchronously, so the destination can exist while still being
+        // written. For a file we compare size; for a folder we compare recursive file count and
+        // total byte size. Any mismatch or error => not complete (caller keeps the original).
+        private static bool CopyLooksComplete(string source, string dest)
+        {
+            try
+            {
+                if (File.Exists(source))
+                {
+                    if (!File.Exists(dest)) return false;
+                    return new FileInfo(source).Length == new FileInfo(dest).Length;
+                }
+                if (Directory.Exists(source))
+                {
+                    if (!Directory.Exists(dest)) return false;
+                    var (sc, ss) = CountAndSize(source);
+                    var (dc, ds) = CountAndSize(dest);
+                    return sc == dc && ss == ds;
+                }
+                return false;
+            }
+            catch { return false; }
+        }
+
+        private static (long count, long size) CountAndSize(string dir)
+        {
+            long count = 0, size = 0;
+            foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+            {
+                count++;
+                try { size += new FileInfo(f).Length; } catch { }
+            }
+            return (count, size);
         }
 
         // True if the drop point is over the desktop (the wallpaper / SHELLDLL_DefView),

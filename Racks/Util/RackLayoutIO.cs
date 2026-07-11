@@ -82,6 +82,15 @@ namespace Racks.Util
             {
                 if (!IsValidRackName(rack.Name))
                     throw new InvalidDataException($"Layout contains an unsafe rack name: '{rack.Name}'.");
+                foreach (var key in _pathValueNames)
+                {
+                    if (rack.Values.TryGetValue(key, out var raw))
+                    {
+                        string? p = ValueAsString(raw);
+                        if (!IsSafeImportedPath(p))
+                            throw new InvalidDataException($"Layout rack '{rack.Name}' has an unsafe {key}: '{p}'.");
+                    }
+                }
             }
 
             string root = $@"SOFTWARE\{InstanceController.appName}\Instances";
@@ -121,6 +130,27 @@ namespace Racks.Util
                && name.IndexOf('/') < 0
                && name != "." && name != ".."
                && name.Length <= 255;
+
+        // Value names that hold a filesystem path and so are validated on import.
+        private static readonly string[] _pathValueNames = { "Folder", "BackgroundImagePath" };
+
+        private static string? ValueAsString(object? raw)
+            => raw is JsonElement je
+                ? (je.ValueKind == JsonValueKind.String ? je.GetString() : null)
+                : raw as string;
+
+        // An imported path must be empty, a known sentinel, or an absolute rooted path with no
+        // ".." traversal segment - so a hostile layout can't point a rack at a relative/traversal
+        // location the app then reads or mirrors. UNC/network paths are allowed (legitimate).
+        private static bool IsSafeImportedPath(string? value)
+        {
+            if (string.IsNullOrEmpty(value)) return true;
+            if (value == "empty" || value == "Default Style") return true; // rack sentinels
+            foreach (var seg in value.Split('\\', '/'))
+                if (seg == "..") return false;
+            try { return Path.IsPathRooted(value); }
+            catch { return false; }
+        }
 
         private static int WriteRacks(string root, List<RackDto> racks)
         {

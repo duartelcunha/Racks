@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace Racks.Util
 {
@@ -48,6 +49,47 @@ namespace Racks.Util
             }
 
             try { Directory.Delete(path, recursive: false); } catch { }
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct SHFILEOPSTRUCT
+        {
+            public IntPtr hwnd;
+            public uint wFunc;
+            public string pFrom;
+            public string? pTo;
+            public ushort fFlags;
+            public bool fAnyOperationsAborted;
+            public IntPtr hNameMappings;
+            public string? lpszProgressTitle;
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern int SHFileOperation(ref SHFILEOPSTRUCT lpFileOp);
+
+        private const uint FO_DELETE = 0x0003;
+        private const ushort FOF_SILENT = 0x0004;
+        private const ushort FOF_NOCONFIRMATION = 0x0010;
+        private const ushort FOF_ALLOWUNDO = 0x0040;   // send to Recycle Bin instead of permanent delete
+        private const ushort FOF_NOERRORUI = 0x0400;
+
+        // Send a file or folder to the Recycle Bin (recoverable), silently. Used where the app
+        // removes something the user could conceivably want back, so a mistake or a mid-operation
+        // race is never a permanent loss. Returns true on success.
+        public static bool ToRecycleBin(string path)
+        {
+            if (string.IsNullOrEmpty(path) || (!File.Exists(path) && !Directory.Exists(path))) return false;
+            try
+            {
+                var op = new SHFILEOPSTRUCT
+                {
+                    wFunc = FO_DELETE,
+                    pFrom = path + "\0\0", // pFrom is a double-null-terminated list
+                    fFlags = (ushort)(FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI),
+                };
+                return SHFileOperation(ref op) == 0 && !op.fAnyOperationsAborted;
+            }
+            catch { return false; }
         }
     }
 }

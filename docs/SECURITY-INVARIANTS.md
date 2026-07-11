@@ -3,7 +3,7 @@
 Registo de segurança do Racks. Cada invariante é uma regra que previne uma classe inteira.
 Origem: sweep multi-agente read-only (5 lentes + síntese) em 2026-07-11.
 
-Estado dos fixes: **Lotes A e B aplicados**. Lotes C/D em aberto, à espera de decisão.
+Estado dos fixes: **Lotes A, B e C aplicados**. Lote D (endurecimento) em aberto.
 
 Modelo de ameaça: app desktop nativa (sem servidor/HTTP/backend). A fronteira de confiança é
 outros processos locais (mesmo utilizador), o sistema de ficheiros, o caminho de rede até ao
@@ -61,17 +61,17 @@ Gravidade / estado. `file:line` do sweep (podem ter drift de 1-2 linhas).
 **H1 — Updater executa `assets[0]` do release sem verificação** `Racks/Util/Updater.cs` · ✅ CORRIGIDO PARCIAL (Lote B)
 Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), URL validada (HTTPS + host `github.com` + path `/duartelcunha/Racks/releases/download/`), tamanho verificado vs a API, e re-validação antes de descarregar. **Resíduo aceite:** a app não é code-signed, portanto não há verificação Authenticode; o vetor fica reduzido a um compromisso genuíno do repo/conta GitHub (mesma confiança de `git clone` + build). Fecho total exige code-signing. → INV-UPDATE-1.
 
-**H2 — Import de layout JSON sem validação, persistido no registo** `Racks/Util/RackLayoutIO.cs` · PARCIAL (nome validado em Lote A; falta canonicalizar Folder/BackgroundImagePath, allowlist de valores) → INV-IMPORT-1.
+**H2 — Import de layout JSON sem validação, persistido no registo** `Racks/Util/RackLayoutIO.cs` · ✅ CORRIGIDO (Lote A nome; Lote C valida `Folder`/`BackgroundImagePath`: rejeita traversal `..` e paths não-rooted, na passagem atómica antes de apagar). Regex do import já limitado por SafeRegex (#3). Resíduo: sem allowlist total de nomes de valor (importar é ação explícita do utilizador; vetores perigosos já fechados). → INV-IMPORT-1.
 
 **H3 — Regex do utilizador sem `MatchTimeout` no UI thread (ReDoS)** `DesktopRouter.cs:73`, `RackWindow.xaml.cs`, `RackViewModel.cs` · ✅ CORRIGIDO (Lote A #3) → INV-REGEX-1.
 
-**H4 — Drag-out apaga original do workspace por heurística de nome, em corrida com a cópia async do Explorer** `Racks/RackWindow.xaml.cs:1635-1648` · ABERTO (Lote C) · SUSPECTED. Delete permanente (sem Reciclagem) pode destruir a fonte a meio da cópia. → INV-DATALOSS-1.
+**H4 — Drag-out apaga original do workspace por heurística de nome, em corrida com a cópia async do Explorer** `Racks/RackWindow.xaml.cs` · ✅ CORRIGIDO (Lote C). Agora só remove o original depois de `CopyLooksComplete` confirmar que a cópia no desktop está completa (compara tamanho/contagem recursiva), e vai para a **Reciclagem** (`SafeDelete.ToRecycleBin`), nunca delete permanente. Se não confirmar, mantém o original (duplicado temporário em vez de perda). → INV-DATALOSS-1.
 
 ### MEDIUM
 
 **M1 — Import com `replaceExisting` apaga todas as racks antes de escrever, sem rollback** `RackLayoutIO.cs` · ✅ CORRIGIDO (Lote A #5, atómico + rollback) → INV-IMPORT-2.
 
-**M2 — `SafeMove` compara paths como strings; contornável por 8.3, `\\?\`, UNC, junctions** `SafeMove.cs:164-207` · ABERTO (Lote C) → INV-PATH-1.
+**M2 — `SafeMove` compara paths como strings; contornável por 8.3, `\\?\`, UNC, junctions** `SafeMove.cs` · ✅ CORRIGIDO (Lote C). `Canonicalize` via `GetFinalPathNameByHandle` resolve 8.3/junctions/subst/`\\?\` antes de comparar, em `IsProtectedPath` e `IsAncestorOrEqual`. Testado: nome 8.3 canonicaliza para o mesmo path (bypass fechado), sem falso-positivo em paths normais. → INV-PATH-1.
 
 **M3 — Proteção de delete fail-open, só verbo "delete" ANSI** `ShellContextMenu.cs` · PARCIAL: VERBW+VERBA aplicado (Lote A #7). Allowlist total NÃO aplicada de propósito: bloquear todos os verbos não-allowlisted arriscava partir itens legítimos de terceiros (Open With, Send To, extensões) — regressão de QoL. Verbo irresolúvel continua a passar. → INV-DELETE-1 (parcial).
 
