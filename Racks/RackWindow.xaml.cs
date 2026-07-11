@@ -5153,6 +5153,12 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
                         string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                         foreach (string fileName in Instance.AssignedFiles)
                         {
+                            // AssignedFiles is persisted in HKCU; treat each entry as a plain leaf
+                            // name by contract. Skip anything with a separator or ".." so a
+                            // hand-edited/imported value can't Path.Combine its way out of the
+                            // workspace and move an arbitrary file to the desktop.
+                            if (string.IsNullOrEmpty(fileName) || System.IO.Path.GetFileName(fileName) != fileName)
+                                continue;
                             string wpPath = System.IO.Path.Combine(DesktopIconManager.RacksWorkspacePath, fileName);
                             string destPath = System.IO.Path.Combine(desktopPath, fileName);
                             if (System.IO.File.Exists(wpPath) || System.IO.Directory.Exists(wpPath))

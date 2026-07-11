@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 
@@ -15,40 +16,45 @@ namespace Racks.Util
     {
         public static void DeleteDirectoryRecursive(string path)
         {
-            if (!Directory.Exists(path)) return;
+            DirectoryInfo root;
+            try { root = new DirectoryInfo(path); if (!root.Exists) return; }
+            catch { return; }
+            DeleteDirectoryRecursive(root);
+        }
 
-            if (JunctionHelper.IsReparsePoint(path))
+        private static void DeleteDirectoryRecursive(DirectoryInfo dir)
+        {
+            // Classify from the attributes captured DURING enumeration (a single filesystem op),
+            // not a separate stat that an attacker/sync-client could race by swapping a real
+            // subdirectory for a junction in between. If this dir is a reparse point (junction/
+            // symlink), unlink it without descending so the target's contents are never deleted.
+            if ((dir.Attributes & FileAttributes.ReparsePoint) != 0)
             {
-                try { Directory.Delete(path, recursive: false); } catch { }
+                try { dir.Delete(recursive: false); } catch { }
                 return;
             }
 
-            foreach (var dir in Directory.EnumerateDirectories(path))
-            {
-                if (JunctionHelper.IsReparsePoint(dir))
-                {
-                    try { Directory.Delete(dir, recursive: false); } catch { }
-                }
-                else
-                {
-                    DeleteDirectoryRecursive(dir);
-                }
-            }
+            IEnumerable<DirectoryInfo> subDirs;
+            try { subDirs = dir.EnumerateDirectories(); }
+            catch { subDirs = Array.Empty<DirectoryInfo>(); }
+            foreach (var sub in subDirs) DeleteDirectoryRecursive(sub);
 
-            foreach (var file in Directory.EnumerateFiles(path))
+            IEnumerable<FileInfo> files;
+            try { files = dir.EnumerateFiles(); }
+            catch { files = Array.Empty<FileInfo>(); }
+            foreach (var file in files)
             {
                 try
                 {
-                    // Clear read-only so File.Delete can actually remove it.
-                    var attrs = File.GetAttributes(file);
-                    if ((attrs & FileAttributes.ReadOnly) != 0)
-                        File.SetAttributes(file, attrs & ~FileAttributes.ReadOnly);
-                    File.Delete(file);
+                    // Clear read-only so Delete can actually remove it.
+                    if ((file.Attributes & FileAttributes.ReadOnly) != 0)
+                        file.Attributes &= ~FileAttributes.ReadOnly;
+                    file.Delete();
                 }
                 catch { }
             }
 
-            try { Directory.Delete(path, recursive: false); } catch { }
+            try { dir.Delete(recursive: false); } catch { }
         }
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

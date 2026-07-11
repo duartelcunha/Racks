@@ -120,11 +120,11 @@ namespace Racks.Util
             }
             catch (Exception ex)
             {
-                // Best-effort cleanup of a partial copy so we don't leave junk
-                // behind in the destination.
+                // Best-effort cleanup of a partial copy so we don't leave junk behind. Route
+                // through SafeDelete so the cleanup itself never follows a reparse point.
                 try
                 {
-                    if (srcIsDir && Directory.Exists(dest)) Directory.Delete(dest, recursive: true);
+                    if (srcIsDir && Directory.Exists(dest)) SafeDelete.DeleteDirectoryRecursive(dest);
                     else if (!srcIsDir && File.Exists(dest)) File.Delete(dest);
                 }
                 catch { }
@@ -132,32 +132,46 @@ namespace Racks.Util
                 return Result.Rejected;
             }
 
-            try
+            // Copy succeeded; remove the source. Use SafeDelete (never follows junctions) rather
+            // than a raw recursive delete. If the source can't be fully removed, the destination
+            // still has the data, so it's a Move - just tell the user the original remains.
+            if (srcIsDir)
             {
-                if (srcIsDir) Directory.Delete(src, recursive: true);
-                else File.Delete(src);
+                SafeDelete.DeleteDirectoryRecursive(src);
+                if (Directory.Exists(src))
+                    reason = $"Copied \"{TryGetLeafName(src)}\" but couldn't fully delete the original.";
             }
-            catch (Exception ex)
+            else
             {
-                // Copy succeeded but source delete failed — the destination has
-                // the data, so call it a Move but tell the user the original is
-                // still there. They can clean up manually.
-                reason = $"Copied \"{TryGetLeafName(src)}\" but couldn't delete the original: {ex.Message}";
-                return Result.Moved;
+                try { File.Delete(src); }
+                catch (Exception ex)
+                {
+                    reason = $"Copied \"{TryGetLeafName(src)}\" but couldn't delete the original: {ex.Message}";
+                }
             }
             return Result.Moved;
         }
 
-        private static void CopyDirectory(string src, string dest)
+        private static void CopyDirectory(string src, string dest, int depth = 0)
         {
+            // Backstop against a junction loop (a link pointing at an ancestor) blowing the stack
+            // or filling the disk before it aborts.
+            if (depth > 64) throw new IOException("Directory nesting too deep (possible junction loop).");
+
             Directory.CreateDirectory(dest);
-            foreach (var file in Directory.GetFiles(src))
+            var srcInfo = new DirectoryInfo(src);
+            foreach (var file in srcInfo.EnumerateFiles())
             {
-                File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: false);
+                file.CopyTo(Path.Combine(dest, file.Name), overwrite: false);
             }
-            foreach (var subDir in Directory.GetDirectories(src))
+            foreach (var sub in srcInfo.EnumerateDirectories())
             {
-                CopyDirectory(subDir, Path.Combine(dest, Path.GetFileName(subDir)));
+                // Skip reparse points (junctions/symlinks): descending would copy the link
+                // TARGET's whole tree instead of the link, and a link to an ancestor would recurse
+                // until it aborts. A cross-volume move can't recreate a junction anyway - the link
+                // isn't real data. Classified from the enumeration's own attributes.
+                if ((sub.Attributes & FileAttributes.ReparsePoint) != 0) continue;
+                CopyDirectory(sub.FullName, Path.Combine(dest, sub.Name), depth + 1);
             }
         }
 

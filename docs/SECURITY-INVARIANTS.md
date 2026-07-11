@@ -3,7 +3,7 @@
 Registo de segurança do Racks. Cada invariante é uma regra que previne uma classe inteira.
 Origem: sweep multi-agente read-only (5 lentes + síntese) em 2026-07-11.
 
-Estado dos fixes: **Lotes A, B e C aplicados**. Lote D (endurecimento) em aberto.
+Estado dos fixes: **Lotes A, B, C e D aplicados**. Todos os achados do sweep tratados.
 
 Modelo de ameaça: app desktop nativa (sem servidor/HTTP/backend). A fronteira de confiança é
 outros processos locais (mesmo utilizador), o sistema de ficheiros, o caminho de rede até ao
@@ -79,15 +79,15 @@ Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), UR
 
 **L1 — Installer no temp com nome previsível `%TEMP%\Racks.exe`** `Updater.cs` · ✅ CORRIGIDO (Lote B, nome aleatório `Racks-update-{guid}.exe` + verificação de tamanho) → INV-EXEC-1.
 **L2 — Uninstaller corre cópia de `{tmp}\RacksFarewell` (TOCTOU same-user)** `installer/Racks.iss:128-138` · ABERTO (Lote D).
-**L3 — `SafeDelete` check-then-recurse TOCTOU em junctions** `SafeDelete.cs:25-35` · ABERTO (Lote D) → INV-DELETE-2.
-**L4 — `CopyDirectory` cross-volume segue junctions (recursão/explosão)** `SafeMove.cs:151-162` · ABERTO (Lote D).
+**L3 — `SafeDelete` check-then-recurse TOCTOU em junctions** `SafeDelete.cs` · ✅ CORRIGIDO (Lote D). Reescrito com `DirectoryInfo`, classifica pelos atributos da própria enumeração (uma só operação) em vez de um stat separado. Testado: árvore com junction é apagada, o alvo do junction sobrevive (sem perda de dados).
+**L4 — `CopyDirectory` cross-volume segue junctions (recursão/explosão)** `SafeMove.cs` · ✅ CORRIGIDO (Lote D). Salta reparse points na cópia + cap de profundidade (64). Deletes do `CopyThenDelete` roteados por `SafeDelete`.
 **L5 — Mutex single-instance `Global\` (squatting DoS)** `App.xaml.cs` · ✅ CORRIGIDO (Lote A #12, `Local\`) → INV-INSTANCE-1.
 
 ### INFO
 
-**I1 — `mklink` via `cmd.exe` com interpolação (latente, não explorável hoje)** `JunctionHelper.cs:165` → INV-PROC-1.
-**I2 — `AssignedFiles` do HKCU em `Path.Combine` sem rejeitar `..` (same-user)** `RackWindow.xaml.cs:5119,1595` → INV-IDS-1.
-**I3 — Comentários dizem que `Directory.Delete(recursive)` segue junctions; no .NET 10 não segue** `JunctionHelper.cs:17-19` · risco de manutenção → INV-DELETE-2.
+**I1 — `mklink` via `cmd.exe` com interpolação (latente)** `JunctionHelper.cs` · ✅ CORRIGIDO (Lote D). Usa `ProcessStartInfo.ArgumentList` (quoting per-argumento), à prova de injeção mesmo que um caller futuro passe input não-filesystem. → INV-PROC-1.
+**I2 — `AssignedFiles` do HKCU em `Path.Combine` sem rejeitar `..`** `RackWindow.xaml.cs` · ✅ CORRIGIDO (Lote D). No uso, salta entradas onde `Path.GetFileName(name) != name`. → INV-IDS-1.
+**I3 — Comentários dizem que `Directory.Delete(recursive)` segue junctions; no .NET 10 não segue** `JunctionHelper.cs` · ✅ CORRIGIDO (Lote D). Comentário corrigido; raw deletes de árvores de racks roteados por `SafeDelete` (RackWindow drag-out via Reciclagem, SafeMove via SafeDelete). → INV-DELETE-2.
 
 ---
 

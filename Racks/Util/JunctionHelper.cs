@@ -15,8 +15,10 @@ namespace Racks.Util
     //   - no .lnk file on disk; the entry looks like a real folder,
     //   - removing the junction does NOT touch the target IF the caller deletes
     //     it as a reparse point (Directory.Delete(path, recursive: false)).
-    //     Directory.Delete(path, recursive: true) on a junction DOES follow it
-    //     and wipe the target's contents — see SafeDelete for the safe walker.
+    //     NOTE: on modern .NET, Directory.Delete(path, recursive: true) SKIPS
+    //     name-surrogate reparse points (junctions), so it does not follow them —
+    //     but do not rely on that per call site: all recursive deletes of rack
+    //     trees go through SafeDelete, the single audited no-follow walker.
     //
     // Strategy: build the REPARSE_DATA_BUFFER ourselves and call
     // DeviceIoControl(FSCTL_SET_REPARSE_POINT). If that fails for any reason
@@ -162,13 +164,22 @@ namespace Racks.Util
                     // absent destination.
                     try { Directory.Delete(junctionPath); } catch { }
                 }
-                var psi = new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{junctionPath}\" \"{targetDir}\"")
+                // Pass each token via ArgumentList (not a concatenated command line) so the
+                // framework quotes the paths per-argument. Filesystem paths can't currently
+                // inject (NTFS forbids quotes, Directory.Exists gates the target), but this keeps
+                // the pattern injection-proof if a caller ever passes a non-filesystem string.
+                var psi = new ProcessStartInfo("cmd.exe")
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                 };
+                psi.ArgumentList.Add("/c");
+                psi.ArgumentList.Add("mklink");
+                psi.ArgumentList.Add("/J");
+                psi.ArgumentList.Add(junctionPath);
+                psi.ArgumentList.Add(targetDir);
                 using var proc = Process.Start(psi)!;
                 proc.WaitForExit(5000);
                 if (proc.ExitCode == 0 && IsReparsePoint(junctionPath))
