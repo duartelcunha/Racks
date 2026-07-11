@@ -91,6 +91,25 @@ Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), UR
 
 ---
 
+## Verificação
+
+Métodos de segurança exercitados contra o **`Racks.dll` real** (não mirrors), 12/12 pass:
+SafeRegex (ReDoS limitado a ~250ms), SafeMove (recusa Desktop + o seu alias 8.3 canonicalizado;
+move ficheiro normal), SafeDelete (apaga árvore com junction, alvo do junction sobrevive),
+SafeDelete.ToRecycleBin (envia para a Reciclagem), RackLayoutIO.Import (rejeita nome/Folder com
+traversal antes de escrever). Falta apenas verificação GUI-only (gesto de drag-out real,
+delete-protection num menu de shell real), que exige conduzir a app à mão.
+
+## Code-signing (o residuo do updater)
+
+Sem certificado, o updater não verifica Authenticode. Opções concretas:
+- **SignPath Foundation** (recomendado): OV **grátis** para projetos open-source. O Racks
+  qualifica (MIT, repo público, já tem releases). Assinatura via CI (GitHub Actions), chave num
+  HSM deles. Aplicar em signpath.org. Quando estiver ativo: adicionar o passo de assinatura no CI
+  + a verificação Authenticode+publisher obrigatória no updater (INV-UPDATE-1 fica fechada).
+- **Azure Artifact Signing** (ex-Trusted Signing): ~10 USD/mês, mas para **indivíduos** só EUA/Canadá;
+  na UE só organizações. Um solo dev em PT precisaria de registar empresa. Menos indicado.
+
 ## Segredos / exposição no GitHub
 
 Verificado em 2026-07-11: **zero segredos** em ficheiros tracked ou no histórico git. Endpoints só
