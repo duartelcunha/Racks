@@ -17,7 +17,7 @@ namespace Racks.Util
     {
         public enum Result
         {
-            Moved,      // Move (or copy+delete fallback) completed.
+            Moved,      // Native move completed without overwriting.
             Skipped,    // Name collision in the destination — no-op.
             Rejected,   // Refused on safety grounds. Reason is populated.
         }
@@ -84,19 +84,19 @@ namespace Racks.Util
                 return Result.Skipped;
             }
 
-            bool srcIsDir = Directory.Exists(src);
             try
             {
-                if (srcIsDir) Directory.Move(src, dest);
-                else File.Move(src, dest);
+                Racks.Core.SafeFiles.ValidateMove(Path.GetFullPath(src), Path.GetFullPath(dest));
+                Racks.Core.SafeFiles.RejectLinkAncestors(src);
+                Racks.Core.SafeFiles.RejectLinkAncestors(Path.GetDirectoryName(dest)!);
+                Racks.Core.SafeFiles.MoveNoReplace(src, dest);
                 return Result.Moved;
             }
             catch (IOException ex) when (IsCrossVolumeError(ex))
             {
-                // Cross-volume Directory.Move throws ERROR_NOT_SAME_DEVICE (0x11)
-                // before touching anything; cross-volume File.Move does the same.
-                // Fall back to copy + delete so the user's gesture actually works.
-                return CopyThenDelete(src, dest, srcIsDir, out reason);
+                // Unsupported transfers retain the original and use Explorer.
+                reason = "Use Explorer to transfer this item between volumes. The original has been kept.";
+                return Result.Rejected;
             }
             catch (UnauthorizedAccessException ex)
             {
@@ -107,71 +107,6 @@ namespace Racks.Util
             {
                 reason = $"Failed to move \"{TryGetLeafName(src)}\": {ex.Message}";
                 return Result.Rejected;
-            }
-        }
-
-        private static Result CopyThenDelete(string src, string dest, bool srcIsDir, out string reason)
-        {
-            reason = "";
-            try
-            {
-                if (srcIsDir) CopyDirectory(src, dest);
-                else File.Copy(src, dest, overwrite: false);
-            }
-            catch (Exception ex)
-            {
-                // Best-effort cleanup of a partial copy so we don't leave junk behind. Route
-                // through SafeDelete so the cleanup itself never follows a reparse point.
-                try
-                {
-                    if (srcIsDir && Directory.Exists(dest)) SafeDelete.DeleteDirectoryRecursive(dest);
-                    else if (!srcIsDir && File.Exists(dest)) File.Delete(dest);
-                }
-                catch { }
-                reason = $"Cross-volume copy of \"{TryGetLeafName(src)}\" failed: {ex.Message}";
-                return Result.Rejected;
-            }
-
-            // Copy succeeded; remove the source. Use SafeDelete (never follows junctions) rather
-            // than a raw recursive delete. If the source can't be fully removed, the destination
-            // still has the data, so it's a Move - just tell the user the original remains.
-            if (srcIsDir)
-            {
-                SafeDelete.DeleteDirectoryRecursive(src);
-                if (Directory.Exists(src))
-                    reason = $"Copied \"{TryGetLeafName(src)}\" but couldn't fully delete the original.";
-            }
-            else
-            {
-                try { File.Delete(src); }
-                catch (Exception ex)
-                {
-                    reason = $"Copied \"{TryGetLeafName(src)}\" but couldn't delete the original: {ex.Message}";
-                }
-            }
-            return Result.Moved;
-        }
-
-        private static void CopyDirectory(string src, string dest, int depth = 0)
-        {
-            // Backstop against a junction loop (a link pointing at an ancestor) blowing the stack
-            // or filling the disk before it aborts.
-            if (depth > 64) throw new IOException("Directory nesting too deep (possible junction loop).");
-
-            Directory.CreateDirectory(dest);
-            var srcInfo = new DirectoryInfo(src);
-            foreach (var file in srcInfo.EnumerateFiles())
-            {
-                file.CopyTo(Path.Combine(dest, file.Name), overwrite: false);
-            }
-            foreach (var sub in srcInfo.EnumerateDirectories())
-            {
-                // Skip reparse points (junctions/symlinks): descending would copy the link
-                // TARGET's whole tree instead of the link, and a link to an ancestor would recurse
-                // until it aborts. A cross-volume move can't recreate a junction anyway - the link
-                // isn't real data. Classified from the enumeration's own attributes.
-                if ((sub.Attributes & FileAttributes.ReparsePoint) != 0) continue;
-                CopyDirectory(sub.FullName, Path.Combine(dest, sub.Name), depth + 1);
             }
         }
 
@@ -195,7 +130,7 @@ namespace Racks.Util
             foreach (var sf in _protectedSpecialFolders)
             {
                 string sfPath;
-                try { sfPath = Environment.GetFolderPath(sf); }
+                try { sfPath = Racks.Util.NativeProfile.GetFolderPath(sf); }
                 catch { continue; }
                 if (string.IsNullOrEmpty(sfPath)) continue;
                 if (string.Equals(full, Canonicalize(sfPath), StringComparison.OrdinalIgnoreCase))
@@ -208,7 +143,7 @@ namespace Racks.Util
             // Downloads isn't in the SpecialFolder enum, so check the standard path.
             try
             {
-                string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                string profile = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.UserProfile);
                 string downloads = Path.Combine(profile, "Downloads");
                 if (string.Equals(full, Canonicalize(downloads), StringComparison.OrdinalIgnoreCase))
                 {

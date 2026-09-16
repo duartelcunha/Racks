@@ -1,3 +1,5 @@
+using Registry = Racks.Util.ProfileRegistry;
+using RegistryKey = Racks.Util.ProfileRegistryKey;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.Windows;
@@ -145,7 +147,7 @@ namespace Racks
 
             _instance = new Instance("Default Style", true);
             _instance.SettingDefault = true;
-            _instance.Folder = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            _instance.Folder = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.Desktop);
 
             _dWindows = new RackWindow(_instance);
             _dWindows.addFolder.Visibility = Visibility.Hidden;

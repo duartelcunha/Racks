@@ -1,0 +1,74 @@
+name: Windows signed beta
+on:
+  push:
+    tags: ['v2.*-beta.*']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: windows-beta-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build, test and sign the Windows beta
+        shell: pwsh
+        env:
+          RACKS_PRIVATE_KEY: ${{ secrets.RACKS_UPDATE_PRIVATE_KEY }}
+          RACKS_FEED_BASE: ${{ vars.RACKS_UPDATE_FEED_BASE }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = ([xml](Get-Content src/Racks.Desktop/Racks.Desktop.csproj -Raw)).Project.PropertyGroup.Version
+          if ($env:GITHUB_REF_TYPE -ne 'tag' -or $env:GITHUB_REF_NAME -ne "v$version" -or $version -notmatch '-beta\.') { throw 'Run this workflow from the matching beta version tag.' }
+          if (!$env:RACKS_PRIVATE_KEY -or !$env:RACKS_FEED_BASE) { throw 'Release signing secret/feed variable is not configured.' }
+          $keys = Join-Path $env:RUNNER_TEMP ('racks-signing-' + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $keys | Out-Null
+          $publicKey = [IO.File]::ReadAllText((Join-Path $PWD 'installer/update-public-key.txt')).Trim()
+          [IO.File]::WriteAllText((Join-Path $keys 'NetSparkle_Ed25519.pub'), $publicKey)
+          [IO.File]::WriteAllText((Join-Path $keys 'NetSparkle_Ed25519.priv'), $env:RACKS_PRIVATE_KEY)
+          try {
+            $compiler = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+            if (!$compiler) { throw 'Inno Setup is unavailable.' }
+            ./scripts/Publish-Windows.ps1 -PublicKey $publicKey -FeedBase ($env:RACKS_FEED_BASE + '/beta') -DownloadBase ("https://github.com/" + $env:GITHUB_REPOSITORY + '/releases/download/' + $env:GITHUB_REF_NAME) -KeyPath $keys -OutputDirectory .artifacts/beta-release -InnoCompiler $compiler
+          } finally {
+            Remove-Item -LiteralPath (Join-Path $keys 'NetSparkle_Ed25519.priv') -ErrorAction SilentlyContinue
+          }
+      - name: Prepare reviewable release assets
+        shell: pwsh
+        run: |
+          Copy-Item .artifacts/beta-release/win-x64/appcast.xml .artifacts/beta-release/win-x64-appcast.xml
+          Copy-Item .artifacts/beta-release/win-x64/appcast.xml.signature .artifacts/beta-release/win-x64-appcast.xml.signature
+          $files = @(Get-ChildItem .artifacts/beta-release -File)
+          $files | ForEach-Object { (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_.Name } | Set-Content .artifacts/beta-release/SHA256SUMS.txt
+      - name: Create draft beta release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = ([xml](Get-Content src/Racks.Desktop/Racks.Desktop.csproj -Raw)).Project.PropertyGroup.Version
+          $existing = gh release view $env:GITHUB_REF_NAME --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if (!(($existing | ConvertFrom-Json).isDraft)) { throw 'A published release is immutable; use a new version.' }
+          } else {
+            gh release create $env:GITHUB_REF_NAME --draft --prerelease --target $env:GITHUB_SHA --title "Racks $version - Windows beta" --notes-file docs/BETA-NOTES.md
+            if ($LASTEXITCODE) { throw 'Draft release creation failed.' }
+          }
+          $assets = @(Get-ChildItem .artifacts/beta-release -File | Select-Object -ExpandProperty FullName)
+          gh release upload $env:GITHUB_REF_NAME @assets --clobber
+          if ($LASTEXITCODE) { throw 'Draft asset upload failed.' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-beta-verification
+          include-hidden-files: true
+          path: |
+            tests/**/TestResults/*.trx
+            .artifacts/smoke-*/smoke-result.json
+            .artifacts/smoke-*/restart-result.json
+          retention-days: 14

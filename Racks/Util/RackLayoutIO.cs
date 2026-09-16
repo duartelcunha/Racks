@@ -1,3 +1,5 @@
+using Registry = Racks.Util.ProfileRegistry;
+using RegistryKey = Racks.Util.ProfileRegistryKey;
 using System;
 using System.Collections.Generic;
 using System.IO;

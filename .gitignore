@@ -395,6 +395,7 @@ launchSettings.json
 *.p12
 *.pem
 *.key
+NetSparkle_Ed25519.priv
 # Registry exports (the app's Export Settings writes a full HKCU subtree to a .reg)
 *.reg
 
@@ -404,3 +405,7 @@ test/last-test-result.json
 # Stray native-build artifacts / scratch test exes (dead feature; must not be tracked)
 Racks/RacksHook.*
 Racks/Test*.exe
+# Local development SDK and isolated application profiles
+.tools/
+.artifacts/
+TestResults/

@@ -1,3 +1,5 @@
+using Registry = Racks.Util.ProfileRegistry;
+using RegistryKey = Racks.Util.ProfileRegistryKey;
 using Racks;
 using Microsoft.Win32;
 using System.Diagnostics;
@@ -21,7 +23,7 @@ public class InstanceController
 
     // Sandbox path used by virtual ("shortcuts-only") frames. Created on first use.
     public static string VirtualFramesRoot => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         appName,
         "VirtualFrames");
 
@@ -44,6 +46,7 @@ public class InstanceController
     // to call any time — Rebuild is idempotent and tolerant of missing state.
     public static void RefreshMirror()
     {
+        if (Racks.Util.NativeProfile.IsIsolated) return;
         try
         {
             var ctrl = MainWindow._controller;
@@ -288,6 +291,13 @@ public class InstanceController
         }
     }
 
+    private void ApplyNewRackAppearance(Instance instance)
+    {
+        // Explicit user defaults win. Existing racks never pass through this method.
+        if (!reg.KeyExistsRoot("TitleBarColor") && !reg.KeyExistsRoot("ListViewBackgroundColor") && !reg.KeyExistsRoot("BackgroundImagePath"))
+            Racks.Util.ThemePresets.Apply(instance, Racks.Util.CossTheme.IsLight ? Racks.Util.ThemePresets.CossLight : Racks.Util.ThemePresets.CossDark);
+    }
+
     public void AddInstance()
     {
         var existingEmptyInstance = Instances.FirstOrDefault(instance => instance.Name == "empty");
@@ -298,6 +308,7 @@ public class InstanceController
         }
 
         var inst = new Instance("empty", false);
+        ApplyNewRackAppearance(inst);
         if (Racks.Util.Interop.GetCursorPos(out Racks.Util.Interop.POINT pt))
         {
             inst.PosX = pt.X - 150;
@@ -335,7 +346,7 @@ public class InstanceController
         var existingEmpty = Instances.FirstOrDefault(i => i.Name == "empty");
         if (existingEmpty != null) Instances.Remove(existingEmpty);
 
-        string desktopFolder = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        string desktopFolder = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
 
         double sWidth = source.Width < 50 ? 300 : source.Width;
         double sHeight = source.Height < 50 ? 400 : source.Height;
@@ -408,7 +419,7 @@ public class InstanceController
         var existingEmpty = Instances.FirstOrDefault(i => i.Name == "empty");
         if (existingEmpty != null) Instances.Remove(existingEmpty);
 
-        string desktopFolder = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        string desktopFolder = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
 
         // Find a safe placement that doesn't overlap existing racks
         double startX = 100;
@@ -439,6 +450,7 @@ public class InstanceController
             PosY = startY,
             AssignedFiles = new List<string>()
         };
+        ApplyNewRackAppearance(inst);
         Instances.Add(inst);
         WriteInstanceToKey(inst);
 
@@ -929,7 +941,7 @@ public class InstanceController
                                 // Folder points at the user's Desktop, mark it as a
                                 // Desktop Filter Rack even if the registry flag was
                                 // never saved (e.g. racks created before this feature).
-                                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                                string desktopPath = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
                                 if (!temp.IsDesktopFilterRack
                                     && !string.IsNullOrEmpty(temp.Folder)
                                     && string.Equals(Path.GetFullPath(temp.Folder), Path.GetFullPath(desktopPath), StringComparison.OrdinalIgnoreCase))

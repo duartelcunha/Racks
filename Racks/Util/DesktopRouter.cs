@@ -24,7 +24,7 @@ namespace Racks.Util
             _instancesProvider = instancesProvider;
             _routeShortcut = routeShortcut;
 
-            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            string desktop = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
             _watcher = new FileSystemWatcher(desktop)
             {
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,

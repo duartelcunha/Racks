@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Racks.Next</AssemblyName>
+    <Version>2.0.0-beta.1</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../../Racks/Icon/Ico.ico</ApplicationIcon>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Racks.Windows.Tests" />
+    <InternalsVisibleTo Include="Racks.UpdateHarness" />
+    <ProjectReference Include="../Racks.Core/Racks.Core.csproj" />
+    <PackageReference Include="Avalonia" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.2" />
+    <PackageReference Include="NetSparkleUpdater.SparkleUpdater" Version="3.1.0" />
+    <Compile Include="../../Racks/Util/ShellLinkHelper.cs" Link="Platform/ShellLinkHelper.cs" />
+    <AvaloniaResource Include="../../Racks/Icon/Ico.ico" Link="Assets/racks.ico" />
+    <AssemblyMetadata Include="UpdatePublicKey" Value="$(RacksUpdatePublicKey)" />
+    <AssemblyMetadata Include="UpdateFeedBase" Value="$(RacksUpdateFeedBase)" />
+  </ItemGroup>
+</Project>

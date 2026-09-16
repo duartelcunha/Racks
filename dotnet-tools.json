@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "netsparkleupdater.tools.appcastgenerator": {
+      "version": "2.9.0",
+      "commands": [
+        "netsparkle-generate-appcast"
+      ],
+      "rollForward": false
+    }
+  }
+}

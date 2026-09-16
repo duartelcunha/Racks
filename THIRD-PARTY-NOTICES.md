@@ -53,3 +53,35 @@ SOFTWARE.
 | Microsoft.WindowsAPICodePack.Shell | Microsoft Software License | https://github.com/contre/Windows-API-Code-Pack-1.1 |
 
 Full license texts are available at each project's source link above.
+
+## Coss UI
+
+The native WPF styles in `Racks/Resources/CossControls.xaml` adapt the visual
+design of [Coss UI](https://coss.com/ui), by the Coss / Cal.com contributors.
+They use the MIT-licensed designs under
+[`apps/ui`](https://github.com/cosscom/coss/tree/main/apps/ui), including the
+button component. No React runtime or browser is included.
+
+The upstream [licensing declaration](https://github.com/cosscom/coss/blob/main/LICENSING.md)
+and `apps/ui/package.json` identify this directory as MIT. The repository's
+AGPL-licensed directories are not included in this adaptation.
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

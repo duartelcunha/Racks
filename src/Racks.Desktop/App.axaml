@@ -1,0 +1,42 @@
+<Application xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="Racks.Desktop.App" RequestedThemeVariant="Default">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="RacksBackground">#10181C</SolidColorBrush>
+          <SolidColorBrush x:Key="RacksSidebar">#162126</SolidColorBrush>
+          <SolidColorBrush x:Key="RacksSurface">#1A272D</SolidColorBrush>
+          <SolidColorBrush x:Key="RacksText">#EAF2EF</SolidColorBrush>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="RacksBackground">#F5F6F2</SolidColorBrush>
+          <SolidColorBrush x:Key="RacksSidebar">#E9EFEA</SolidColorBrush>
+          <SolidColorBrush x:Key="RacksSurface">#FFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="RacksText">#203530</SolidColorBrush>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme />
+    <Style Selector="ScrollViewer"><Setter Property="IsScrollInertiaEnabled" Value="{DynamicResource RacksScrollInertia}"/></Style>
+    <Style Selector="Window"><Setter Property="FontFamily" Value="Inter, Segoe UI"/><Setter Property="FontSize" Value="14"/><Setter Property="Background" Value="{DynamicResource RacksBackground}"/><Setter Property="Foreground" Value="{DynamicResource RacksText}"/></Style>
+    <Style Selector="Button"><Setter Property="CornerRadius" Value="8"/><Setter Property="Padding" Value="14,9"/><Setter Property="MinHeight" Value="36"/></Style>
+    <Style Selector="Button.primary"><Setter Property="Background" Value="#58C4AD"/><Setter Property="Foreground" Value="#102620"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#75D4BD"/><Setter Property="Foreground" Value="#102620"/></Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#44A990"/><Setter Property="Foreground" Value="#102620"/></Style>
+    <Style Selector="Button.quiet"><Setter Property="Background" Value="Transparent"/></Style>
+    <Style Selector="ToggleButton.file-tile:checked /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{DynamicResource RackSelectionBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource RackSelectionBorder}"/><Setter Property="BorderThickness" Value="1"/></Style>
+    <Style Selector="ToggleButton.file-tile:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{DynamicResource RackSelectionBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource RackSelectionBorder}"/></Style>
+    <Style Selector="Button.nav"><Setter Property="Background" Value="Transparent"/><Setter Property="HorizontalAlignment" Value="Stretch"/><Setter Property="HorizontalContentAlignment" Value="Left"/><Setter Property="Padding" Value="14,12"/></Style>
+    <Style Selector="Button.nav.active"><Setter Property="Background" Value="#2458C4AD"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+    <Style Selector="Border.sidebar"><Setter Property="Background" Value="{DynamicResource RacksSidebar}"/></Style>
+    <Style Selector="Border.card"><Setter Property="Background" Value="{DynamicResource RacksSurface}"/></Style>
+    <Style Selector="ListBox.rack-list"><Setter Property="Background" Value="Transparent"/></Style>
+    <Style Selector="ListBox.rack-list ListBoxItem"><Setter Property="Margin" Value="0,0,0,10"/><Setter Property="CornerRadius" Value="12"/><Setter Property="Background" Value="{DynamicResource RacksSurface}"/><Setter Property="Padding" Value="20,14"/></Style>
+    <Style Selector="TextBox"><Setter Property="CornerRadius" Value="8"/><Setter Property="MinHeight" Value="38"/></Style>
+    <Style Selector="TextBlock.muted"><Setter Property="Opacity" Value="0.7"/></Style>
+    <Style Selector="Border.card"><Setter Property="CornerRadius" Value="12"/><Setter Property="BorderThickness" Value="1"/><Setter Property="BorderBrush" Value="#307F8E93"/><Setter Property="Padding" Value="20"/></Style>
+    <Style Selector="ListBoxItem"><Setter Property="Padding" Value="8"/><Setter Property="MinHeight" Value="40"/></Style>
+  </Application.Styles>
+</Application>

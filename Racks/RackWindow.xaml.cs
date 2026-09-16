@@ -1,3 +1,5 @@
+using Registry = Racks.Util.ProfileRegistry;
+using RegistryKey = Racks.Util.ProfileRegistryKey;
 #pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604, CS8618, CS8622, CS8625
 using Racks.ViewModels;
 using Racks.Core;
@@ -70,7 +72,7 @@ namespace Racks
 
         public RackViewModel ViewModel { get; }
         public System.Collections.ObjectModel.ObservableCollection<FileItem> FileItems => ViewModel.FileItems;
-        
+
 
         public bool VirtualDesktopSupported;
         IntPtr hwnd;
@@ -92,13 +94,13 @@ namespace Racks
         bool _dragMovingWinddow = false;
 
 
-        
+
         #pragma warning disable CS0649
         private FileItem? _draggedItem;
 #pragma warning restore CS0649
-        
+
         private List<FileItem> _selectedItems = new List<FileItem>();
-        
+
         private FileItem _itemUnderCursor;
         private FileItem _itemCurrentlyRenaming;
         string _dropIntoFolderPath;
@@ -123,7 +125,7 @@ namespace Racks
         private int _currentVD;
         int _oriPosX, _oriPosY;
         private bool _isBlack = true;
-        
+
         private bool _canAutoClose = true;
         private bool _isLocked = false;
         private bool _isOnTop = false;
@@ -554,7 +556,7 @@ namespace Racks
         {
             if (!(HwndSource.FromHwnd(hWnd).RootVisual is Window rootVisual))
                 return IntPtr.Zero;
-          
+
             if (msg == 0x0005) // WM_SIZE
             {
                 if (_dragMovingWinddow)
@@ -1231,6 +1233,7 @@ namespace Racks
 
         private void SetAsDesktopChild()
         {
+            if (Util.NativeProfile.IsIsolated) { ShowInTaskbar = true; Title = Instance.TitleText ?? Instance.Name; return; }
             // Explorer briefly has no SHELLDLL_DefView while it's restarting (a common
             // user troubleshooting step). This used to retry with no delay and no cap -
             // a 100%-CPU spin on the UI thread that never gave up, hanging the whole
@@ -1372,12 +1375,14 @@ namespace Racks
 
         public void SetAsToolWindow()
         {
+            if (Util.NativeProfile.IsIsolated) return;
             WindowInteropHelper wih = new WindowInteropHelper(this);
             IntPtr dwNew = new IntPtr(((long)Interop.GetWindowLong(wih.Handle, Interop.GWL_EXSTYLE).ToInt32() | 128L | 0x00200000L) & 4294705151L);
             Interop.SetWindowLong((nint)new HandleRef(this, wih.Handle), Interop.GWL_EXSTYLE, dwNew);
         }
         public void SetNoActivate()
         {
+            if (Util.NativeProfile.IsIsolated) return;
             if (_isTopmost)
             {
                 return;
@@ -1518,9 +1523,9 @@ namespace Racks
         {
             base.OnSourceInitialized(e);
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
-            
+
             int exStyle = (int)Interop.GetWindowLong(hwnd, Interop.GWL_EXSTYLE);
-            Interop.SetWindowLong(hwnd, Interop.GWL_EXSTYLE, exStyle | Interop.WS_EX_NOACTIVATE);
+            if (!Util.NativeProfile.IsIsolated) Interop.SetWindowLong(hwnd, Interop.GWL_EXSTYLE, exStyle | Interop.WS_EX_NOACTIVATE);
             WindowChrome.SetWindowChrome(this, Instance.IsLocked ?
                 new WindowChrome
                 {
@@ -1595,7 +1600,7 @@ namespace Racks
                         string shortcutPath = System.IO.Path.Combine(Instance.Folder, fileItem.Name);
                         if (System.IO.File.Exists(shortcutPath))
                         {
-                            try { System.IO.File.Delete(shortcutPath); } catch { }
+                            // Never delete a source based only on the requested drop effect.
                         }
                     }
                 }
@@ -1611,7 +1616,7 @@ namespace Racks
         {
             try
             {
-                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                string desktopPath = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.Desktop);
                 string p = Path.Combine(desktopPath, fileName);
                 return File.Exists(p) || Directory.Exists(p);
             }
@@ -1630,40 +1635,10 @@ namespace Racks
             if (!Instance.IsDesktopFilterRack || string.IsNullOrEmpty(workspaceFullPath)) return;
             try
             {
-                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                string desktopTarget = Path.Combine(desktopPath, fileName);
-                bool newOnDesktop = !desktopHadFileBefore && DesktopHasFile(fileName);
-
-                if (newOnDesktop)
-                {
-                    // Explorer copied the item to the desktop (if it had MOVED it, the sandbox
-                    // original would already be gone). Remove the sandbox original so it isn't a
-                    // duplicate - but ONLY once the desktop copy is confirmed COMPLETE, and only
-                    // to the Recycle Bin, never a permanent delete. Explorer copies large folders
-                    // asynchronously, so a name-existence heuristic alone could delete the source
-                    // mid-copy and lose data - the app's core promise is that a rack never loses a
-                    // file. If we can't confirm the copy finished, we keep the original (a brief
-                    // duplicate is fine; data loss is not).
-                    if (!CopyLooksComplete(workspaceFullPath, desktopTarget))
-                    {
-                        Debug.WriteLine("Drag-out: desktop copy not confirmed complete; keeping sandbox original.");
-                        return; // keep the rack's claim and the original - no data loss
-                    }
-                    if (!Util.SafeDelete.ToRecycleBin(workspaceFullPath))
-                        Debug.WriteLine("Drag-out: could not recycle sandbox original; leaving it in place.");
-                }
-                else
-                {
-                    // Nothing new landed on the desktop. If the drop was ON the desktop area
-                    // (not into another app), physically move the file out of the sandbox to
-                    // the desktop ourselves; otherwise leave it in the rack untouched.
-                    if (!DroppedOnDesktop(dropPt)) return;
-                    if (File.Exists(desktopTarget) || Directory.Exists(desktopTarget)) return; // name clash: bail safely
-
-                    if (Util.SafeMove.TryMove(workspaceFullPath, desktopTarget, out _) != Util.SafeMove.Result.Moved)
-                        return;
-                }
-
+                // The drop target owns the transfer. A same-named file, matching size,
+                // or pointer position cannot prove it completed. Only release our claim
+                // when the original is actually gone. Copy drops retain their original.
+                if (File.Exists(workspaceFullPath) || Directory.Exists(workspaceFullPath)) return;
                 // Drop the rack's claim so the item stops showing in the rack.
                 if (Instance.AssignedFiles != null && Instance.AssignedFiles.Remove(fileName))
                 {
@@ -1673,42 +1648,6 @@ namespace Racks
                 LoadFiles(_currentFolderPath);
             }
             catch (Exception ex) { Debug.WriteLine($"HandleDesktopRackDragOut failed: {ex.Message}"); }
-        }
-
-        // Confirm the desktop copy of `source` is a COMPLETE copy before we remove the sandbox
-        // original. Explorer copies asynchronously, so the destination can exist while still being
-        // written. For a file we compare size; for a folder we compare recursive file count and
-        // total byte size. Any mismatch or error => not complete (caller keeps the original).
-        private static bool CopyLooksComplete(string source, string dest)
-        {
-            try
-            {
-                if (File.Exists(source))
-                {
-                    if (!File.Exists(dest)) return false;
-                    return new FileInfo(source).Length == new FileInfo(dest).Length;
-                }
-                if (Directory.Exists(source))
-                {
-                    if (!Directory.Exists(dest)) return false;
-                    var (sc, ss) = CountAndSize(source);
-                    var (dc, ds) = CountAndSize(dest);
-                    return sc == dc && ss == ds;
-                }
-                return false;
-            }
-            catch { return false; }
-        }
-
-        private static (long count, long size) CountAndSize(string dir)
-        {
-            long count = 0, size = 0;
-            foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
-            {
-                count++;
-                try { size += new FileInfo(f).Length; } catch { }
-            }
-            return (count, size);
         }
 
         // True if the drop point is over the desktop (the wallpaper / SHELLDLL_DefView),
@@ -1849,7 +1788,7 @@ namespace Racks
             titleStackPanel.MouseEnter += (s, e) => AnimateSymbolIcon(frameTypeSymbol, Instance.TitleFontSize, 1, 5);
             titleStackPanel.MouseLeave += (s, e) => AnimateSymbolIcon(frameTypeSymbol, 0, 0, 0);
 
-            
+
             // Restore persistent pin-to-top.
             if (Instance.PinToTop)
             {
@@ -1860,7 +1799,7 @@ namespace Racks
             // sandbox or the legacy DeskFrame AppData path so users upgrading from
             // the old build keep working racks.
             string legacyAppDataPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeskFrame");
+                Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeskFrame");
             if (!string.IsNullOrEmpty(instance.Folder)
                 && (InstanceController.IsInsideVirtualFramesRoot(instance.Folder)
                     || instance.Folder.StartsWith(legacyAppDataPath, StringComparison.OrdinalIgnoreCase)))
@@ -2485,6 +2424,7 @@ namespace Racks
 
         private void KeepWindowBehind()
         {
+            if (Util.NativeProfile.IsIsolated) return;
             if (_isTopmost)
             {
                 return;
@@ -2588,9 +2528,9 @@ namespace Racks
                         LoadingProgressRingFade(false);
                         return new List<FileSystemInfo>();
                     }
-                    
+
                     var filteredFiles = new List<FileSystemInfo>();
-                    
+
                     void ScanDir(string dirPath)
                     {
                         if (!Directory.Exists(dirPath)) return;
@@ -2607,9 +2547,9 @@ namespace Racks
                         catch (IOException ex) { Debug.WriteLine($"ScanDir failed for '{dirPath}': {ex.Message}"); }
                         catch (UnauthorizedAccessException ex) { Debug.WriteLine($"ScanDir failed for '{dirPath}': {ex.Message}"); }
                     }
-                    
+
                     ScanDir(path);
-                    
+
                     if (Instance.IsDesktopFilterRack)
                     {
                         ScanDir(DesktopIconManager.RacksWorkspacePath);
@@ -2624,11 +2564,11 @@ namespace Racks
                     _folderCount = filteredFiles.OfType<DirectoryInfo>().Count();
                     _fileCount = filteredFiles.OfType<FileInfo>().Count().ToString();
                     _folderSize = !Instance.CheckFolderSize ? "" : Task.Run(() => BytesToStringAsync(filteredFiles.OfType<FileInfo>().Sum(file => file.Length))).Result; 
-                    
+
                     filteredFiles = filteredFiles
                                 .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
                                 .ToList();
-                    
+
                     if (!Instance.ShowHiddenFiles)
                         filteredFiles = filteredFiles.Where(entry => !entry.Attributes.HasFlag(FileAttributes.Hidden)).ToList();
                     var fileFilterRegex = TryCompileRegex(Instance.FileFilterRegex);
@@ -2691,15 +2631,15 @@ namespace Racks
                             LoadingProgressRingFade(false);
                             return;
                         }
-                        
+
                         // Check if the exact FullPath still exists in the newly scanned entries
                         bool stillExists = fileEntries.Any(f => string.Equals(f.FullName, FileItems[i].FullPath, StringComparison.OrdinalIgnoreCase));
-                        
+
                         if (!stillExists)
                         {
                             string fileName = Path.GetFileName(FileItems[i].FullPath!);
                             FileItems.RemoveAt(i);
-                            
+
                             // Cleanup: if the file was physically moved/deleted, remove it from the Rack's claim
                             if (Instance.IsDesktopFilterRack && Instance.AssignedFiles != null && Instance.AssignedFiles.Contains(fileName))
                             {
@@ -2708,7 +2648,7 @@ namespace Racks
                             }
                         }
                     }
-                    
+
                     if (assignedFilesChanged)
                     {
                         MainWindow._controller.WriteInstanceToKey(Instance);
@@ -3086,7 +3026,7 @@ namespace Racks
             }
 
             MainWindow._controller.WriteInstanceToKey(Instance);
-            
+
             // Force refresh of all Desktop racks
             foreach (var window in MainWindow._controller._subWindows)
             {
@@ -3129,10 +3069,10 @@ namespace Racks
                 //   Hold Ctrl  → LINK for this drop only.
                 //   Hold Shift → MOVE for this drop (overrides LinkOnDrop=true).
                 //
-                // Safety: rack removal only ever recurses into VirtualFramesRoot.
-                // SafeDelete is used so junctions inside the sandbox (created by
-                // an explicit LinkOnDrop toggle) are unlinked without descending
-                // into their Desktop targets.
+                // Safety: rack removal returns items to Desktop without recursive deletion.
+                // Links and unavailable files keep the rack definition. Historically created
+                // links are inspected in Explorer instead of following their targets.
+
                 bool ctrlDown  = Keyboard.IsKeyDown(Key.LeftCtrl)  || Keyboard.IsKeyDown(Key.RightCtrl);
                 bool shiftDown = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
                 bool wantsLinkInsteadOfMove = (Instance.LinkOnDrop || ctrlDown) && !shiftDown;
@@ -3189,12 +3129,12 @@ namespace Racks
                         }
                     }
                     string destinationDir = _currentFolderPath;
-                    
+
                     if (Instance.IsDesktopFilterRack)
                     {
                         destinationDir = DesktopIconManager.RacksWorkspacePath;
                     }
-                    
+
                     string destinationPath = Path.Combine(destinationDir, Path.GetFileName(file));
                     if (!string.IsNullOrEmpty(_dropIntoFolderPath))
                         destinationPath = Path.Combine(_dropIntoFolderPath, Path.GetFileName(file));
@@ -3221,7 +3161,7 @@ namespace Racks
                         if (!string.IsNullOrEmpty(parent)) sourceParents.Add(parent);
 
                         bool srcIsDir = Directory.Exists(file);
-                        
+
                         // Handle name collisions in the destination by generating a unique name (like Windows Explorer)
                         if (File.Exists(destinationPath) || Directory.Exists(destinationPath))
                         {
@@ -3235,7 +3175,7 @@ namespace Racks
                                 counter++;
                             }
                         }
-                        
+
                         if (Instance.IsDesktopFilterRack)
                         {
                             // If it's a Desktop rack, we always move it physically to the RacksWorkspace
@@ -3910,186 +3850,11 @@ namespace Racks
 
         public BitmapSource? GetThumbnail(string filePath, int size)
         {
-            try
-            {
-                ShellObject shellObject = ShellObject.FromParsingName(filePath);
-                ShellThumbnail shellThumbnail = shellObject.Thumbnail;
-                shellThumbnail.CurrentSize = new System.Windows.Size(size, size);
-                BitmapSource thumbnail = shellThumbnail.BitmapSource;
-                thumbnail.Freeze();
-                return thumbnail;
-            }
-            catch
-            {
-                return null;
-            }
+            return Racks.Services.NativeShellImage.Load(filePath, size);
         }
 
-        private async Task<BitmapSource?> GetThumbnailAsync(string path)
-        {
-            return await Task.Run(async () =>
-            {
-                if (string.IsNullOrWhiteSpace(path) || (!File.Exists(path) && !Directory.Exists(path)))
-                {
-                    return null;
-                }
-                IntPtr hBitmap = IntPtr.Zero;
-                BitmapSource? thumbnail = null;
-                int iconSize = (int)(Instance.IconSize * _windowsScalingFactor);
-                if (Path.GetExtension(path).ToLower() == ".svg")
-                {
-                    try
-                    {
-                        thumbnail = await LoadSvgThumbnailAsync(path, iconSize);
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.WriteLine(e);
-                    }
-                    return thumbnail;
-                }
-                string ext = Path.GetExtension(path).ToLowerInvariant();
-                bool isLink = ext == ".lnk" || ext == ".url";
-
-                if (isLink)
-                {
-                    try
-                    {
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            thumbnail = GetThumbnail(path, iconSize);
-                        });
-                        if (Instance.ShowShortcutArrow)
-                        {
-                            return Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                IntPtr[] overlayIcons = new IntPtr[1];
-                                int overlayExtracted = ExtractIconEx(
-                                    Environment.SystemDirectory + "\\shell32.dll",
-                                    29,
-                                    overlayIcons,
-                                    null,
-                                    1);
-
-                                if (overlayExtracted > 0 && overlayIcons[0] != IntPtr.Zero)
-                                {
-                                    var overlay = Imaging.CreateBitmapSourceFromHIcon(
-                                                  overlayIcons[0],
-                                                  Int32Rect.Empty,
-                                                  BitmapSizeOptions.FromEmptyOptions());
-                                    DestroyIcon(overlayIcons[0]);
-
-                                    var visual = new DrawingVisual();
-                                    using (var dc = visual.RenderOpen())
-                                    {
-                                        Debug.WriteLine("iconsize: " + iconSize);
-                                        double scale = iconSize / Math.Max(thumbnail.PixelWidth, thumbnail.PixelHeight);
-                                        double thumbnailWidth = thumbnail.PixelWidth * scale;
-                                        double thumbnailHeight = thumbnail.PixelHeight * scale;
-
-                                        double thumbnailX = (iconSize - thumbnailWidth) / 2.0;
-                                        double thumbnailY = (iconSize - thumbnailHeight) / 2.0;
-
-                                        dc.DrawImage(
-                                            thumbnail,
-                                            new Rect(
-                                                thumbnailX,
-                                                thumbnailY,
-                                                thumbnailWidth,
-                                                thumbnailHeight)
-                                        );
-                                        double overlayScale = (iconSize < 32 ? iconSize / 32.0 : 1.0);
-                                        if (_windowsScalingFactor != 1.0)
-                                        {
-                                            overlayScale *= (1 / _windowsScalingFactor);
-                                        }
-                                        if (overlayScale != 1.0)
-                                        {
-                                            overlay = new TransformedBitmap(overlay, new ScaleTransform(overlayScale, overlayScale));
-                                            overlay.Freeze();
-                                        }
-                                        double overlayX = thumbnailX;
-                                        double overlayY = thumbnailY + thumbnailHeight - overlay.PixelHeight;
-                                        dc.DrawImage(overlay,
-                                            new Rect(
-                                            overlayX,
-                                            overlayY,
-                                            overlay.PixelWidth,
-                                            overlay.PixelHeight)
-                                        );
-                                    }
-
-                                    var rtb = new RenderTargetBitmap(
-                                        iconSize,
-                                        iconSize,
-                                        thumbnail.DpiX,
-                                        thumbnail.DpiY,
-                                        PixelFormats.Pbgra32);
-                                    rtb.Render(visual);
-                                    rtb.Freeze();
-                                    return rtb;
-                                }
-                                return thumbnail;
-                            });
-                        }
-                        return thumbnail;
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.WriteLine(e);
-                    }
-                }
-                else
-                {
-                    try
-                    {
-                        int attempt = 0;
-                        while (attempt < 3 && thumbnail == null)
-                        {
-                            ShellObject? shellObj = null;
-                            shellObj = Directory.Exists(path) ? ShellObject.FromParsingName(path) : ShellFile.FromFilePath(path);
-                            if (shellObj != null)
-                            {
-                                try
-                                {
-                                    Application.Current.Dispatcher.Invoke(() =>
-                                    {
-                                        thumbnail = GetThumbnail(path, iconSize);
-                                    });
-                                    if (thumbnail != null)
-                                    {
-                                        return thumbnail;
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Debug.WriteLine("Failed to fetch thumbnail:" + ex.Message);
-                                }
-                                finally
-                                {
-                                    shellObj?.Dispose();
-                                }
-                            }
-                            attempt++;
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.WriteLine(e);
-                    }
-                }
-                if (thumbnail != null)
-                {
-                    return thumbnail;
-                }
-
-                Debug.WriteLine("Failed to retrieve thumbnail after 3 attempts.");
-                return null;
-            });
-        }
-
-
-
+        private Task<BitmapSource?> GetThumbnailAsync(string path) =>
+            Racks.Services.ThumbnailService.GetThumbnailAsync(path, Instance.IconSize, Instance.ShowShortcutArrow, _windowsScalingFactor);
         private async Task<BitmapSource?> LoadSvgThumbnailAsync(string path, int iconSize)
         {
             try
@@ -4283,7 +4048,7 @@ namespace Racks
             AnimateChevron(_isMinimized, true, 0.01); // When 0 docked window won't open
             KeepWindowBehind();
             RegistryHelper rgh = new RegistryHelper(InstanceController.appName);
-            
+
             //if (rgh.KeyExistsRoot("blurBackground"))
             //{
             //    toBlur = (bool)rgh.ReadKeyValueRoot("blurBackground");
@@ -4356,7 +4121,7 @@ namespace Racks
                         EndPoint = new System.Windows.Point(0, 1)
                     };
                     gradient.GradientStops.Add(new GradientStop(Color.FromArgb((byte)Instance.Opacity, c.R, c.G, c.B), 0.0));
-                    
+
                     var bottomColor = c;
                     bottomColor.R = (byte)Math.Max(0, c.R - 30);
                     bottomColor.G = (byte)Math.Max(0, c.G - 30);
@@ -4369,7 +4134,7 @@ namespace Racks
                 {
                     WindowBackground.Background = new SolidColorBrush(Color.FromArgb((byte)Instance.Opacity, c.R, c.G, c.B));
                 }
-                
+
                 BackgroundType(_isTopmost);
             }
             catch
@@ -4451,7 +4216,7 @@ namespace Racks
                         return; // setting Left/Top re-enters LocationChanged with the snapped values
                     }
                 }
-                
+
                 // Track drag velocity (exponential smoothing) for flick-to-throw on release.
                 long nowT = DateTime.UtcNow.Ticks;
                 double dtT = (nowT - _lastDragTicks) / (double)TimeSpan.TicksPerSecond;
@@ -4763,6 +4528,7 @@ namespace Racks
 private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             contextMenu = new ContextMenu();
+            if (!(Util.NativeProfile.DesignPreview && Instance.Name == "Original")) Util.CossTheme.Attach(contextMenu);
             if (_itemCurrentlyRenaming != null)
             {
                 _itemCurrentlyRenaming.IsRenaming = false;
@@ -5087,8 +4853,8 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
             exitItem.Click += async (s, args) =>
             {
                 // Make the user understand what removal actually does. Three cases:
-                //   1. Virtual rack in sandbox — its .lnk shortcuts will be deleted
-                //      from AppData; original files are untouched.
+                //   1. Virtual rack in sandbox — its items are returned to Desktop.
+                //      Failed returns keep the rack definition.
                 //   2. Folder-backed rack — only the rack is removed, the folder on
                 //      disk is left exactly as it was.
                 //   3. Anything else — same as 2.
@@ -5109,7 +4875,7 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
                 string body;
                 bool isSandboxed = Instance.IsShortcutsOnly
                     && InstanceController.IsInsideVirtualFramesRoot(Instance.Folder);
-                string deskPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                string deskPath = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.Desktop);
                 bool isOnDesktop = !string.IsNullOrEmpty(Instance.Folder) &&
                     System.IO.Path.GetDirectoryName(Instance.Folder.TrimEnd('\\', '/'))?.Equals(deskPath, StringComparison.OrdinalIgnoreCase) == true;
 
@@ -5122,14 +4888,8 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
                 else if (isSandboxed)
                 {
                     body = itemCount > 0
-                        ? $"Remove this rack? {itemCount} shortcut(s) will be deleted from the sandbox. Original files are not touched."
+                        ? $"Remove this rack? {itemCount} item(s) will be returned to your Desktop."
                         : "Remove this empty rack?";
-                }
-                else if (isOnDesktop)
-                {
-                    body = itemCount > 0 
-                        ? $"Remove this rack? {itemCount} item(s) will be returned to your Desktop, and the folder '{System.IO.Path.GetFileName(Instance.Folder)}' will be deleted."
-                        : $"Remove this empty rack? The folder '{System.IO.Path.GetFileName(Instance.Folder)}' will be deleted.";
                 }
                 else
                 {
@@ -5148,35 +4908,49 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
                     // into a clean grid afterwards (files just moved back land wherever
                     // Explorer decides, which looks messy).
                     var returnedToDesktop = new List<string>();
+                    var returnErrors = new List<string>();
                     if (Instance.IsDesktopFilterRack && Instance.AssignedFiles != null)
                     {
-                        string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                        foreach (string fileName in Instance.AssignedFiles)
+                        foreach (string fileName in Instance.AssignedFiles.ToList())
                         {
-                            // AssignedFiles is persisted in HKCU; treat each entry as a plain leaf
-                            // name by contract. Skip anything with a separator or ".." so a
-                            // hand-edited/imported value can't Path.Combine its way out of the
-                            // workspace and move an arbitrary file to the desktop.
-                            if (string.IsNullOrEmpty(fileName) || System.IO.Path.GetFileName(fileName) != fileName)
-                                continue;
-                            string wpPath = System.IO.Path.Combine(DesktopIconManager.RacksWorkspacePath, fileName);
-                            string destPath = System.IO.Path.Combine(desktopPath, fileName);
-                            if (System.IO.File.Exists(wpPath) || System.IO.Directory.Exists(wpPath))
+                            if (!Racks.Core.SafeFiles.IsLeafName(fileName))
                             {
-                                if (Util.SafeMove.TryMove(wpPath, destPath, out _) == Util.SafeMove.Result.Moved)
-                                    returnedToDesktop.Add(destPath);
+                                returnErrors.Add("Invalid file reference: " + fileName);
+                                continue;
                             }
+                            string source = Path.Combine(DesktopIconManager.RacksWorkspacePath, fileName);
+                            string destination = Path.Combine(deskPath, fileName);
+                            if (Util.SafeMove.TryMove(source, destination, out string reason) == Util.SafeMove.Result.Moved)
+                            {
+                                returnedToDesktop.Add(destination);
+                                Instance.AssignedFiles.Remove(fileName);
+                            }
+                            else returnErrors.Add(fileName + ": " + reason);
+                        }
+                        MainWindow._controller.WriteInstanceToKey(Instance);
+                    }
+                    else if (isSandboxed)
+                    {
+                        if (!Directory.Exists(Instance.Folder))
+                        {
+                            Racks.Views.RacksMessageBox.Show("The rack folder is unavailable. Reconnect it before removing the rack.", "Rack kept");
+                            return;
+                        }
+                        foreach (string source in Directory.EnumerateFileSystemEntries(Instance.Folder))
+                        {
+                            string destination = Path.Combine(deskPath, Path.GetFileName(source));
+                            if (Util.SafeMove.TryMove(source, destination, out string reason) == Util.SafeMove.Result.Moved)
+                                returnedToDesktop.Add(destination);
+                            else returnErrors.Add(Path.GetFileName(source) + ": " + reason);
                         }
                     }
-                    else if (isOnDesktop && System.IO.Directory.Exists(Instance.Folder))
+                    // A folder rack is only a view. Even if its folder is on Desktop,
+                    // removing the view must never move or delete the folder's contents.
+                    if (returnErrors.Count > 0)
                     {
-                        foreach (string file in System.IO.Directory.GetFileSystemEntries(Instance.Folder))
-                        {
-                            string dest = System.IO.Path.Combine(deskPath, System.IO.Path.GetFileName(file));
-                            if (Util.SafeMove.TryMove(file, dest, out _) == Util.SafeMove.Result.Moved)
-                                returnedToDesktop.Add(dest);
-                        }
-                        try { System.IO.Directory.Delete(Instance.Folder, false); } catch { }
+                        LoadFiles(_currentFolderPath);
+                        Racks.Views.RacksMessageBox.Show("The rack was kept because some items could not be returned. Resolve these in Explorer and try again:\n\n" + string.Join("\n", returnErrors), "Rack kept");
+                        return;
                     }
                     if (returnedToDesktop.Count > 0)
                         Util.DesktopIconPositioner.ArrangeInGrid(returnedToDesktop);
@@ -5187,21 +4961,6 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
                         Registry.CurrentUser.DeleteSubKeyTree(Instance.GetKeyLocation());
                     }
                     MainWindow._controller.RemoveInstance(Instance, this);
-                    // Only nuke the backing folder if it's actually under our
-                    // VirtualFrames sandbox in AppData. Otherwise we'd delete
-                    // whatever real folder the rack happens to be pointing at —
-                    // that's how users were losing data on the old build.
-                    // SafeDelete walks reparse points (junctions to Desktop
-                    // folders) WITHOUT descending — a plain Directory.Delete
-                    // recursive would obliterate the junction targets.
-                    if (Instance.IsShortcutsOnly
-                        && !string.IsNullOrEmpty(Instance.Folder)
-                        && InstanceController.IsInsideVirtualFramesRoot(Instance.Folder)
-                        && Directory.Exists(Instance.Folder))
-                    {
-                        try { Util.SafeDelete.DeleteDirectoryRecursive(Instance.Folder); }
-                        catch (Exception ex) { Debug.WriteLine($"Sandbox delete failed: {ex.Message}"); }
-                    }
                     this.Close();
 
                 }

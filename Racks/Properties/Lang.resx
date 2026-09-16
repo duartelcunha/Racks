@@ -536,4 +536,64 @@
   <data name="RacksSettings_EQSToolTip_Feature3" xml:space="preserve">
     <value>Calculator in search bar</value>
   </data>
+  <data name="TrayContextMenu.NewRack" xml:space="preserve">
+    <value>New rack</value>
+  </data>
+  <data name="TrayContextMenu.NewRackHelp" xml:space="preserve">
+    <value>Empty rack — drag any shortcut, file, or folder into it (creates a shortcut, never moves your file).</value>
+  </data>
+  <data name="TrayContextMenu.NewFolderRack" xml:space="preserve">
+    <value>New folder rack</value>
+  </data>
+  <data name="TrayContextMenu.NewFolderRackHelp" xml:space="preserve">
+    <value>Rack bound to a folder you pick by dragging it in. Shows that folder&apos;s contents.</value>
+  </data>
+  <data name="TrayContextMenu.HideDesktopIcons" xml:space="preserve">
+    <value>Hide desktop icons</value>
+  </data>
+  <data name="TrayContextMenu.HotCorner" xml:space="preserve">
+    <value>Hide racks on top-right corner</value>
+  </data>
+  <data name="TrayContextMenu.HotCornerHelp" xml:space="preserve">
+    <value>Move your cursor to the top-right of the primary monitor to peek the desktop. Move away to show racks again.</value>
+  </data>
+  <data name="TrayContextMenu.LockAll" xml:space="preserve">
+    <value>Lock all racks</value>
+  </data>
+  <data name="TrayContextMenu.LockAllHelp" xml:space="preserve">
+    <value>Prevents accidentally moving or resizing any rack. Per-rack lock is still available from the title-bar menu.</value>
+  </data>
+  <data name="TrayContextMenu.Physics" xml:space="preserve">
+    <value>Ice-rink physics</value>
+  </data>
+  <data name="TrayContextMenu.PhysicsHelp" xml:space="preserve">
+    <value>Racks glide, bounce off edges and push each other when dragged together. Turn off to keep racks perfectly still.</value>
+  </data>
+  <data name="TrayContextMenu.Organize" xml:space="preserve">
+    <value>✨ Magic Organize Desktop...</value>
+  </data>
+  <data name="TrayContextMenu.OrganizeHelp" xml:space="preserve">
+    <value>Preview suggested groups before organizing desktop files into racks.</value>
+  </data>
+  <data name="TrayContextMenu.Export" xml:space="preserve">
+    <value>Export racks…</value>
+  </data>
+  <data name="TrayContextMenu.ExportHelp" xml:space="preserve">
+    <value>Save rack settings and folder references to JSON. The files themselves are not included.</value>
+  </data>
+  <data name="TrayContextMenu.Import" xml:space="preserve">
+    <value>Import racks…</value>
+  </data>
+  <data name="TrayContextMenu.ImportHelp" xml:space="preserve">
+    <value>Load a rack layout from JSON. Replaces all current racks. Restart required.</value>
+  </data>
+  <data name="TrayContextMenu.CheckUpdatesHelp" xml:space="preserve">
+    <value>Check GitHub for a newer version of Racks and install it.</value>
+  </data>
+  <data name="TrayContextMenu.Help" xml:space="preserve">
+    <value>Help / cheatsheet…</value>
+  </data>
+  <data name="TrayContextMenu.HelpDescription" xml:space="preserve">
+    <value>Keybindings, gestures, and feature overview.</value>
+  </data>
 </root>

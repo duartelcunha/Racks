@@ -18,9 +18,13 @@
 
 #define AppName "Racks"
 #define AppPublisher "Duarte L. Cunha"
-#define AppExeName "Racks.exe"
+#ifndef AppExeName
+  #define AppExeName "Racks.exe"
+#endif
 #define AppUrl "https://github.com/duartelcunha/Racks"
-#define SourceRoot "..\publish"
+#ifndef SourceRoot
+  #define SourceRoot "..\publish"
+#endif
 
 [Setup]
 ; Stable, unique-to-Racks GUID. Don't change this — it identifies the install
@@ -57,19 +61,23 @@ SolidCompression=yes
 ; Block a second installer from starting on top of a running one. Without this
 ; you can end up with half-extracted .exes on disk if the user double-clicks
 ; the setup twice.
-SetupMutex=Racks-Setup-{#AppVersion}
+SetupMutex=Racks-Setup
 OutputBaseFilename=Racks-Setup-{#AppVersion}
 OutputDir=Output
 SetupIconFile=..\Racks\Icon\ico.ico
 WizardSmallImageFile=..\Racks\Icon\logo_small.bmp
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
+; Older releases recorded recursive AppData deletion and registry cleanup.
+; Appending would preserve those destructive entries even after an upgrade.
+; Reset that log; this full installer records every current application file.
+UninstallLogMode=overwrite
 ; Single-arch — Racks targets x64 only (see csproj <Platforms>x64</Platforms>).
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; Auto-close a running Racks instance so we can replace the .exe on upgrade.
-; No "please close the app" modal — just take care of it.
-CloseApplications=force
+; An active file operation must never be terminated by an installer.
+AppMutex=Racks-SingleInstance-2C9D
+CloseApplications=no
 CloseApplicationsFilter=*.exe
 RestartApplications=no
 
@@ -80,6 +88,24 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 ; Pull every file from the publish output. Recurse so the localization
 ; subfolders (cs-CZ, ko-KR, zh-CN, ...) come along.
 Source: "{#SourceRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+#if AppExeName != "Racks.exe"
+[InstallDelete]
+; Exact obsolete files from the published WPF package. Never wildcard-delete
+; the installation folder or traverse any user-data directory during upgrade.
+Type: files; Name: "{app}\Racks.exe"
+Type: files; Name: "{app}\Racks.pdb"
+Type: files; Name: "{app}\Racks.dll"
+Type: files; Name: "{app}\Racks.deps.json"
+Type: files; Name: "{app}\Racks.runtimeconfig.json"
+Type: files; Name: "{app}\wpfgfx_cor3.dll"
+Type: files; Name: "{app}\vcruntime140_cor3.dll"
+Type: files; Name: "{app}\PresentationNative_cor3.dll"
+Type: files; Name: "{app}\PenImc_cor3.dll"
+Type: files; Name: "{app}\LdaNative.dll"
+Type: files; Name: "{app}\D3DCompiler_47_cor3.dll"
+Type: files; Name: "{app}\Icon\WorkspaceFolder.ico"
+#endif
 
 [Icons]
 ; Start menu shortcut only by default. Desktop shortcut is intentionally
@@ -93,52 +119,34 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 ; nowait + skipifsilent + postinstall so an /SILENT install just runs it.
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
 
-[UninstallRun]
-; Kill running instance silently so the uninstaller instance can run without hitting the Mutex
-Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExeName} /F"; Flags: runhidden; RunOnceId: "KillRacks"
-; The farewell animation is played from [Code] at usPostUninstall (after everything is
-; removed), from a temp copy of the exe, so it appears when uninstall FINISHES.
-
-[UninstallDelete]
-Type: filesandordirs; Name: "{userappdata}\{#AppName}"
-Type: filesandordirs; Name: "{localappdata}\{#AppName}"
-
+; App files are removed by Inno's installation log. User files, settings and
+; recovery records are deliberately retained. Never recursively remove AppData.
 [Registry]
-Root: HKCU; Subkey: "Software\{#AppName}"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "DesktopRacks"; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Racks"; Flags: dontcreatekey uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "DesktopRacks"; Flags: dontcreatekey uninsdeletevalue
 
+#if AppExeName != "Racks.exe"
 [Code]
-// Play the farewell animation AFTER the uninstall has finished. The app exe is
-// self-contained (needs its sibling .NET files), and Inno removes {app} during
-// uninstall - so at usUninstall we copy the whole app folder to a temp location,
-// then at usPostUninstall (everything already removed) we launch the animation from
-// that copy. The copy self-deletes via a delayed cmd so nothing is left behind.
+procedure UpdateExistingStartup(const ValueName: String);
 var
-  AnimDir: String;
-
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-var
-  ResultCode: Integer;
-  Exe: String;
+  Existing, OldExecutable, NewExecutable: String;
 begin
-  if CurUninstallStep = usUninstall then
+  if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', ValueName, Existing) then
   begin
-    // Snapshot the app folder before it's deleted.
-    AnimDir := ExpandConstant('{tmp}\RacksFarewell');
-    Exec(ExpandConstant('{cmd}'), '/C xcopy "' + ExpandConstant('{app}') + '" "' + AnimDir + '" /E /I /Q /Y', '',
-      SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  end
-  else if CurUninstallStep = usPostUninstall then
-  begin
-    Exe := AnimDir + '\{#AppExeName}';
-    if FileExists(Exe) then
-    begin
-      // Run the animation, wait for it, then schedule the temp copy for deletion.
-      Exec(Exe, '--uninstall-anim', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
-      Exec(ExpandConstant('{cmd}'),
-        '/C ping 127.0.0.1 -n 2 > nul & rmdir /S /Q "' + AnimDir + '"', '',
-        SW_HIDE, ewNoWait, ResultCode);
-    end;
+    OldExecutable := ExpandConstant('{app}\Racks.exe');
+    NewExecutable := ExpandConstant('{app}\{#AppExeName}');
+    if (CompareText(Existing, OldExecutable) = 0) or
+       (CompareText(Existing, '"' + OldExecutable + '"') = 0) then
+      RegWriteStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', ValueName, '"' + NewExecutable + '"');
   end;
 end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    UpdateExistingStartup('Racks');
+    UpdateExistingStartup('DesktopRacks');
+  end;
+end;
+#endif

@@ -13,14 +13,14 @@
         AllowsTransparency="True"
         WindowStyle="None"
         ResizeMode="CanResize"
-        FontFamily="Segoe UI Variable Display, Segoe UI"
+        FontFamily="Segoe UI" Foreground="{DynamicResource CossText}"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextFormattingMode="Display"
         TextOptions.TextRenderingMode="ClearType"
         RenderOptions.BitmapScalingMode="HighQuality"
-        Width="520"
-        Height="640"
+        Width="640"
+        Height="720"
         MinHeight="480"
         MinWidth="440"
         ShowInTaskbar="False"
@@ -33,32 +33,36 @@
     </shell:WindowChrome.WindowChrome>
 
     <Window.Resources>
+      <ResourceDictionary>
+        <ResourceDictionary.MergedDictionaries>
+          <ResourceDictionary Source="/Racks;component/Resources/CossControls.xaml"/>
+        </ResourceDictionary.MergedDictionaries>
 
-        <SolidColorBrush x:Key="SectionCardBackground" Color="#0DFFFFFF"/>
-        <SolidColorBrush x:Key="SectionCardBorder" Color="#1AFFFFFF"/>
-        <SolidColorBrush x:Key="NavItemHoverBackground" Color="#14FFFFFF"/>
-        <SolidColorBrush x:Key="NavItemSelectedBackground" Color="#26FFFFFF"/>
-        <SolidColorBrush x:Key="NavItemSelectedAccent" Color="#FF3DA9FC"/>
-        <SolidColorBrush x:Key="MutedForeground" Color="#A6FFFFFF"/>
+        <SolidColorBrush x:Key="SectionCardBackground" Color="{Binding Color, Source={StaticResource CossSurface}}"/>
+        <SolidColorBrush x:Key="SectionCardBorder" Color="{Binding Color, Source={StaticResource CossBorder}}"/>
+        <SolidColorBrush x:Key="NavItemHoverBackground" Color="{Binding Color, Source={StaticResource CossBorder}}"/>
+        <SolidColorBrush x:Key="NavItemSelectedBackground" Color="{Binding Color, Source={StaticResource CossSelection}}"/>
+        <SolidColorBrush x:Key="NavItemSelectedAccent" Color="{Binding Color, Source={StaticResource CossFocus}}"/>
+        <SolidColorBrush x:Key="MutedForeground" Color="{Binding Color, Source={StaticResource CossMuted}}"/>
 
         <Style x:Key="SectionHeader" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,0,0,8"/>
-            <Setter Property="Foreground" Value="#9CFFFFFF"/>
+            <Setter Property="Foreground" Value="{DynamicResource CossMuted}"/>
         </Style>
 
         <Style x:Key="FieldLabel" TargetType="TextBlock">
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Margin" Value="0,0,0,4"/>
-            <Setter Property="Foreground" Value="#E6FFFFFF"/>
+            <Setter Property="Foreground" Value="{DynamicResource CossText}"/>
         </Style>
 
         <Style x:Key="FieldHelp" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Margin" Value="0,2,0,0"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="Foreground" Value="#70FFFFFF"/>
+            <Setter Property="Foreground" Value="{DynamicResource CossMuted}"/>
         </Style>
 
         <Style x:Key="SettingsCard" TargetType="Border">
@@ -75,7 +79,7 @@
             <Setter Property="Padding" Value="0,8,0,8"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Foreground" Value="#E6FFFFFF"/>
+            <Setter Property="Foreground" Value="{DynamicResource CossText}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -117,16 +121,15 @@
             </VisualBrush.Visual>
         </VisualBrush>
 
+      </ResourceDictionary>
     </Window.Resources>
 
     <!-- Card wrapper: transparent window + rounded gradient card, matching every other
          Racks window. Resize still works via WindowChrome's ResizeBorderThickness. -->
-    <Border CornerRadius="14" BorderThickness="1" Margin="10"
-            Background="{StaticResource RacksCardBackground}"
-            BorderBrush="{StaticResource RacksCardBorder}">
-        <Border.Effect>
-            <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="15" Opacity="0.5"/>
-        </Border.Effect>
+    <Border CornerRadius="12" BorderThickness="1" Margin="4"
+            Background="{DynamicResource CossBackground}"
+            BorderBrush="{DynamicResource CossBorder}">
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -135,19 +138,19 @@
         </Grid.RowDefinitions>
 
         <!-- Custom card-style title strip (drag + action buttons + close). -->
-        <Grid Grid.Row="0" Height="46" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+        <Grid Grid.Row="0" Height="48" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <TextBlock Text="{x:Static prop:Lang.FrameSettings_TitleBarText}" FontSize="13" FontWeight="SemiBold"
-                       Foreground="#DDFFFFFF" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                       Foreground="{DynamicResource CossText}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0">
-                <Button x:Name="ChangeStyleDropDownButton" Style="{StaticResource RacksWindowIconButton}"
+                <Button x:Name="ChangeStyleDropDownButton" Style="{StaticResource CossIconButton}"
                         ToolTip="{x:Static prop:Lang.FrameSettings_ChangeStyle}" Click="ChangeStyleDropDownButton_Click">
                     <ui:SymbolIcon Symbol="PaintBrush20" FontSize="15"/>
                 </Button>
-                <Button x:Name="ChangeFolderButton" Style="{StaticResource RacksWindowIconButton}"
+                <Button x:Name="ChangeFolderButton" Style="{StaticResource CossIconButton}"
                         ToolTip="{x:Static prop:Lang.FrameSettings_ChangeFolder}" Click="ChangeFolderButton_Click">
                     <ui:SymbolIcon Symbol="Folder20" FontSize="15"/>
                 </Button>
-                <Button x:Name="CloseButton" Style="{StaticResource RacksWindowIconButton}" Click="Titlebar_CloseClicked">
+                <Button x:Name="CloseButton" Style="{StaticResource CossIconButton}" Click="Titlebar_CloseClicked">
                     <ui:SymbolIcon Symbol="Dismiss24" FontSize="14"/>
                 </Button>
             </StackPanel>
@@ -159,7 +162,7 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Background="#08FFFFFF" BorderBrush="#14FFFFFF" BorderThickness="0,0,1,0">
+            <Border Grid.Column="0" Background="#08FFFFFF" BorderBrush="{DynamicResource CossBorder}" BorderThickness="0,0,1,0">
                 <ListBox x:Name="SectionList"
                          Background="Transparent"
                          BorderThickness="0"
@@ -169,31 +172,31 @@
                     <ListBoxItem x:Name="NavAppearance" IsSelected="True" ToolTip="Appearance">
                         <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                             <ui:SymbolIcon Symbol="PaintBrush20" FontSize="20" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Style" FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Center" Foreground="#B0FFFFFF"/>
+                            <TextBlock Text="Style" FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Center" Foreground="{DynamicResource CossMuted}"/>
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem x:Name="NavTitleBar" ToolTip="Title bar">
                         <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                             <ui:SymbolIcon Symbol="TextHeader120" FontSize="20" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Title" FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Center" Foreground="#B0FFFFFF"/>
+                            <TextBlock Text="Title" FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Center" Foreground="{DynamicResource CossMuted}"/>
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem x:Name="NavItems" ToolTip="Items">
                         <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                             <ui:SymbolIcon Symbol="Apps20" FontSize="20" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Items" FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Center" Foreground="#B0FFFFFF"/>
+                            <TextBlock Text="Items" FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Center" Foreground="{DynamicResource CossMuted}"/>
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem x:Name="NavWindow" ToolTip="Window position and size">
                         <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                             <ui:SymbolIcon Symbol="Window20" FontSize="20" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Window" FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Center" Foreground="#B0FFFFFF"/>
+                            <TextBlock Text="Window" FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Center" Foreground="{DynamicResource CossMuted}"/>
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem x:Name="NavFolder" ToolTip="Folder behavior">
                         <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                             <ui:SymbolIcon Symbol="FolderOpen20" FontSize="20" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Folder" FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Center" Foreground="#B0FFFFFF"/>
+                            <TextBlock Text="Folder" FontSize="10" Margin="0,3,0,0" HorizontalAlignment="Center" Foreground="{DynamicResource CossMuted}"/>
                         </StackPanel>
                     </ListBoxItem>
                 </ListBox>
@@ -208,8 +211,8 @@
                        Placement="Bottom"
                        HorizontalOffset="0"
                        VerticalOffset="4">
-                    <Border Background="#FF1F1F1F"
-                            BorderBrush="#33FFFFFF"
+                    <Border Background="{DynamicResource CossSurface}"
+                            BorderBrush="{DynamicResource CossBorder}"
                             BorderThickness="1"
                             CornerRadius="8"
                             Padding="12"
@@ -230,7 +233,7 @@
 
                         <Border Style="{StaticResource SettingsCard}">
                             <StackPanel>
-                                <TextBlock Text="PREMIUM UI &amp; OPTIMIZATION" Style="{StaticResource SectionHeader}"/>
+                                <TextBlock Text="Effects and motion" Style="{StaticResource SectionHeader}"/>
                                 <CheckBox x:Name="DropShadowCheckBox"
                                           Content="Enable Drop Shadow"
                                           Margin="0,0,0,8"
@@ -915,11 +918,11 @@
             </Grid>
         </Grid>
 
-        <Border Grid.Row="2" Background="#0AFFFFFF" BorderBrush="#14FFFFFF" BorderThickness="0,1,0,0" Padding="10,6,10,6">
+        <Border Grid.Row="2" Background="{DynamicResource CossInset}" BorderBrush="{DynamicResource CossBorder}" BorderThickness="0,1,0,0" Padding="10,6,10,6">
             <ui:Button x:Name="RevertButton"
                        Content="{x:Static prop:Lang.FrameSettings_RevertButton}"
                        Icon="{ui:SymbolIcon ArrowUndo20}"
-                       Height="28"
+                       MinHeight="32"
                        Padding="10,0,10,0"
                        HorizontalAlignment="Right"
                        Click="RevertButton_Click"/>

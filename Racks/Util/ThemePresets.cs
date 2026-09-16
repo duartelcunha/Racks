@@ -20,8 +20,19 @@ namespace Racks.Util
             public bool BorderEnabled { get; init; }
         }
 
+        public static readonly Preset CossDark = new()
+        {
+            Name = "Coss · Dark", TitleBarColor = "#FF202020", ListViewBackgroundColor = "#F51B1B1B",
+            TitleTextColor = "#F5F5F5", ListViewFontColor = "#F5F5F5", ListViewFontShadowColor = "#00000000", BorderColor = "#FF414141", BorderEnabled = true
+        };
+        public static readonly Preset CossLight = new()
+        {
+            Name = "Coss · Light", TitleBarColor = "#FFF4F4F5", ListViewBackgroundColor = "#F5FFFFFF",
+            TitleTextColor = "#18181B", ListViewFontColor = "#27272A", ListViewFontShadowColor = "#00000000", BorderColor = "#FFCECED3", BorderEnabled = true
+        };
         public static readonly IReadOnlyList<Preset> All = new[]
         {
+            CossDark, CossLight,
             new Preset
             {
                 Name = "Dark (default)",
@@ -99,6 +110,15 @@ namespace Racks.Util
             instance.ListViewFontShadowColor = preset.ListViewFontShadowColor;
             instance.BorderColor = preset.BorderColor;
             instance.BorderEnabled = preset.BorderEnabled;
+            if (ReferenceEquals(preset, CossDark) || ReferenceEquals(preset, CossLight))
+            {
+                instance.ActiveBackgroundColor = preset.ListViewBackgroundColor;
+                instance.ActiveBorderColor = preset.BorderColor;
+                instance.ActiveTitleTextColor = preset.TitleTextColor;
+                instance.TitleFontFamily = "Segoe UI"; instance.ItemFontFamily = "Segoe UI";
+                instance.DropShadowEnabled = false; instance.GradientBackgroundEnabled = false;
+                instance.TitleFontSize = 13; instance.Opacity = 245; instance.IdleOpacity = 1;
+            }
         }
     }
 }

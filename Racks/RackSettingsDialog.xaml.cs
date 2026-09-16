@@ -211,6 +211,17 @@ namespace Racks
                 }));
 
             _initDone = true;
+            RefreshColorSwatches();
+        }
+
+        private void RefreshColorSwatches()
+        {
+            foreach (var input in new[] { TitleBarColorTextBox, TitleTextColorTextBox, ListViewBackgroundColorTextBox, ListViewFontColorTextBox, ListViewFontShadowColorTextBox, BorderColorTextBox, ActiveBorderColorTextBox, ActiveBackgroundColorTextBox, ActiveTitleTextColorTextBox })
+            {
+                if (input.Icon == null) continue;
+                try { input.Icon.Foreground = new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(input.Text)); }
+                catch { input.Icon.Foreground = System.Windows.Media.Brushes.Transparent; }
+            }
         }
 
         private int _currentPage = 0;

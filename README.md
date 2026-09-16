@@ -32,6 +32,25 @@
 
 ---
 
+## Native Windows recovery
+
+The stable Windows release remains **v1.1.4**. The rejected `2.0.0-beta.1` has been withdrawn: its signed beta feed is empty and the release is a draft. Its tag and artifacts are retained, and installed users are not automatically downgraded.
+
+Development now refines the original **WPF application**, with native controls adapted from the MIT-licensed Coss UI designs. Real file icons, thumbnails, custom backgrounds and optional physics remain part of Racks. The Avalonia source and tests are preserved; that interface and the Mac release are deferred.
+
+The first review milestone compares an original-style rack with a Coss rack and its appearance dialog, using isolated files:
+
+```powershell
+dotnet build Racks/Racks.csproj -c Release
+dotnet run --project Racks -- --profile "$PWD/.artifacts/native-review" --design-preview
+./scripts/Test-All.ps1
+```
+
+Use a fresh preview folder and test files. The preview has its own JSON settings, Desktop and workspace, and skips personal registry import, global hooks and desktop attachment. It is a development comparison, not a replacement installer. [Native recovery status and release gates](docs/NATIVE-RECOVERY.md) distinguish completed checks from outstanding work.
+
+No corrected beta will be published before the running design review and required acceptance tests pass. Signed updates remain part of the recovery plan; the existing shared updater still needs its WPF integration.
+
+The sections below describe the original Windows application.
 ## Why Racks?
 
 Your desktop shouldn't be a dumping ground. Racks lives quietly in your system tray and lets you create translucent floating panels on your wallpaper. Drop files in and they leave the mess behind for a tidy, safe home you can reach in one click.
@@ -49,7 +68,7 @@ Drop a file, folder, or shortcut onto a rack and it's tidied away instantly.
 - **Default drop** — the item is **moved** into the rack (off your desktop, into a private sandbox).
 - **`Ctrl` + drop** — a **shortcut** is created instead; the original stays where it is.
 - **`Shift` + drop** — force a move even on a link-mode rack.
-- **Drag an item out** — it comes back to your desktop as a single file, no duplicate.
+- **Drag an item out** — Explorer handles the move or copy. Racks keeps the source unless Explorer has actually moved it; it never deletes a source based on a guessed drag result.
 
 Two kinds of rack:
 
@@ -84,7 +103,7 @@ The settings panel snaps next to the rack you're editing and updates **live** �
 
 - **No accidental deletes.** The Delete option is blocked for files inside a rack, so you can't wipe a folder a rack points at. Want it gone? Drag it out first.
 - **Open in File Explorer** — one click from any rack item to reveal the real file in its folder.
-- **Removing a rack returns everything** to your desktop, laid out in a clean grid.
+- **Removing an owned rack returns its files** to Desktop. If a return fails, the rack stays so you can resolve it. Removing a folder rack leaves the folder in place.
 
 <br />
 

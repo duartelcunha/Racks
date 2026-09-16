@@ -106,9 +106,9 @@ namespace Racks.Util
         private static void Tick(object? sender, EventArgs e)
         {
             // Real elapsed time so motion is frame-rate independent.
-            long now = DateTime.UtcNow.Ticks;
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
             if (_lastTicks == 0) { _lastTicks = now; return; }
-            double dt = (now - _lastTicks) / (double)TimeSpan.TicksPerSecond;
+            double dt = (now - _lastTicks) / (double)System.Diagnostics.Stopwatch.Frequency;
             _lastTicks = now;
             if (dt <= 0) return;
             if (dt > 0.05) dt = 0.05; // clamp a stall so nothing leaps across the screen
