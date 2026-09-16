@@ -38,7 +38,15 @@ Do not run `test/Test-Racks.ps1` in a normal Windows account. That older WPF tra
 - JSON replacement is atomic and keeps a last-good backup. A settings error opens recovery mode rather than silently resetting the user's layout.
 - Registry import makes a separate backup and converts settings once. The pure snapshot converter has isolated tests.
 - Scanning runs off the UI thread; refreshes are serialized. Rack grids virtualize rows. Position writes are delayed until movement settles. There is no thumbnail cache or idle animation loop in the shared app.
-- New shared-app shortcuts use Alt-drop; the existing WPF app retains its Ctrl-drop behavior. Ctrl/Cmd+K opens filename search, Ctrl/Cmd+Z undoes the last file operation, F2 renames a selection.
+- New shared-app shortcuts use Alt-drop; the existing WPF app retains its Ctrl-drop behavior. Ctrl/Cmd+K opens filename search, Ctrl/Cmd+Z undoes the last operation, F2 renames a selection. Arrow keys navigate files, Shift extends a range, Ctrl/Cmd+A selects all, and Escape clears selection without resetting scroll or focus.
+- Empty and folder-rack removal is undoable. Interrupted definition changes are reconciled on restart. Cancelled organization drops only empty, fully accounted-for rack definitions; uncertain folders remain accessible.
+- Application binaries, operation records, settings, and settings backups cannot be transfer sources or destinations. Routing pauses unavailable source folders with an explanation instead of silently appearing active.
+
+## Translation contributions
+
+The existing WPF tray uses `Racks/Properties/Lang.resx` and its `Lang.<culture>.resx` companions for all visible action labels and tooltips. Add matching `TrayContextMenu.*` keys to a language file; missing translations fall back to English. Chinese tray translations and fallback behavior have regression coverage. Regenerate `Lang.Designer.cs` with the existing resource generator when introducing keys, and keep the generated accessors in the commit.
+
+This addresses the hardcoded tray strings raised in [issue #3](https://github.com/duartelcunha/Racks/issues/3). The unused `Microsoft.CodeAnalysis` package is removed. The shared preview separates filesystem and persistence logic into Core; its UI copy is currently English and does not yet share the legacy translation resources. The existing app stays available throughout that migration.
 
 ## Releases and signing
 

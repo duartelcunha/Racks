@@ -28,7 +28,7 @@
                                        Foreground="#FFFFFF"/>
                             <Button x:Name="GithubHeaderButton"
                                     Click="visitGithub_Buton_Click"
-                                    ToolTip="Open Racks on GitHub"
+                                    ToolTip="{x:Static prop:Lang.TrayContextMenu_VisitGithub}"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
                                     Width="26" Height="26"
@@ -73,16 +73,16 @@
 
                 <ui:ToggleSwitch x:Name="AutorunToggle" Content="{x:Static prop:Lang.TrayContextMenu_StartOnLogin}"
                              Checked="AutorunToggle_CheckChanged"  Unchecked="AutorunToggle_CheckChanged"  />
-                <ui:ToggleSwitch x:Name="HideDesktopIconsToggle" Content="Hide desktop icons"
+                <ui:ToggleSwitch x:Name="HideDesktopIconsToggle" Content="{x:Static prop:Lang.TrayContextMenu_HideDesktopIcons}"
                              Checked="HideDesktopIconsToggle_CheckChanged" Unchecked="HideDesktopIconsToggle_CheckChanged" />
-                <ui:ToggleSwitch x:Name="HotCornerHideToggle" Content="Hide racks on top-right corner"
-                             ToolTip="Move your cursor to the top-right of the primary monitor to peek the desktop. Move away to show racks again."
+                <ui:ToggleSwitch x:Name="HotCornerHideToggle" Content="{x:Static prop:Lang.TrayContextMenu_HotCorner}"
+                             ToolTip="{x:Static prop:Lang.TrayContextMenu_HotCornerHelp}"
                              Checked="HotCornerHideToggle_CheckChanged" Unchecked="HotCornerHideToggle_CheckChanged" />
-                <ui:ToggleSwitch x:Name="LockAllToggle" Content="Lock all racks"
-                             ToolTip="Prevents accidentally moving or resizing any rack. Per-rack lock is still available from the title-bar menu."
+                <ui:ToggleSwitch x:Name="LockAllToggle" Content="{x:Static prop:Lang.TrayContextMenu_LockAll}"
+                             ToolTip="{x:Static prop:Lang.TrayContextMenu_LockAllHelp}"
                              Checked="LockAllToggle_CheckChanged" Unchecked="LockAllToggle_CheckChanged" />
-                <ui:ToggleSwitch x:Name="IcePhysicsToggle" Content="Ice-rink physics"
-                             ToolTip="Racks glide, bounce off edges and push each other when dragged together. Turn off to keep racks perfectly still."
+                <ui:ToggleSwitch x:Name="IcePhysicsToggle" Content="{x:Static prop:Lang.TrayContextMenu_Physics}"
+                             ToolTip="{x:Static prop:Lang.TrayContextMenu_PhysicsHelp}"
                              Checked="IcePhysicsToggle_CheckChanged" Unchecked="IcePhysicsToggle_CheckChanged" />
                 <!--<ui:ToggleSwitch x:Name="BlurToggle" Content="Enable blur"
                 Checked="BlurToggle_CheckChanged"  Unchecked="BlurToggle_CheckChanged" />-->
@@ -92,16 +92,16 @@
                 <ui:MenuItem x:Name="Settings_Button" Header="{x:Static prop:Lang.TrayContextMenu_Settings}"
                              Icon="{ui:SymbolIcon Symbol=Settings20}" Click="Settings_Button_Click" />
 
-                <MenuItem Name="addDesktopFrame" Height="34" Header="New rack" ToolTip="Empty rack — drag any shortcut, file, or folder into it (creates a shortcut, never moves your file)." Click="addDesktopFrame_Click" Icon="{ui:SymbolIcon Symbol=Add20}"/>
-                <MenuItem Name="addFolderFrame" Height="34" Header="New folder rack" ToolTip="Rack bound to a folder you pick by dragging it in. Shows that folder's contents." Click="addFolderFrame_Click" Icon="{ui:SymbolIcon Symbol=FolderAdd20}"/>
+                <MenuItem Name="addDesktopFrame" Height="34" Header="{x:Static prop:Lang.TrayContextMenu_NewRack}" ToolTip="{x:Static prop:Lang.TrayContextMenu_NewRackHelp}" Click="addDesktopFrame_Click" Icon="{ui:SymbolIcon Symbol=Add20}"/>
+                <MenuItem Name="addFolderFrame" Height="34" Header="{x:Static prop:Lang.TrayContextMenu_NewFolderRack}" ToolTip="{x:Static prop:Lang.TrayContextMenu_NewFolderRackHelp}" Click="addFolderFrame_Click" Icon="{ui:SymbolIcon Symbol=FolderAdd20}"/>
                 <Separator Margin="0,3,0,3"/>
-                <MenuItem Name="magicOrganizeDesktop" Height="34" Header="✨ Magic Organize Desktop..." ToolTip="AI will automatically organize your messy desktop into smart racks!" Click="magicOrganizeDesktop_Click" Foreground="#4DA6FF"/>
+                <MenuItem Name="magicOrganizeDesktop" Height="34" Header="{x:Static prop:Lang.TrayContextMenu_Organize}" ToolTip="{x:Static prop:Lang.TrayContextMenu_OrganizeHelp}" Click="magicOrganizeDesktop_Click" Foreground="#4DA6FF"/>
                 <Separator Margin="0,3,0,3"/>
-                <MenuItem Name="exportLayout" Height="34" Header="Export racks…" ToolTip="Save the entire rack layout to a single JSON file (backup or transfer)." Click="ExportLayout_Click" Icon="{ui:SymbolIcon Symbol=ArrowUpload20}"/>
-                <MenuItem Name="importLayout" Height="34" Header="Import racks…" ToolTip="Load a rack layout from JSON. Replaces all current racks. Restart required." Click="ImportLayout_Click" Icon="{ui:SymbolIcon Symbol=ArrowDownload20}"/>
+                <MenuItem Name="exportLayout" Height="34" Header="{x:Static prop:Lang.TrayContextMenu_Export}" ToolTip="{x:Static prop:Lang.TrayContextMenu_ExportHelp}" Click="ExportLayout_Click" Icon="{ui:SymbolIcon Symbol=ArrowUpload20}"/>
+                <MenuItem Name="importLayout" Height="34" Header="{x:Static prop:Lang.TrayContextMenu_Import}" ToolTip="{x:Static prop:Lang.TrayContextMenu_ImportHelp}" Click="ImportLayout_Click" Icon="{ui:SymbolIcon Symbol=ArrowDownload20}"/>
                 <Separator Margin="0,3,0,3"/>
-                <MenuItem Name="checkUpdatesMenuItem" Height="34" Header="Check for updates…" ToolTip="Check GitHub for a newer version of Racks and install it." Click="CheckUpdates_Click" Icon="{ui:SymbolIcon Symbol=ArrowSync20}"/>
-                <MenuItem Name="helpMenuItem" Height="34" Header="Help / cheatsheet…" ToolTip="Keybindings, gestures, and feature overview." Click="HelpMenuItem_Click" Icon="{ui:SymbolIcon Symbol=QuestionCircle20}"/>
+                <MenuItem Name="checkUpdatesMenuItem" Height="34" Header="{x:Static prop:Lang.TrayContextMenu_CheckUpdateButton}" ToolTip="{x:Static prop:Lang.TrayContextMenu_CheckUpdatesHelp}" Click="CheckUpdates_Click" Icon="{ui:SymbolIcon Symbol=ArrowSync20}"/>
+                <MenuItem Name="helpMenuItem" Height="34" Header="{x:Static prop:Lang.TrayContextMenu_Help}" ToolTip="{x:Static prop:Lang.TrayContextMenu_HelpDescription}" Click="HelpMenuItem_Click" Icon="{ui:SymbolIcon Symbol=QuestionCircle20}"/>
                 <MenuItem x:Name="Exit_Button" Height="34" 
                           Header="{x:Static prop:Lang.TrayContextMenu_Exit}" Click="ExitApp" Icon="{ui:SymbolIcon Symbol=ArrowExit20}" />
 

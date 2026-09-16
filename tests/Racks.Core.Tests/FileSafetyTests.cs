@@ -21,6 +21,54 @@ public sealed class FileSafetyTests : IDisposable
         var restarted = new FileOperations(paths, actions); var undo = restarted.LastUndo(); Assert.NotNull(undo);
         await restarted.UndoAsync(undo); Assert.Equal("original content", File.ReadAllText(source)); Assert.Equal(ItemOutcome.Undone, restarted.LastUndo()!.Items[0].Outcome);
     }
+    [Theory] [InlineData(RackKind.Owned)] [InlineData(RackKind.Folder)]
+    public async Task DefinitionRemovalAndUndoSurviveNewCoordinator(RackKind kind)
+    {
+        var folder = Path.Combine(paths.Workspace, "definition-only"); Directory.CreateDirectory(folder);
+        var rack = new RackDefinition { Kind = kind, Folder = folder };
+        var settings = new AppSettings { Racks = { rack } };
+        var record = new OperationRecord { RemovedRack = rack, SettingsPending = true };
+        await operations.ExecuteAsync(record, CollisionChoice.Skip);
+        var restarted = new FileOperations(paths, actions);
+        var saved = restarted.LastUndo(); Assert.NotNull(saved);
+        saved.ReconcileRacks(settings); Assert.Empty(settings.Racks);
+        await restarted.UndoAsync(saved);
+        restarted.LastUndo()!.ReconcileRacks(settings);
+        Assert.Equal(rack.Id, Assert.Single(settings.Racks).Id); Assert.True(Directory.Exists(folder));
+        Assert.Equal(0, actions.MoveCalls);
+    }
+    [Fact] public async Task RemovalKeepsFilesThatArriveDuringTheOperation()
+    {
+        var folder = Path.Combine(paths.Workspace, "incoming");
+        var source = FileAt(folder); var rack = new RackDefinition { Folder = folder };
+        var settings = new AppSettings { Racks = { rack } };
+        var record = Move(source, Path.Combine(paths.Desktop, "report.txt")); record.RemovedRack = rack;
+        actions.AfterMove = () => FileAt(folder, "arrived.txt");
+        await operations.ExecuteAsync(record, CollisionChoice.Skip); record.ReconcileRacks(settings);
+        Assert.Single(settings.Racks); Assert.True(File.Exists(Path.Combine(folder, "arrived.txt")));
+    }
+    [Theory] [InlineData(ItemOutcome.Pending, true)] [InlineData(ItemOutcome.Completed, true)]
+    [InlineData(ItemOutcome.Failed, true)] [InlineData(ItemOutcome.UndoPending, true)]
+    [InlineData(ItemOutcome.Skipped, false)] [InlineData(ItemOutcome.Undone, false)]
+    public void OrganizationReconciliationKeepsUncertainRacks(ItemOutcome outcome, bool retained)
+    {
+        var folder = Path.Combine(paths.Workspace, "group"); Directory.CreateDirectory(folder);
+        var rack = new RackDefinition { Folder = folder };
+        var record = new OperationRecord { Finished = true, CreatedRacks = { rack },
+            Items = { new OperationItem { Source = Path.Combine(paths.Desktop, "file.txt"), Destination = Path.Combine(folder, "file.txt"), DestinationRackId = rack.Id, Outcome = outcome } } };
+        var settings = new AppSettings { Racks = { rack } };
+        record.ReconcileRacks(settings); record.ReconcileRacks(settings);
+        Assert.Equal(retained, settings.Racks.Any(x => x.Id == rack.Id)); Assert.True(Directory.Exists(folder));
+    }
+    [Fact] public void CancelledOrganizationKeepsUnexpectedFilesAndUnavailableFolders()
+    {
+        var folder = Path.Combine(paths.Workspace, "group"); var file = FileAt(folder);
+        var rack = new RackDefinition { Folder = folder };
+        var record = new OperationRecord { Finished = true, CreatedRacks = { rack } };
+        var settings = new AppSettings(); record.ReconcileRacks(settings);
+        Assert.Single(settings.Racks); Assert.True(File.Exists(file));
+        rack.Folder = Path.Combine(paths.Workspace, "disconnected"); record.ReconcileRacks(settings); Assert.Single(settings.Racks);
+    }
     [Theory] [InlineData(CollisionChoice.KeepBoth, ItemOutcome.Completed)] [InlineData(CollisionChoice.Skip, ItemOutcome.Skipped)] [InlineData(CollisionChoice.Cancel, ItemOutcome.Skipped)]
     public async Task CollisionNeverReplacesExistingFile(CollisionChoice choice, ItemOutcome expected)
     {
@@ -118,6 +166,22 @@ public sealed class FileSafetyTests : IDisposable
         Assert.Equal(ItemOutcome.Failed, record.Items[0].Outcome);
         Assert.True(File.Exists(paths.Settings)); Assert.Equal(0, actions.MoveCalls);
     }
+    [Theory] [InlineData(OperationKind.Move)] [InlineData(OperationKind.Shortcut)]
+    public async Task RecoveryDirectoryCannotReceiveUserFiles(OperationKind kind)
+    {
+        var source = FileAt(paths.Desktop);
+        var destination = Path.Combine(paths.Operations, Guid.NewGuid() + ".json");
+        var record = Move(source, destination); record.Kind = kind;
+        await operations.ExecuteAsync(record, CollisionChoice.KeepBoth);
+        Assert.True(File.Exists(source)); Assert.False(File.Exists(destination));
+        Assert.Equal(ItemOutcome.Failed, record.Items[0].Outcome); Assert.Equal(0, actions.MoveCalls);
+    }
+    [Fact] public async Task SettingsBackupCannotBeMovedIntoARack()
+    {
+        JsonStore.Write(paths.Settings + ".bak", new AppSettings());
+        var record = await operations.ExecuteAsync(Move(paths.Settings + ".bak"), CollisionChoice.Skip);
+        Assert.True(File.Exists(paths.Settings + ".bak")); Assert.Equal(ItemOutcome.Failed, record.Items[0].Outcome);
+    }
     [Fact] public void ExtendedWindowsPathCannotBypassProtectedDirectory()
     {
         if (!OperatingSystem.IsWindows()) return;
@@ -141,6 +205,13 @@ public sealed class FileSafetyTests : IDisposable
     {
         File.WriteAllText(Path.Combine(paths.Operations, "broken.json"), "{bad"); operations.Persist(Move(FileAt(paths.Desktop)));
         Assert.Single(operations.ReadRecords(out var errors)); Assert.Single(errors);
+    }
+    [Fact] public void CorruptRecoveryDefinitionIsReportedWithoutReplayingIt()
+    {
+        var record = Move(FileAt(paths.Desktop)); record.SettingsPending = true;
+        record.CreatedRacks.Add(new RackDefinition { Folder = "relative-path" }); operations.Persist(record);
+        Assert.Empty(operations.ReadRecords(out var errors)); Assert.Single(errors);
+        Assert.True(File.Exists(record.Items[0].Source));
     }
     [Fact] public void AcknowledgingRecoveryNeverChangesFiles()
     {

@@ -1,6 +1,8 @@
 using Racks.Core;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.VisualTree;
 using System.Diagnostics;
 
@@ -15,10 +17,11 @@ internal static class Smoke
         try
         {
             var rack = session.Settings.Racks.Single(x => x.Title == "Large rack");
+            if (session.Settings.Racks.Any(x => x.Title is "Pending folder removal" or "Cancelled empty group")) throw new IOException("Interrupted definition changes were not reconciled after restart.");
             if (!rack.Locked || !rack.ListView || session.Items.Count(x => x.RackId == rack.Id) != 5001) throw new IOException("Rack state did not survive a new application process.");
             await session.UndoAsync();
             if (!File.Exists(Path.Combine(session.Paths.Desktop, "restart-marker.txt"))) throw new IOException("Undo did not survive a new application process.");
-            JsonStore.Write(Path.Combine(session.Paths.Data, "restart-result.json"), new { Passed = true, Checks = new[] { "Rack files, view and lock restored in a new process", "Last operation undone after a real application restart" } });
+            JsonStore.Write(Path.Combine(session.Paths.Data, "restart-result.json"), new { Passed = true, Checks = new[] { "Rack files, view and lock restored in a new process", "Interrupted rack removal and cancelled organization reconciled", "Last operation undone after a real application restart" } });
         }
         catch (Exception ex) { JsonStore.Write(Path.Combine(session.Paths.Data, "restart-result.json"), new { Passed = false, Error = ex.ToString() }); Environment.ExitCode = 1; }
         finally { app.Exit(); }
@@ -71,6 +74,19 @@ internal static class Smoke
             Check(File.Exists(source), "Return to Desktop restores the file");
             await session.RemoveRackAsync(rack, CollisionChoice.Skip);
             Check(!session.Settings.Racks.Any(x => x.Id == rack.Id), "Empty rack removal persists");
+            await session.UndoAsync();
+            Check(session.Settings.Racks.Any(x => x.Id == rack.Id), "Undo restores an empty rack definition");
+            var folderRack = session.CreateRack("Folder view", RackKind.Folder, session.Paths.Desktop);
+            await session.RemoveRackAsync(folderRack, CollisionChoice.Skip);
+            Check(File.Exists(source) && !session.Settings.Racks.Any(x => x.Id == folderRack.Id), "Folder rack removal leaves its files in place");
+            await session.UndoAsync();
+            Check(session.Settings.Racks.Any(x => x.Id == folderRack.Id) && File.Exists(source), "Undo restores a folder rack without moving its files");
+            var filteredRack = session.CreateRack("Imported name filter", RackKind.Owned);
+            var filteredFile = Path.Combine(filteredRack.Folder, "filtered.txt"); await File.WriteAllTextAsync(filteredFile, "legacy membership");
+            filteredRack.IncludedNames = ["filtered.txt"]; session.Save();
+            await session.RemoveRackAsync(filteredRack, CollisionChoice.Skip); await session.UndoAsync();
+            var restoredFilter = session.Settings.Racks.Single(x => x.Id == filteredRack.Id);
+            Check(File.Exists(filteredFile) && restoredFilter.IncludedNames!.Contains("filtered.txt") && session.Items.Any(x => x.RackId == filteredRack.Id), "Undo of imported rack removal restores its file membership");
             var partialRack = session.CreateRack("Partial return", RackKind.Owned);
             var held = Path.Combine(partialRack.Folder, "held.txt"); var free = Path.Combine(partialRack.Folder, "free.txt");
             await File.WriteAllTextAsync(held, "held"); await File.WriteAllTextAsync(free, "free");
@@ -98,6 +114,10 @@ internal static class Smoke
             var paused = Path.Combine(routingSource, "paused.txt"); await File.WriteAllTextAsync(paused, "leave this in source");
             await Task.Delay(4500);
             Check(File.Exists(paused) && !File.Exists(Path.Combine(partialRack.Folder, "paused.txt")), "Paused routing leaves new files in their source folder");
+            var unavailableRule = new RoutingRule { Source = Path.Combine(session.Paths.Data, "unavailable-source"), DestinationRackId = secondRack.Id, Enabled = true };
+            session.Settings.Rules.Add(unavailableRule); session.Settings.RoutingPaused = false; session.Router.Rebuild();
+            Check(!unavailableRule.Enabled && unavailableRule.LastError.Length > 0 && !session.Store.Load().Rules.Single(x => x.Id == unavailableRule.Id).Enabled, "Unavailable routing source pauses with a persisted explanation");
+            session.Settings.RoutingPaused = true; session.Save(); session.Router.Rebuild();
             var stress = session.CreateRack("Large rack", RackKind.Owned);
             await Task.Run(() => { for (var i = 0; i < 5000; i++) File.WriteAllText(Path.Combine(stress.Folder, $"Item-{i:D5}.txt"), "isolated sample"); });
             await session.RefreshAsync(); var stressWindow = app.GetRackWindow(stress); stressWindow.Activate();
@@ -114,6 +134,18 @@ internal static class Smoke
             }
             stressWindow.RequestAnimationFrame(Sample);
             await finished.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            await Task.Delay(100);
+            var focusedTile = stressWindow.GetVisualDescendants().OfType<ToggleButton>().First(x => x.Tag is string);
+            focusedTile.Focus(); var offsetBeforeSelection = scroll.Offset;
+            focusedTile.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.A, KeyModifiers = KeyModifiers.Control });
+            Check(focusedTile.IsChecked == true && focusedTile.IsFocused && scroll.Offset == offsetBeforeSelection, "Select all preserves the focused tile and scroll position");
+            focusedTile.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
+            Check(focusedTile.IsChecked == false && focusedTile.IsFocused && scroll.Offset == offsetBeforeSelection, "Clearing selection preserves the focused tile and scroll position");
+            focusedTile.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Right });
+            var nextTile = stressWindow.GetVisualDescendants().OfType<ToggleButton>().Single(x => x.IsFocused);
+            Check(!Equals(nextTile.Tag, focusedTile.Tag) && nextTile.IsChecked == true, "Arrow navigation focuses and selects the next file, not a row container");
+            nextTile.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Down, KeyModifiers = KeyModifiers.Shift });
+            Check(stressWindow.GetVisualDescendants().OfType<ToggleButton>().Count(x => x.IsChecked == true) == 3, "Shift-arrow selects a file range across grid rows");
             frames.Sort(); var p95 = frames[(int)(frames.Count * .95)];
             diagnostics["ScrollFrameP95Ms"] = p95;
             diagnostics["ScrollFramesOver25Ms"] = frames.Count(x => x > 25);
@@ -128,6 +160,11 @@ internal static class Smoke
             diagnostics["IdleRefreshes"] = session.RefreshCount - refreshes;
             diagnostics["IdleSettingsSaves"] = session.SaveCount - saves;
             Check(idleCores < .2, "Idle CPU stays below 20% of one core in isolated run");
+            var pendingRemovalRack = session.CreateRack("Pending folder removal", RackKind.Folder, session.Paths.Desktop);
+            await session.Operations.ExecuteAsync(new OperationRecord { RemovedRack = pendingRemovalRack, SettingsPending = true }, CollisionChoice.Skip);
+            var cancelledRack = session.CreateRack("Cancelled empty group", RackKind.Owned);
+            session.Operations.Persist(new OperationRecord { Finished = true, SettingsPending = true, CreatedRacks = { cancelledRack },
+                Items = { new OperationItem { Source = paused, Destination = Path.Combine(cancelledRack.Folder, "paused.txt"), DestinationRackId = cancelledRack.Id, Outcome = ItemOutcome.Skipped } } });
             var restartMarker = Path.Combine(session.Paths.Desktop, "restart-marker.txt"); await File.WriteAllTextAsync(restartMarker, "Persistent undo across an actual process restart");
             await session.MoveIntoAsync(stress, [restartMarker], false, CollisionChoice.Skip);
             stress.Locked = true; stress.ListView = true; session.Save();

@@ -1193,5 +1193,25 @@ namespace Racks.Properties {
                 return ResourceManager.GetString("TrayContextMenu.VisitGithub", resourceCulture);
             }
         }
+        public static string TrayContextMenu_NewRack => ResourceManager.GetString("TrayContextMenu.NewRack", resourceCulture)!;
+        public static string TrayContextMenu_NewRackHelp => ResourceManager.GetString("TrayContextMenu.NewRackHelp", resourceCulture)!;
+        public static string TrayContextMenu_NewFolderRack => ResourceManager.GetString("TrayContextMenu.NewFolderRack", resourceCulture)!;
+        public static string TrayContextMenu_NewFolderRackHelp => ResourceManager.GetString("TrayContextMenu.NewFolderRackHelp", resourceCulture)!;
+        public static string TrayContextMenu_HideDesktopIcons => ResourceManager.GetString("TrayContextMenu.HideDesktopIcons", resourceCulture)!;
+        public static string TrayContextMenu_HotCorner => ResourceManager.GetString("TrayContextMenu.HotCorner", resourceCulture)!;
+        public static string TrayContextMenu_HotCornerHelp => ResourceManager.GetString("TrayContextMenu.HotCornerHelp", resourceCulture)!;
+        public static string TrayContextMenu_LockAll => ResourceManager.GetString("TrayContextMenu.LockAll", resourceCulture)!;
+        public static string TrayContextMenu_LockAllHelp => ResourceManager.GetString("TrayContextMenu.LockAllHelp", resourceCulture)!;
+        public static string TrayContextMenu_Physics => ResourceManager.GetString("TrayContextMenu.Physics", resourceCulture)!;
+        public static string TrayContextMenu_PhysicsHelp => ResourceManager.GetString("TrayContextMenu.PhysicsHelp", resourceCulture)!;
+        public static string TrayContextMenu_Organize => ResourceManager.GetString("TrayContextMenu.Organize", resourceCulture)!;
+        public static string TrayContextMenu_OrganizeHelp => ResourceManager.GetString("TrayContextMenu.OrganizeHelp", resourceCulture)!;
+        public static string TrayContextMenu_Export => ResourceManager.GetString("TrayContextMenu.Export", resourceCulture)!;
+        public static string TrayContextMenu_ExportHelp => ResourceManager.GetString("TrayContextMenu.ExportHelp", resourceCulture)!;
+        public static string TrayContextMenu_Import => ResourceManager.GetString("TrayContextMenu.Import", resourceCulture)!;
+        public static string TrayContextMenu_ImportHelp => ResourceManager.GetString("TrayContextMenu.ImportHelp", resourceCulture)!;
+        public static string TrayContextMenu_CheckUpdatesHelp => ResourceManager.GetString("TrayContextMenu.CheckUpdatesHelp", resourceCulture)!;
+        public static string TrayContextMenu_Help => ResourceManager.GetString("TrayContextMenu.Help", resourceCulture)!;
+        public static string TrayContextMenu_HelpDescription => ResourceManager.GetString("TrayContextMenu.HelpDescription", resourceCulture)!;
     }
 }

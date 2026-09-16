@@ -520,4 +520,64 @@
   <data name="RacksSettings_EQSToolTip_Feature3" xml:space="preserve">
     <value>• 搜索栏中的计算器</value>
   </data>
+  <data name="TrayContextMenu.NewRack" xml:space="preserve">
+    <value>新建框架</value>
+  </data>
+  <data name="TrayContextMenu.NewRackHelp" xml:space="preserve">
+    <value>空框架：将快捷方式、文件或文件夹拖入其中以创建快捷方式，原文件不会移动。</value>
+  </data>
+  <data name="TrayContextMenu.NewFolderRack" xml:space="preserve">
+    <value>新建文件夹框架</value>
+  </data>
+  <data name="TrayContextMenu.NewFolderRackHelp" xml:space="preserve">
+    <value>拖入文件夹以关联框架并显示该文件夹的内容。</value>
+  </data>
+  <data name="TrayContextMenu.HideDesktopIcons" xml:space="preserve">
+    <value>隐藏桌面图标</value>
+  </data>
+  <data name="TrayContextMenu.HotCorner" xml:space="preserve">
+    <value>移到右上角时隐藏框架</value>
+  </data>
+  <data name="TrayContextMenu.HotCornerHelp" xml:space="preserve">
+    <value>将光标移到主显示器右上角以查看桌面，移开后恢复显示框架。</value>
+  </data>
+  <data name="TrayContextMenu.LockAll" xml:space="preserve">
+    <value>锁定所有框架</value>
+  </data>
+  <data name="TrayContextMenu.LockAllHelp" xml:space="preserve">
+    <value>防止意外移动框架或调整大小。也可通过标题栏菜单单独锁定框架。</value>
+  </data>
+  <data name="TrayContextMenu.Physics" xml:space="preserve">
+    <value>滑动与碰撞效果</value>
+  </data>
+  <data name="TrayContextMenu.PhysicsHelp" xml:space="preserve">
+    <value>拖动时，框架会滑动、在边缘反弹并相互推动。关闭后框架保持静止。</value>
+  </data>
+  <data name="TrayContextMenu.Organize" xml:space="preserve">
+    <value>✨ 智能整理桌面…</value>
+  </data>
+  <data name="TrayContextMenu.OrganizeHelp" xml:space="preserve">
+    <value>使用智能分组将桌面文件整理到框架中。</value>
+  </data>
+  <data name="TrayContextMenu.Export" xml:space="preserve">
+    <value>导出框架…</value>
+  </data>
+  <data name="TrayContextMenu.ExportHelp" xml:space="preserve">
+    <value>将框架布局保存为 JSON 文件以便备份或迁移。文件本身不包含在内。</value>
+  </data>
+  <data name="TrayContextMenu.Import" xml:space="preserve">
+    <value>导入框架…</value>
+  </data>
+  <data name="TrayContextMenu.ImportHelp" xml:space="preserve">
+    <value>从 JSON 文件导入布局，替换当前所有框架。需要重新启动。</value>
+  </data>
+  <data name="TrayContextMenu.CheckUpdatesHelp" xml:space="preserve">
+    <value>检查 GitHub 上是否有新版本的 Racks 并安装。</value>
+  </data>
+  <data name="TrayContextMenu.Help" xml:space="preserve">
+    <value>帮助 / 快捷操作…</value>
+  </data>
+  <data name="TrayContextMenu.HelpDescription" xml:space="preserve">
+    <value>查看快捷键、手势和功能概览。</value>
+  </data>
 </root>

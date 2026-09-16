@@ -26,6 +26,8 @@
     <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#75D4BD"/><Setter Property="Foreground" Value="#102620"/></Style>
     <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#44A990"/><Setter Property="Foreground" Value="#102620"/></Style>
     <Style Selector="Button.quiet"><Setter Property="Background" Value="Transparent"/></Style>
+    <Style Selector="ToggleButton.file-tile:checked /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{DynamicResource RackSelectionBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource RackSelectionBorder}"/><Setter Property="BorderThickness" Value="1"/></Style>
+    <Style Selector="ToggleButton.file-tile:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="{DynamicResource RackSelectionBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource RackSelectionBorder}"/></Style>
     <Style Selector="Button.nav"><Setter Property="Background" Value="Transparent"/><Setter Property="HorizontalAlignment" Value="Stretch"/><Setter Property="HorizontalContentAlignment" Value="Left"/><Setter Property="Padding" Value="14,12"/></Style>
     <Style Selector="Button.nav.active"><Setter Property="Background" Value="#2458C4AD"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
     <Style Selector="Border.sidebar"><Setter Property="Background" Value="{DynamicResource RacksSidebar}"/></Style>

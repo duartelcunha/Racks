@@ -11,6 +11,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Racks.Core;
 
 namespace Racks.Desktop;
@@ -33,6 +34,7 @@ public sealed class RackWindow : Window
     private Point? dragStart;
     private PointerPressedEventArgs? dragEvent;
     private bool dragging;
+    private string? selectionAnchor;
 
     public RackWindow(App app, RackDefinition rack)
     {
@@ -74,7 +76,9 @@ public sealed class RackWindow : Window
         });
 
         list.DoubleTapped += async (_, _) => { if (rack.ListView && list.SelectedItem is CatalogItem item) await OpenAsync(item); };
-        KeyDown += OnKeyDown;
+        // Intercept application shortcuts before ListBox consumes Ctrl+A to
+        // select row containers instead of the actual files.
+        AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
         PositionChanged += (_, _) => { if (!restoring) SaveSoon(); };
         SizeChanged += (_, _) => { if (!restoring) { var next = ColumnCount(); if (next != columns && !rack.ListView) { columns = next; RenderItems(); } SaveSoon(); } };
         saveTimer.Tick += (_, _) => { saveTimer.Stop(); FlushPosition(); };
@@ -150,6 +154,9 @@ public sealed class RackWindow : Window
         var color = Color.TryParse(Rack.Background, out var c) ? c : Color.Parse("#18252B");
         surface.Background = new SolidColorBrush(Color.FromArgb((byte)(Math.Clamp(Rack.Opacity, .2, 1) * 255), color.R, color.G, color.B));
         surface.BorderBrush = ParseBrush(Rack.Accent, "#58C4AD");
+        var accent = Color.TryParse(Rack.Accent, out var a) ? a : Color.Parse("#58C4AD");
+        Resources["RackSelectionBrush"] = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B));
+        Resources["RackSelectionBorder"] = new SolidColorBrush(accent);
         CanResize = !Rack.Locked && !Rack.Collapsed; list.IsVisible = !Rack.Collapsed;
         restoring = true; Height = Rack.Collapsed ? 68 : Rack.Height; restoring = false;
         if ((!session.Settings.DesktopIntegration || session.SafeMode) && attached) { session.Platform.Detach(this); attached = false; RestorePosition(); }
@@ -195,8 +202,10 @@ public sealed class RackWindow : Window
         symbol.Foreground = ParseBrush(Rack.Accent, "#58C4AD"); symbol.FontWeight = FontWeight.SemiBold;
         var content = compact ? Ui.Row(symbol, label) : Ui.Stack(symbol, label); content.Spacing = 8;
         var button = new ToggleButton { Content = content, HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch, MinWidth = 0, Height = compact ? Math.Max(42, Rack.FontSize * 1.8 + 16) : Math.Max(104, Rack.FontSize * 2.8 + 40), Padding = new Thickness(10), CornerRadius = new CornerRadius(9), Background = Brushes.Transparent, IsChecked = selected.Contains(item.Path) };
+        button.Tag = item.Path;
+        button.Classes.Add("file-tile");
         AutomationProperties.SetName(button, item.Name + ", " + item.Kind); ToolTip.SetTip(button, item.Name);
-        button.Click += (_, _) => { if (button.IsChecked == true) selected.Add(item.Path); else selected.Remove(item.Path); };
+        button.Click += (_, _) => { if (button.IsChecked == true) selected.Add(item.Path); else selected.Remove(item.Path); selectionAnchor = item.Path; };
         button.DoubleTapped += async (_, e) => { e.Handled = true; await OpenAsync(item); };
         button.AddHandler(KeyDownEvent, async (_, e) => { if (e.Key == Key.Enter) { e.Handled = true; await OpenAsync(item); } }, RoutingStrategies.Tunnel);
         button.ContextMenu = new ContextMenu { ItemsSource = new[] { Menu("Open", () => OpenAsync(item)), Menu("Reveal", () => { session.Platform.Reveal(item.Path); return Task.CompletedTask; }), Menu("Rename…", async () => { var name = await Ui.Prompt(this, "Rename file", "Filename", item.Name); if (name != null) await session.RenameAsync(item, name); }), Menu("Return to Desktop", async () => { var choice = await Ui.Collision(this); if (choice != null) await session.ReturnAsync([item], choice.Value); }) } };
@@ -232,6 +241,44 @@ public sealed class RackWindow : Window
         return button;
     }
     private IEnumerable<CatalogItem> Selected() => items.Where(x => selected.Contains(x.Path));
+    private void RefreshSelection()
+    {
+        // Keep the scroll position, focus, and virtualized rows when selection
+        // changes. Newly realized tiles read the same selection in Tile().
+        foreach (var button in list.GetVisualDescendants().OfType<ToggleButton>())
+            if (button.Tag is string path) button.IsChecked = selected.Contains(path);
+    }
+    private void NavigateFiles(KeyEventArgs e)
+    {
+        var focusedPath = (FocusManager?.GetFocusedElement() as Control)?.Tag as string;
+        var current = Array.FindIndex(items, item => item.Path == focusedPath);
+        var stride = Rack.ListView ? 1 : columns;
+        var target = e.Key switch
+        {
+            Key.Home => 0, Key.End => items.Length - 1,
+            _ when current < 0 => 0,
+            Key.Left => current - 1, Key.Right => current + 1,
+            Key.Up => current - stride, _ => current + stride
+        };
+        target = Math.Clamp(target, 0, items.Length - 1);
+        var command = (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0;
+        if ((e.KeyModifiers & KeyModifiers.Shift) != 0)
+        {
+            selectionAnchor ??= current >= 0 ? items[current].Path : items[target].Path;
+            var anchor = Math.Max(0, Array.FindIndex(items, item => item.Path == selectionAnchor));
+            if (!command) selected.Clear();
+            for (var i = Math.Min(anchor, target); i <= Math.Max(anchor, target); i++) selected.Add(items[i].Path);
+        }
+        else if (!command)
+        {
+            selected.Clear(); selected.Add(items[target].Path); selectionAnchor = items[target].Path;
+        }
+        list.SelectedIndex = -1;
+        list.ScrollIntoView(Rack.ListView ? target : target / columns);
+        list.UpdateLayout();
+        RefreshSelection();
+        list.GetVisualDescendants().OfType<ToggleButton>().FirstOrDefault(button => Equals(button.Tag, items[target].Path))?.Focus(NavigationMethod.Directional);
+    }
     public async Task DropAsync(string[] paths, bool shortcut, CollisionChoice? choice = null)
     {
         choice ??= await Ui.Collision(this); if (choice != null) await session.MoveIntoAsync(Rack, paths, shortcut, choice.Value);
@@ -249,11 +296,13 @@ public sealed class RackWindow : Window
         try
         {
             var command = (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0;
-            if (command && e.Key == Key.A) { foreach (var item in items) selected.Add(item.Path); RenderItems(); e.Handled = true; }
+            if (items.Length > 0 && list.IsKeyboardFocusWithin && e.Key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Home or Key.End)
+            { e.Handled = true; NavigateFiles(e); }
+            else if (command && e.Key == Key.A) { foreach (var item in items) selected.Add(item.Path); RefreshSelection(); e.Handled = true; }
             else if (command && e.Key == Key.Z) { await session.UndoAsync(); e.Handled = true; }
             else if (command && e.Key == Key.K) { new FinderWindow(session).Show(this); e.Handled = true; }
             else if (e.Key == Key.F2 && Selected().FirstOrDefault() is { } item) { var name = await Ui.Prompt(this, "Rename file", "Filename", item.Name); if (name != null) await session.RenameAsync(item, name); e.Handled = true; }
-            else if (e.Key == Key.Escape) { selected.Clear(); RenderItems(); }
+            else if (e.Key == Key.Escape) { selected.Clear(); selectionAnchor = null; list.SelectedIndex = -1; RefreshSelection(); e.Handled = true; }
         }
         catch (Exception ex) { await Ui.Error(this, ex); }
     }

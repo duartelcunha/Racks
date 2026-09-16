@@ -7,32 +7,47 @@ namespace Racks.Desktop;
 public sealed class RoutingService(Session session) : IDisposable
 {
     private readonly List<FileSystemWatcher> watchers = new();
-    private readonly ConcurrentDictionary<string, byte> pending = new();
     private CancellationTokenSource lifetime = new();
 
     public void Rebuild()
     {
         lifetime.Cancel(); lifetime.Dispose(); lifetime = new();
-        foreach (var watcher in watchers) watcher.Dispose(); watchers.Clear(); pending.Clear();
+        foreach (var watcher in watchers) watcher.Dispose(); watchers.Clear();
         if (session.SafeMode || session.ReadOnly || session.Settings.RoutingPaused) return;
-        foreach (var folder in session.Settings.Rules.Where(x => x.Enabled).Select(x => x.Source).Distinct().Where(Directory.Exists))
+        var token = lifetime.Token;
+        var pending = new ConcurrentDictionary<string, byte>();
+        foreach (var folder in session.Settings.Rules.Where(x => x.Enabled).Select(x => x.Source).Distinct().ToArray())
         {
-            var watcher = new FileSystemWatcher(folder) { NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite };
-            watcher.Created += (_, e) => Queue(e.FullPath, lifetime.Token);
-            watcher.Renamed += (_, e) => Queue(e.FullPath, lifetime.Token);
-            watcher.Error += (_, _) => Dispatcher.UIThread.Post(() =>
+            FileSystemWatcher? watcher = null;
+            try
             {
-                foreach (var rule in session.Settings.Rules.Where(x => x.Source == folder)) { rule.Enabled = false; rule.LastError = "Folder notifications were lost. Preview and enable the rule again."; }
-                try { session.Save(); } catch (Exception ex) { session.Problems.Add("Could not save routing pause: " + ex.Message); }
-                session.Status = "Routing paused after a folder notification error.";
-            });
-            watcher.EnableRaisingEvents = true; watchers.Add(watcher);
+                if (!Directory.Exists(folder)) throw new IOException("Source folder is unavailable. Reconnect it, then preview and enable the rule again.");
+                watcher = new FileSystemWatcher(folder) { NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite };
+                watcher.Created += (_, e) => Queue(e.FullPath, token, pending);
+                watcher.Renamed += (_, e) => Queue(e.FullPath, token, pending);
+                watcher.Error += (_, _) => Dispatcher.UIThread.Post(() =>
+                {
+                    if (!token.IsCancellationRequested) PauseFolder(folder, "Folder notifications were lost. Preview and enable the rule again.");
+                });
+                watcher.EnableRaisingEvents = true; watchers.Add(watcher);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                watcher?.Dispose(); PauseFolder(folder, ex.Message);
+            }
         }
     }
 
-    private async void Queue(string path, CancellationToken token)
+    private void PauseFolder(string folder, string error)
     {
-        if (!pending.TryAdd(path, 0)) return;
+        foreach (var rule in session.Settings.Rules.Where(x => x.Source == folder)) { rule.Enabled = false; rule.LastError = error; }
+        try { session.Save(); } catch (Exception ex) { session.Problems.Add("Could not save routing pause: " + ex.Message); }
+        session.Status = "Routing paused: " + error;
+    }
+
+    private async void Queue(string path, CancellationToken token, ConcurrentDictionary<string, byte> pending)
+    {
+        if (token.IsCancellationRequested || !pending.TryAdd(path, 0)) return;
         try
         {
             if (!File.Exists(path)) return; // New folders may still be receiving nested files.

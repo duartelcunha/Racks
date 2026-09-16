@@ -14,6 +14,16 @@ public sealed class FileOperations(AppPaths paths, IFileActions actions)
     public event Action? Changed;
     private string RecordPath(Guid id) => Path.Combine(paths.Operations, id + ".json");
     public void Persist(OperationRecord record) => JsonStore.Write(RecordPath(record.Id), record, backup: false);
+    private bool IsApplicationFile(string path)
+    {
+        if (SafeFiles.IsWithin(path, paths.Operations) || SafeFiles.IsWithin(path, AppContext.BaseDirectory)) return true;
+        var canonical = SafeFiles.CanonicalPath(path);
+        return new[] { paths.Settings, paths.LastUndo, paths.Startup }.Any(reserved =>
+        {
+            var location = SafeFiles.CanonicalPath(reserved);
+            return canonical.Equals(location, SafeFiles.PathComparison) || canonical.StartsWith(location + ".", SafeFiles.PathComparison);
+        });
+    }
 
     public IReadOnlyList<OperationRecord> ReadRecords(out List<string> errors)
     {
@@ -46,6 +56,11 @@ public sealed class FileOperations(AppPaths paths, IFileActions actions)
         if (record.Version != 1 || record.Id == Guid.Empty || record.Items is null || record.CreatedRacks is null || !Enum.IsDefined(record.Kind) || record.Label is null ||
             record.Items.Any(item => item == null || item.Error is null || !Enum.IsDefined(item.Outcome) || !Path.IsPathFullyQualified(item.Source) || !Path.IsPathFullyQualified(item.Destination)))
             throw new InvalidDataException("Invalid or unsupported operation record. Inspect the JSON file in the settings folder.");
+        var definitions = record.CreatedRacks.ToList();
+        if (record.RemovedRack != null) definitions.Add(record.RemovedRack);
+        SettingsStore.Validate(new AppSettings { Racks = definitions });
+        if (record.Items.Any(item => item.UndoDestination != null && !Path.IsPathFullyQualified(item.UndoDestination)))
+            throw new InvalidDataException("Invalid undo destination in operation record.");
     }
 
     public void PruneCompletedRecords()
@@ -80,9 +95,8 @@ public sealed class FileOperations(AppPaths paths, IFileActions actions)
                     try
                     {
                         if (!Path.IsPathFullyQualified(item.Source) || !Path.IsPathFullyQualified(item.Destination)) throw new IOException("Invalid file location.");
-                        if (SafeFiles.IsWithin(item.Source, paths.Operations) || SafeFiles.IsWithin(item.Source, AppContext.BaseDirectory) ||
-                            new[] { paths.Settings, paths.LastUndo, paths.Startup }.Any(x => SafeFiles.CanonicalPath(item.Source).Equals(SafeFiles.CanonicalPath(x), SafeFiles.PathComparison)))
-                            throw new IOException("Application and recovery files cannot be moved into a rack.");
+                        if (IsApplicationFile(item.Source) || IsApplicationFile(item.Destination))
+                            throw new IOException("Application files and recovery locations cannot be used for rack transfers.");
                         if (SafeFiles.Exists(item.Destination))
                         {
                             if (collision == CollisionChoice.Cancel)
@@ -133,7 +147,8 @@ public sealed class FileOperations(AppPaths paths, IFileActions actions)
                 }
                 operation.Finished = true;
                 Persist(operation);
-                if (operation.Completed > 0) JsonStore.Write(paths.LastUndo, operation.Id);
+                if (operation.Completed > 0 || operation.RemovedRack != null && operation.Items.Count == 0)
+                    JsonStore.Write(paths.LastUndo, operation.Id);
                 return operation;
             }, CancellationToken.None);
         }
@@ -148,12 +163,17 @@ public sealed class FileOperations(AppPaths paths, IFileActions actions)
         {
             return await Task.Run(() =>
             {
+                if (cancellation.IsCancellationRequested) return operation;
+                operation.UndoRequested = true;
+                Persist(operation);
                 foreach (var item in operation.Items.AsEnumerable().Reverse())
                 {
                     if (cancellation.IsCancellationRequested) break;
                     if (item.Outcome != ItemOutcome.Completed) continue;
                     try
                     {
+                        if (IsApplicationFile(item.Source) || IsApplicationFile(item.Destination))
+                            throw new IOException("Undo cannot change application files or recovery locations.");
                         if (!SafeFiles.Exists(item.Destination)) throw new IOException("The item is no longer at its recorded destination. Reveal its locations before resolving it.");
                         SafeFiles.RejectLinkAncestors(item.Destination);
                         if (!item.IsDirectory && (new FileInfo(item.Destination).Length != item.Length || File.GetLastWriteTimeUtc(item.Destination) != item.LastWriteUtc))

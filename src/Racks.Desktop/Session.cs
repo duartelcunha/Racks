@@ -29,6 +29,7 @@ public sealed class Session : INotifyPropertyChanged, IDisposable
     private CancellationTokenSource? catalogCancellation;
     private readonly SemaphoreSlim refreshGate = new(1, 1);
     private bool disposed;
+    private int refreshPosted;
     public long RefreshCount { get; private set; }
     public long SaveCount { get; private set; }
     public RoutingService Router { get; }
@@ -43,8 +44,12 @@ public sealed class Session : INotifyPropertyChanged, IDisposable
         Operations = new(Paths, Platform);
         if (!ReadOnly)
         {
-            if (LegacyImporter.Import(Paths, Settings)) Problems.Add("Your existing racks were imported. Their files stayed in their original folders. Routing rules were imported paused.");
-            Store.Save(Settings);
+            try
+            {
+                if (LegacyImporter.Import(Paths, Settings)) Problems.Add("Your existing racks were imported. Their files stayed in their original folders. Routing rules were imported paused.");
+                Store.Save(Settings);
+            }
+            catch (Exception ex) { ReadOnly = true; Problems.Add("Settings could not be saved. Check available space and folder permissions, then restart. " + ex.Message); }
         }
         var records = Operations.ReadRecords(out var errors);
         if (!ReadOnly)
@@ -53,11 +58,13 @@ public sealed class Session : INotifyPropertyChanged, IDisposable
             {
                 // Reconcile definitions and name filters from confirmed results only.
                 // This never moves or deletes a file and leaves ambiguous items unresolved.
-                foreach (var created in record.CreatedRacks)
-                    if (!Settings.Racks.Any(x => x.Id == created.Id)) Settings.Racks.Add(created);
-                if (record.RemovedRack is { } removed && record.Items.Any(x => x.Outcome == ItemOutcome.Undone) && !Settings.Racks.Any(x => x.Id == removed.Id)) Settings.Racks.Add(removed);
-                ApplyMembership(record, false); ApplyMembership(record, true); Store.Save(Settings);
-                record.SettingsPending = false; Operations.Persist(record);
+                try
+                {
+                    record.ReconcileRacks(Settings);
+                    ApplyMembership(record, false); ApplyMembership(record, true); Store.Save(Settings);
+                    record.SettingsPending = false; Operations.Persist(record);
+                }
+                catch (Exception ex) { ReadOnly = true; Problems.Add("Recovery could not be saved. Your operation record was retained. Check space and permissions, then restart. " + ex.Message); break; }
             }
         }
         foreach (var record in records)
@@ -140,6 +147,7 @@ public sealed class Session : INotifyPropertyChanged, IDisposable
         foreach (var source in sources.Distinct())
         {
             var name = Path.GetFileName(source.TrimEnd(Path.DirectorySeparatorChar));
+            if (!SafeFiles.IsLeafName(name)) throw new IOException("Choose a file or folder with a name, rather than a drive root.");
             if (shortcut) name += Platform.ShortcutExtension;
             operation.Items.Add(new() { Source = source, Destination = Path.Combine(rack.Folder, name), DestinationRackId = rack.Id,
                 SourceRackId = Items.FirstOrDefault(x => x.Path.Equals(source, SafeFiles.PathComparison))?.RackId });
@@ -164,19 +172,18 @@ public sealed class Session : INotifyPropertyChanged, IDisposable
     public async Task<bool> RemoveRackAsync(RackDefinition rack, CollisionChoice collision)
     {
         RequireWritable();
+        var operation = new OperationRecord { Label = "Remove " + rack.Title, RemovedRack = rack };
         if (rack.Kind == RackKind.Owned)
         {
             if (!Directory.Exists(rack.Folder)) throw new IOException("The rack folder is unavailable. Reconnect it before returning its files.");
             var sources = Directory.EnumerateFileSystemEntries(rack.Folder)
                 .Where(x => rack.IncludedNames == null || rack.IncludedNames.Contains(Path.GetFileName(x), StringComparer.OrdinalIgnoreCase)).ToList();
-            var operation = new OperationRecord { Label = "Remove " + rack.Title, RemovedRack = rack };
             foreach (var source in sources) operation.Items.Add(new() { Source = source, Destination = Path.Combine(Paths.Desktop, Path.GetFileName(source)), SourceRackId = rack.Id });
-            var result = await RunOperationAsync(operation, collision);
-            if (result.Items.Any(x => x.Outcome != ItemOutcome.Completed)) { Status = "The rack was kept because some files could not be returned. Open Recovery."; return false; }
         }
-        Settings.Racks.Remove(rack);
-        try { Save(); } catch { Settings.Racks.Add(rack); throw; }
-        RebuildWatchers(); Router.Rebuild(); RacksChanged?.Invoke(); await RefreshAsync(); return true;
+        await RunOperationAsync(operation, collision);
+        var removed = !Settings.Racks.Any(x => x.Id == rack.Id);
+        if (!removed) Status = "The rack was kept because files remain or its folder could not be checked. Inspect it before trying again.";
+        return removed;
     }
 
     public async Task<OperationRecord> RunOperationAsync(OperationRecord operation, CollisionChoice collision)
@@ -189,7 +196,10 @@ public sealed class Session : INotifyPropertyChanged, IDisposable
         {
             operation.SettingsPending = true;
             var result = await Operations.ExecuteAsync(operation, collision, new Progress<string>(x => Status = x), CurrentOperation.Token);
-            ApplyMembership(result, false); Save(); result.SettingsPending = false; Operations.Persist(result); Operations.PruneCompletedRecords(); await RefreshAsync();
+            ApplyMembership(result, false); result.ReconcileRacks(Settings); Save();
+            result.SettingsPending = false; Operations.Persist(result); Operations.PruneCompletedRecords();
+            if (result.CreatedRacks.Count > 0 || result.RemovedRack != null) { RebuildWatchers(); Router.Rebuild(); RacksChanged?.Invoke(); }
+            await RefreshAsync();
             Status = $"{result.Completed} completed · {result.Items.Count(x => x.Outcome == ItemOutcome.Skipped)} skipped · {result.Items.Count(x => x.Outcome == ItemOutcome.Failed)} need attention";
             if (result.NeedsAttention) Problems.Add(Status + " — " + result.Label);
             return result;
@@ -211,7 +221,7 @@ public sealed class Session : INotifyPropertyChanged, IDisposable
             foreach (var path in group.Paths) operation.Items.Add(new OperationItem { Source = path, Destination = Path.Combine(rack.Folder, Path.GetFileName(path)), DestinationRackId = rack.Id });
         }
         if (operation.Items.Count == 0) return;
-        Operations.Persist(operation);
+        operation.SettingsPending = true; Operations.Persist(operation);
         foreach (var rack in operation.CreatedRacks) Directory.CreateDirectory(rack.Folder);
         Settings.Racks.AddRange(operation.CreatedRacks); Save(); RacksChanged?.Invoke(); RebuildWatchers();
         await RunOperationAsync(operation, collision);
@@ -243,12 +253,9 @@ public sealed class Session : INotifyPropertyChanged, IDisposable
         {
             operation.SettingsPending = true; Operations.Persist(operation);
             var result = await Operations.UndoAsync(operation, CurrentOperation.Token);
-            if (operation.RemovedRack is { } rack && !Settings.Racks.Any(x => x.Id == rack.Id) && result.Items.Any(x => x.Outcome == ItemOutcome.Undone)) Settings.Racks.Add(rack);
-            ApplyMembership(result, true); Save(); RacksChanged?.Invoke(); RebuildWatchers(); await RefreshAsync();
-            foreach (var created in result.CreatedRacks)
-                if (Directory.Exists(created.Folder) && !Directory.EnumerateFileSystemEntries(created.Folder).Any() && !result.Items.Any(x => x.DestinationRackId == created.Id && x.Outcome is ItemOutcome.Completed or ItemOutcome.UndoPending or ItemOutcome.Failed or ItemOutcome.Pending))
-                    Settings.Racks.RemoveAll(x => x.Id == created.Id);
-            Save(); result.SettingsPending = false; Operations.Persist(result); RacksChanged?.Invoke(); RebuildWatchers();
+            result.ReconcileRacks(Settings); ApplyMembership(result, true); Save();
+            result.SettingsPending = false; Operations.Persist(result);
+            RacksChanged?.Invoke(); RebuildWatchers(); Router.Rebuild(); await RefreshAsync();
             Status = result.NeedsAttention || result.Items.Any(x => x.Outcome == ItemOutcome.Completed) ? "Undo needs attention. Inspect the recorded locations in Recovery." : "Operation undone.";
         }
         finally { CurrentOperation.Dispose(); CurrentOperation = null; PropertyChanged?.Invoke(this, new(nameof(CurrentOperation))); }
@@ -284,7 +291,18 @@ public sealed class Session : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void ScheduleRefresh() => Dispatcher.UIThread.Post(() => { if (disposed) return; refreshTimer.Stop(); refreshTimer.Start(); });
+    private void ScheduleRefresh()
+    {
+        // A burst of file notifications needs one queued UI callback, not one
+        // callback per file. Enumeration still happens off the UI thread.
+        if (Interlocked.Exchange(ref refreshPosted, 1) != 0) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            Interlocked.Exchange(ref refreshPosted, 0);
+            if (disposed) return;
+            refreshTimer.Stop(); refreshTimer.Start();
+        });
+    }
     public void Dispose()
     {
         disposed = true; Router.Dispose(); Updates.Dispose(); refreshTimer.Stop(); catalogCancellation?.Cancel();

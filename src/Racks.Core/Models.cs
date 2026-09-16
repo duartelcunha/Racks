@@ -99,11 +99,44 @@ public sealed class OperationRecord
     public DateTime StartedUtc { get; set; } = DateTime.UtcNow;
     public bool Finished { get; set; }
     public bool SettingsPending { get; set; }
+    public bool UndoRequested { get; set; }
     public List<OperationItem> Items { get; set; } = new();
     public List<RackDefinition> CreatedRacks { get; set; } = new();
     public RackDefinition? RemovedRack { get; set; }
     [JsonIgnore] public int Completed => Items.Count(x => x.Outcome == ItemOutcome.Completed);
     [JsonIgnore] public bool NeedsAttention => SettingsPending || !Finished || Items.Any(x => x.Outcome is ItemOutcome.Pending or ItemOutcome.Failed or ItemOutcome.UndoPending || x.Outcome == ItemOutcome.Completed && x.Error.Length > 0);
+
+    // Replaying this after a crash changes definitions only, never files. Keep a
+    // definition whenever its directory cannot be inspected safely.
+    public void ReconcileRacks(AppSettings settings)
+    {
+        foreach (var rack in CreatedRacks)
+        {
+            var released = Finished && Items.Where(x => x.DestinationRackId == rack.Id)
+                .All(x => x.Outcome is ItemOutcome.Skipped or ItemOutcome.Undone);
+            if (released && FolderIsEmpty(rack)) settings.Racks.RemoveAll(x => x.Id == rack.Id);
+            else if (!settings.Racks.Any(x => x.Id == rack.Id)) settings.Racks.Add(rack);
+        }
+        if (RemovedRack is not { } removed) return;
+        if (Items.Any(x => x.Outcome == ItemOutcome.Undone) || UndoRequested && Items.Count == 0)
+        {
+            if (!settings.Racks.Any(x => x.Id == removed.Id)) settings.Racks.Add(removed);
+        }
+        else if (!UndoRequested && Finished && Items.All(x => x.Outcome == ItemOutcome.Completed) &&
+                 (removed.Kind == RackKind.Folder || FolderIsEmpty(removed)))
+            settings.Racks.RemoveAll(x => x.Id == removed.Id);
+    }
+
+    private static bool FolderIsEmpty(RackDefinition rack)
+    {
+        try
+        {
+            if (!Directory.Exists(rack.Folder)) return false;
+            return !Directory.EnumerateFileSystemEntries(rack.Folder)
+                .Any(path => rack.IncludedNames == null || rack.IncludedNames.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
 }
 
 public sealed class OrganizeGroup

@@ -71,5 +71,18 @@ public sealed class LegacyRegressionTests : IDisposable
         var platform = new PlatformServices(); platform.CreateShortcut(source, target); var first = File.ReadAllBytes(target);
         Assert.Throws<IOException>(() => platform.CreateShortcut(source, target)); Assert.Equal(first, File.ReadAllBytes(target)); Assert.Equal("source", File.ReadAllText(source));
     }
+    [Theory] [InlineData("zh-CN", "新建框架")] [InlineData("en", "New rack")] [InlineData("pl-PL", "New rack")]
+    public void TrayResourcesResolveLocalizedTextOrEnglishFallback(string culture, string expected)
+    {
+        var previous = Racks.Properties.Lang.Culture;
+        try
+        {
+            Racks.Properties.Lang.Culture = new System.Globalization.CultureInfo(culture);
+            Assert.Equal(expected, Racks.Properties.Lang.TrayContextMenu_NewRack);
+            foreach (var property in typeof(Racks.Properties.Lang).GetProperties().Where(x => x.Name.StartsWith("TrayContextMenu_", StringComparison.Ordinal)))
+                Assert.False(string.IsNullOrWhiteSpace(property.GetValue(null) as string), property.Name);
+        }
+        finally { Racks.Properties.Lang.Culture = previous; }
+    }
     public void Dispose() { ResetCache(); Environment.SetEnvironmentVariable("RACKS_TEST_PROFILE", prior); if (root.StartsWith(Path.Combine(Path.GetTempPath(), "racks-tests") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) Directory.Delete(root, true); }
 }
