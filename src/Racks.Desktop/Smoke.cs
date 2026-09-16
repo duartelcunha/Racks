@@ -44,7 +44,7 @@ internal static class Smoke
             var updateControls = settingsWindow.GetVisualDescendants().OfType<Button>().ToArray();
             Check(updateControls.Any(x => Equals(x.Content, "Check for updates") && x.IsEffectivelyVisible && x.IsEnabled), "Manual update check is accessible without a signed feed");
             Check(updateControls.Any(x => Equals(x.Content, "View releases") && x.IsEffectivelyVisible && x.IsEnabled), "Official release page is accessible from settings");
-            Check(!session.Updates.Configured && !session.Updates.Ready, "Development builds do not offer unverified automatic installation");
+            Check(!session.Updates.Ready, "No installation is offered without a verified downloaded package");
             settingsWindow.Close();
             var source = Path.Combine(session.Paths.Desktop, "smoke-" + Guid.NewGuid().ToString("N") + ".txt");
             await File.WriteAllTextAsync(source, "Racks isolated verification");

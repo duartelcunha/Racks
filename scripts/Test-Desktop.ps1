@@ -1,9 +1,9 @@
 [CmdletBinding()]
-param([string]$Dotnet = 'dotnet', [ValidateSet('Debug','Release')][string]$Configuration = 'Release')
+param([string]$Dotnet = 'dotnet', [ValidateSet('Debug','Release')][string]$Configuration = 'Release', [string]$AssemblyPath)
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $profilePath = Join-Path $repoRoot ('.artifacts/smoke-' + [Guid]::NewGuid().ToString('N'))
-$assembly = Join-Path $repoRoot "src/Racks.Desktop/bin/$Configuration/net10.0/Racks.Next.dll"
+$assembly = if ($AssemblyPath) { [IO.Path]::GetFullPath($AssemblyPath) } else { Join-Path $repoRoot "src/Racks.Desktop/bin/$Configuration/net10.0/Racks.Next.dll" }
 if (!(Test-Path -LiteralPath $assembly)) { throw 'Build Racks.Desktop before running this check.' }
 # Each run creates its own profile. Never terminate any other Racks process.
 & $Dotnet $assembly --profile $profilePath --smoke-test
