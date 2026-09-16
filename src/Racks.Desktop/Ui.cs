@@ -20,7 +20,18 @@ internal static class Ui
     public static Button Button(string label, Action action, bool primary = false)
     {
         var button = new Button { Content = label }; AutomationProperties.SetName(button, label);
-        if (primary) button.Classes.Add("primary"); button.Click += (_, _) => action(); return button;
+        if (primary) button.Classes.Add("primary");
+        button.Click += async (_, _) =>
+        {
+            var owner = TopLevel.GetTopLevel(button) as Window;
+            try { action(); }
+            catch (Exception ex)
+            {
+                if (owner == null) throw;
+                await Error(owner, ex);
+            }
+        };
+        return button;
     }
     public static Button AsyncButton(string label, Window owner, Func<Task> action, bool primary = false)
     {

@@ -94,7 +94,13 @@ public sealed class RackWindow : Window
             }
             if (!Screens.All.Any(s => s.WorkingArea.Contains(session.Platform.ScreenPosition(this)))) RestorePosition();
         };
-        Closing += (_, e) => { if (!appClosing) { e.Cancel = true; rack.Visible = false; FlushPosition(); session.Save(); app.SyncRacks(); } };
+        Closing += async (_, e) =>
+        {
+            if (appClosing) return;
+            e.Cancel = true;
+            try { FlushPosition(); rack.Visible = false; session.Save(); app.SyncRacks(); }
+            catch (Exception ex) { rack.Visible = true; await Ui.Error(this, ex); }
+        };
         Closed += (_, _) => { saveTimer.Stop(); integrationTimer.Stop(); session.PropertyChanged -= SessionChanged; session.SettingsChanged -= ApplyAppearance; };
         ApplyAppearance();
     }

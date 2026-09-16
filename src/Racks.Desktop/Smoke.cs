@@ -2,7 +2,9 @@ using Racks.Core;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using System.Diagnostics;
 
@@ -118,6 +120,14 @@ internal static class Smoke
             session.Settings.Rules.Add(unavailableRule); session.Settings.RoutingPaused = false; session.Router.Rebuild();
             Check(!unavailableRule.Enabled && unavailableRule.LastError.Length > 0 && !session.Store.Load().Rules.Single(x => x.Id == unavailableRule.Id).Enabled, "Unavailable routing source pauses with a persisted explanation");
             session.Settings.RoutingPaused = true; session.Save(); session.Router.Rebuild();
+            var failureWindow = new Window { Title = "Isolated command failure", Width = 320, Height = 160 };
+            var failingButton = Ui.Button("Check failure handling", () => throw new IOException("Isolated write failure"));
+            failureWindow.Content = failingButton; failureWindow.Show(app.Home);
+            failingButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await Task.Delay(100);
+            var errorDialog = ((IClassicDesktopStyleApplicationLifetime)app.ApplicationLifetime!).Windows.SingleOrDefault(x => x.Title == "Couldn’t finish");
+            Check(errorDialog != null && errorDialog.GetVisualDescendants().OfType<TextBlock>().Any(x => x.Text == "Isolated write failure"), "A failed window command shows an actionable error without terminating the app");
+            errorDialog!.Close(); failureWindow.Close();
             var stress = session.CreateRack("Large rack", RackKind.Owned);
             await Task.Run(() => { for (var i = 0; i < 5000; i++) File.WriteAllText(Path.Combine(stress.Folder, $"Item-{i:D5}.txt"), "isolated sample"); });
             await session.RefreshAsync(); var stressWindow = app.GetRackWindow(stress); stressWindow.Activate();
