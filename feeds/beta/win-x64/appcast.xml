@@ -1,15 +1,1 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>Racks</title>
-    <description>Most recent changes with links to updates</description>
-    <language>en</language>
-    <item>
-      <title>Racks 2.0.0-beta.1</title>
-      <pubDate>Wed, 16 Sep 2026 15:08:55 +00:00</pubDate>
-      <sparkle:version>2.0.0-beta.1</sparkle:version>
-      <sparkle:shortVersionString>2.0.0</sparkle:shortVersionString>
-      <enclosure url="https://github.com/duartelcunha/Racks/releases/download/v2.0.0-beta.1/Racks-Setup-2.0.0-beta.1.exe" sparkle:version="2.0.0-beta.1" sparkle:shortVersionString="2.0.0" length="54025429" sparkle:os="windows-x64" type="application/x-msdos-program" sparkle:criticalUpdate="false" sparkle:edSignature="4mGi5NPVSpHVMoBq6BVhCnGch3+yYRzoYJFS5345N4K2Ehp6ow+CJbzvL8yA3ymjmZIswDl9Qu9J3CwmJ5cFCw==" />
-    </item>
-  </channel>
-</rss>
+<?xml version="1.0" encoding="utf-8"?><rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>Racks Windows beta updates</title><description>Verified Windows x64 beta releases.</description><language>en</language></channel></rss>
