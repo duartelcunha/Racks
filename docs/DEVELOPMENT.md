@@ -8,6 +8,7 @@ The current Windows app is in `Racks/`. The shared app lives alongside it so the
 - `src/Racks.Desktop`: Avalonia surfaces, application session, and small Windows/Mac platform integrations.
 - `tests/Racks.Core.Tests`: isolated filesystem and persistence regressions; runs on Windows and Mac.
 - `tests/Racks.Windows.Tests`: tests the actual legacy assembly, settings conversion, Windows shortcuts, and update signatures.
+- `tests/Racks.UpdateHarness`: runs the real update service on a disposable hosted Windows VM. It holds the application mutex until graceful shutdown, allowing CI to verify the updater-to-installer handoff.
 
 Use .NET 10. `global.json` accepts installed .NET 10 feature releases. No global SDK change is required.
 
@@ -55,10 +56,14 @@ Never distribute a stable overhaul build based only on compilation and unit test
 The Windows publishing script requires a maintainer-owned Ed25519 **public** key and an HTTPS feed base:
 
 ```powershell
-./scripts/Publish-Windows.ps1 -PublicKey '<base64 public key>' -FeedBase 'https://your-release-host/racks'
+./scripts/Publish-Windows.ps1 -PublicKey '<base64 public key>' -FeedBase 'https://your-release-host/racks' -DownloadBase 'https://github.com/duartelcunha/Racks/releases/download/v2.0.0-beta.1' -KeyPath '<existing signing key directory>'
 ```
 
 NetSparkle uses strict verification for both feeds and packages. The application chooses `win-x64/appcast.xml` or `osx-arm64/appcast.xml` beneath the configured base. Publish each feed with its `.signature`, and sign every enclosed package using NetSparkle's standard appcast generator. Keep private signing keys outside this repository. Do not generate a replacement production trust root during a build.
+
+Both publishing scripts call `New-UpdateFeed.ps1`, which uses the pinned NetSparkle appcast generator in `dotnet-tools.json`. It requires existing keys matching the embedded public key, checks package URL/platform/version, and independently verifies feed and package signatures before succeeding. Use an empty output directory. Windows Authenticode signing, if applied, must happen before generating the final NetSparkle signatures; any later package modification invalidates them.
+
+`Test-ReleaseSigning.ps1` generates disposable test keys and inert packages under `.artifacts`, then exercises both platform feeds. Test keys are never uploaded or embedded in production builds. The Windows installer job additionally downloads a real signed test installer through the production update service, waits for graceful app shutdown, and checks install/uninstall/reinstall preservation. It refuses execution outside a disposable hosted Windows VM.
 
 Automatic checks run at startup and every six hours when enabled, and download verified updates; installation is a user-selected safe restart and refuses active file operations. Settings provides manual checks, pause, and restart controls. A development build without a key/feed only contacts GitHub when **Check for updates** is clicked, shows the latest published stable version alongside the installed version, and provides **View releases** for downloads and release notes. This discovery does not download or install packages. GitHub failures and timeouts allow retry; only the signed updater can offer automatic installation.
 
@@ -68,4 +73,4 @@ Inno Setup keeps the existing application ID and retains files/settings outside 
 
 Mac CI runs the shared build, core tests, and a native-window experiment on an Apple Silicon runner. This is not a substitute for Finder/Spaces, multi-monitor, sleep/resume, accessibility, signed package, and notarization checks on a real Mac session.
 
-`bash scripts/Publish-Mac.sh` builds an Apple Silicon `.app`, signs its native binaries and bundle, submits it using an existing `notarytool` keychain profile, staples the ticket, and produces a ZIP. It requires `RACKS_PUBLIC_KEY`, `RACKS_FEED_BASE`, `RACKS_CODESIGN_IDENTITY`, and `RACKS_NOTARY_PROFILE`. The script has not been exercised with production signing credentials. NetSparkle feed/package signing remains a separate maintainer step; neither publishing script uploads a release.
+`bash scripts/Publish-Mac.sh` builds an Apple Silicon `.app`, signs its native binaries and bundle, submits it using an existing `notarytool` keychain profile, staples the ticket, and produces a ZIP plus verified signed feed. It requires `RACKS_PUBLIC_KEY`, `RACKS_FEED_BASE`, `RACKS_DOWNLOAD_BASE`, `RACKS_KEY_PATH`, `RACKS_CODESIGN_IDENTITY`, and `RACKS_NOTARY_PROFILE`. The script has not been exercised with production Apple signing credentials. The ZIP is extracted beside the installed application bundle; the updater then relaunches its executable. Neither publishing script uploads a release.

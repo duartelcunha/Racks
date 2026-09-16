@@ -46,12 +46,12 @@ Set-ItemProperty -LiteralPath $startupPath -Name DesktopRacks -Value ('"' + (Joi
 Push-Location $repoRoot
 try {
     $publishPath = Join-Path $outputRoot 'publish'
-    & $Dotnet publish src/Racks.Desktop/Racks.Desktop.csproj -c Release -r win-x64 --self-contained true -o $publishPath --warnaserror
+    & $Dotnet publish src/Racks.Desktop/Racks.Desktop.csproj -c Release -r win-x64 --self-contained true -o $publishPath '-p:Version=2.0.0-beta.2' --warnaserror
     if ($LASTEXITCODE) { throw 'Installer test publish failed.' }
-    & $compiler '/DAppVersion=2.0.0-beta.1' '/DAppExeName=Racks.Next.exe' "/DSourceRoot=$publishPath" installer/Racks.iss
+    & $compiler '/DAppVersion=2.0.0-beta.2' '/DAppExeName=Racks.Next.exe' "/DSourceRoot=$publishPath" installer/Racks.iss
     if ($LASTEXITCODE) { throw 'Installer compilation failed.' }
-    $installer = Join-Path $repoRoot 'installer/Output/Racks-Setup-2.0.0-beta.1.exe'
-    Run-Installer $installer 'upgrade.log'
+    $installer = Join-Path $repoRoot 'installer/Output/Racks-Setup-2.0.0-beta.2.exe'
+    & "$PSScriptRoot/Test-UpdateInstall.ps1" -Dotnet $Dotnet -PackagePath $installer -InstallPath $installPath -FixtureRoot $outputRoot
     if ((Get-ItemPropertyValue -LiteralPath $startupPath -Name Racks) -ne 'Existing startup preference') { throw 'Upgrade changed the startup preference.' }
     if ((Get-ItemPropertyValue -LiteralPath $startupPath -Name DesktopRacks) -ne ('"' + (Join-Path $installPath 'Racks.Next.exe') + '"')) { throw 'Upgrade did not update the existing app startup path.' }
     if (!(Test-Path -LiteralPath (Join-Path $installPath 'Racks.Next.exe'))) { throw 'Upgrade did not install the shared app.' }
@@ -67,7 +67,7 @@ try {
     if (Test-Path -LiteralPath (Join-Path $installPath 'Racks.Next.exe')) { throw 'Uninstall left the application executable installed.' }
     Run-Installer $installer 'reinstall.log'
     Assert-Preserved
-    @{ Passed = $true; Baseline = 'v1.1.4'; Checks = @('Published installer upgraded', 'Startup preference preserved during upgrade', 'Files and registry survived uninstall', 'Reinstall retained files and settings') } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repoRoot '.artifacts/installer-result.json')
+    @{ Passed = $true; Baseline = 'v1.1.4'; Checks = @('Signed feed and package verified by actual updater', 'Updater requested graceful shutdown before installation', 'Published installer upgraded', 'Startup preference preserved during upgrade', 'Files and registry survived uninstall', 'Reinstall retained files and settings') } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repoRoot '.artifacts/installer-result.json')
 } finally {
     $logs = Join-Path $repoRoot '.artifacts/installer-logs'
     New-Item -ItemType Directory -Path $logs -Force | Out-Null

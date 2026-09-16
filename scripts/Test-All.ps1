@@ -12,4 +12,5 @@ try {
         if ($LASTEXITCODE) { throw 'Windows regression tests failed.' }
     }
     & "$PSScriptRoot/Test-Desktop.ps1" -Dotnet $Dotnet -Configuration Release
+    & "$PSScriptRoot/Test-ReleaseSigning.ps1" -Dotnet $Dotnet
 } finally { Pop-Location }

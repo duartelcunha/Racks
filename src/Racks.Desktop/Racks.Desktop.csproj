@@ -11,6 +11,8 @@
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Racks.Windows.Tests" />
+    <InternalsVisibleTo Include="Racks.UpdateHarness" />
     <ProjectReference Include="../Racks.Core/Racks.Core.csproj" />
     <PackageReference Include="Avalonia" Version="12.1.2" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />

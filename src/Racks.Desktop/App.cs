@@ -24,6 +24,7 @@ public sealed partial class App : Application
             Home = new HomeWindow(this); desktop.MainWindow = Home; desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             Session.RacksChanged += SyncRacks;
             Session.Updates.CloseRequested += () => Exit();
+            Session.Updates.PreparingInstall += () => { foreach (var window in windows.Values) window.FlushPosition(); };
             desktop.ShutdownRequested += (_, e) => { if (Session.CurrentOperation != null) { e.Cancel = true; Home.Show(); Home.Activate(); Session.Status = "Finish or cancel the file operation before quitting."; } };
             desktop.Exit += (_, _) => Session.Dispose();
             Home.Opened += async (_, _) =>

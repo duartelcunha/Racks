@@ -16,7 +16,7 @@ public sealed class FileOperations(AppPaths paths, IFileActions actions)
     public void Persist(OperationRecord record) => JsonStore.Write(RecordPath(record.Id), record, backup: false);
     private bool IsApplicationFile(string path)
     {
-        if (SafeFiles.IsWithin(path, paths.Operations) || SafeFiles.IsWithin(path, AppContext.BaseDirectory)) return true;
+        if (SafeFiles.IsWithin(path, paths.Operations) || SafeFiles.IsWithin(path, paths.Updates) || SafeFiles.IsWithin(path, AppContext.BaseDirectory)) return true;
         var canonical = SafeFiles.CanonicalPath(path);
         return new[] { paths.Settings, paths.LastUndo, paths.Startup }.Any(reserved =>
         {

@@ -182,6 +182,17 @@ public sealed class FileSafetyTests : IDisposable
         var record = await operations.ExecuteAsync(Move(paths.Settings + ".bak"), CollisionChoice.Skip);
         Assert.True(File.Exists(paths.Settings + ".bak")); Assert.Equal(ItemOutcome.Failed, record.Items[0].Outcome);
     }
+    [Fact] public async Task UpdateCacheCannotBecomeAUserFileLocation()
+    {
+        Directory.CreateDirectory(paths.Updates);
+        var package = FileAt(paths.Updates);
+        var userFile = FileAt(paths.Desktop);
+        var outgoing = await operations.ExecuteAsync(Move(package), CollisionChoice.Skip);
+        var incoming = await operations.ExecuteAsync(Move(userFile, Path.Combine(paths.Updates, "user.txt")), CollisionChoice.Skip);
+        Assert.Equal(ItemOutcome.Failed, outgoing.Items[0].Outcome);
+        Assert.Equal(ItemOutcome.Failed, incoming.Items[0].Outcome);
+        Assert.True(File.Exists(package)); Assert.True(File.Exists(userFile)); Assert.Equal(0, actions.MoveCalls);
+    }
     [Fact] public void ExtendedWindowsPathCannotBypassProtectedDirectory()
     {
         if (!OperatingSystem.IsWindows()) return;

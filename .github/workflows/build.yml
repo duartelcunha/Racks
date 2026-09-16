@@ -29,6 +29,9 @@ jobs:
       - name: Isolated real application smoke test
         shell: pwsh
         run: ./scripts/Test-Desktop.ps1 -Dotnet dotnet -Configuration Release
+      - name: Signed feed and package generation with ephemeral keys
+        shell: pwsh
+        run: ./scripts/Test-ReleaseSigning.ps1 -Dotnet dotnet
       - name: Upgrade, uninstall and reinstall on disposable runner
         shell: pwsh
         env:
@@ -66,6 +69,9 @@ jobs:
       - name: Isolated native-window experiment
         shell: pwsh
         run: ./scripts/Test-Desktop.ps1 -Dotnet dotnet -Configuration Release
+      - name: Signed feed and package generation with ephemeral keys
+        shell: pwsh
+        run: ./scripts/Test-ReleaseSigning.ps1 -Dotnet dotnet
       - uses: actions/upload-artifact@v4
         if: always()
         with:

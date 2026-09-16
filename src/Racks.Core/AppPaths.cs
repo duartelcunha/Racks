@@ -10,6 +10,7 @@ public sealed class AppPaths
     public string Operations => Path.Combine(Data, "operations");
     public string LastUndo => Path.Combine(Data, "last-undo.json");
     public string Startup => Path.Combine(Data, "startup.json");
+    public string Updates => Path.Combine(Data, "updates");
 
     public AppPaths(string? profile = null)
     {
