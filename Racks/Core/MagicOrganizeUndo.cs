@@ -30,7 +30,7 @@ namespace Racks.Core
 
         // Only the most recent run is undoable (kept in memory + persisted for safety).
         private static string StoragePath => Path.Combine(
-            Environment.GetEnvironmentVariable("RACKS_TEST_PROFILE") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RacksData"), "legacy-organize-undo.json");
+            Environment.GetEnvironmentVariable("RACKS_TEST_PROFILE") ?? Path.Combine(Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RacksData"), "legacy-organize-undo.json");
         private static MagicOrganizeUndo? _last;
         public static MagicOrganizeUndo? Last
         {

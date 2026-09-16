@@ -26,7 +26,10 @@ jobs:
         run: dotnet test tests/Racks.Core.Tests -c Release --no-build --logger "trx;LogFileName=core.trx"
       - name: Existing Windows app and integration tests
         run: dotnet test tests/Racks.Windows.Tests -c Release --logger "trx;LogFileName=windows.trx" --warnaserror
-      - name: Isolated real application smoke test
+      - name: Native WPF rack preview and restart
+        shell: pwsh
+        run: ./scripts/Test-NativePreview.ps1 -Dotnet dotnet -Configuration Release
+      - name: Preserved shared application regression smoke
         shell: pwsh
         run: ./scripts/Test-Desktop.ps1 -Dotnet dotnet -Configuration Release
       - name: Signed feed and package generation with ephemeral keys
@@ -46,6 +49,8 @@ jobs:
             tests/**/TestResults/*.trx
             .artifacts/smoke-*/smoke-result.json
             .artifacts/smoke-*/restart-result.json
+            .artifacts/native-preview-*/pass-*.json
+            .artifacts/native-preview-*/Roaming/Racks/crash.log
             .artifacts/installer-result.json
             .artifacts/update-relaunch-*.json
             .artifacts/installer-logs/*.log

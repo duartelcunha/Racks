@@ -24,11 +24,14 @@ namespace Racks
         // and popped a modal dialog when you double-clicked the exe.
         #pragma warning disable CS0649
         private static Mutex? _singleInstanceMutex;
+        private static bool _ownsMutex;
 #pragma warning restore CS0649
-        public RegistryHelper reg = new RegistryHelper(InstanceController.appName);
+        public RegistryHelper reg;
 
         public App()
         {
+            Util.NativeProfile.Initialize(Environment.GetCommandLineArgs().Skip(1).ToArray());
+            reg = new RegistryHelper(InstanceController.appName);
             // Racks is a background tray app that's meant to keep running for the
             // whole session - a single bad rename, a bad saved regex, a stray null
             // ref in a click handler, shouldn't take down every open rack with it.
@@ -64,7 +67,7 @@ namespace Racks
             try
             {
                 string dir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                     InstanceController.appName);
                 Directory.CreateDirectory(dir);
                 File.AppendAllText(Path.Combine(dir, "crash.log"),
@@ -83,7 +86,7 @@ namespace Racks
             AppDomain.CurrentDomain.SetData("REGEX_DEFAULT_MATCH_TIMEOUT", Racks.Util.SafeRegex.MatchTimeout);
             // One-time migration of HKCU\SOFTWARE\DeskFrame → HKCU\SOFTWARE\Racks so
             // users upgrading from the original DeskFrame build keep their frames.
-            InstanceController.MigrateLegacyRegistry();
+            if (!Util.NativeProfile.IsIsolated) InstanceController.MigrateLegacyRegistry();
             // Tell Windows we'd like dark mode for native popups (shell context
             // menu). Has to run before any menu is shown.
             Racks.Util.DarkModeHelper.EnableForApp();
@@ -96,7 +99,8 @@ namespace Racks
                 // concept. Global\ let any process in ANY session pre-create the name and silently
                 // block every Racks launch (a squatting DoS), and wrongly stopped two different
                 // users from each running their own Racks. Local\ scopes it to this session.
-                _singleInstanceMutex = new Mutex(true, @"Local\Racks-SingleInstance-2C9D", out createdNew);
+                _singleInstanceMutex = new Mutex(true, Util.NativeProfile.MutexName, out createdNew);
+                _ownsMutex = createdNew;
                 if (!createdNew)
                 {
                     // Another Racks is already running in this session — its tray icon is live. Just exit.
@@ -112,7 +116,18 @@ namespace Racks
             }
 
             PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Critical;
+            Util.CossTheme.Apply(false);
             base.OnStartup(e);
+
+            if (Util.NativeProfile.IsIsolated)
+            {
+                Racks.Core.DesktopIconManager.Initialize();
+                var shell = new MainWindow();
+                Util.NativeDesignPreview.Show(shell);
+                return;
+            }
+
+            StartupUri = new Uri("MainWindow.xaml", UriKind.Relative);
 
             // Two distinct animations:
             //  - FIRST run after install: the signature "logo rolls in and drops into the
@@ -172,7 +187,7 @@ namespace Racks
             // Remove the C++ desktop hook
             try { Racks.Core.DesktopIconManager.StopHook(); } catch { }
             
-            _singleInstanceMutex?.ReleaseMutex();
+            if (_ownsMutex) _singleInstanceMutex?.ReleaseMutex();
             _singleInstanceMutex?.Dispose();
             
             base.OnExit(e);

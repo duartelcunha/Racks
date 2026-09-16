@@ -24,7 +24,7 @@ namespace Racks.Util
     public static class RackMirror
     {
         public static string MirrorRoot => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "Racks");
 
         // Sanitize a rack title into a usable folder name. Strips reserved

@@ -83,6 +83,7 @@ namespace Racks
             catch { versionHeader.ToolTip = "Racks"; }
             _controller = new InstanceController();
             _controller.InitInstances();
+            if (NativeProfile.IsIsolated) return;
             RefreshGlobalHiddenFiles();
 
             // Auto-routing: any file landing on the user's Desktop that matches a
@@ -188,7 +189,7 @@ namespace Racks
         {
             try
             {
-                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                string desktopPath = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.Desktop);
                 var clusters = Racks.Core.AutoOrganizer.AnalyzeDesktop(desktopPath);
                 
                 if (clusters.Count == 0)
@@ -249,7 +250,7 @@ namespace Racks
 
                             var inst = new Instance(safeName, false);
                             inst.TitleText = cluster.Name;
-                            inst.Folder = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                            inst.Folder = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.Desktop);
                             inst.IsDesktopFilterRack = true;
                             inst.PosX = startX + col * (rackWidth + gap);
                             inst.PosY = startY + row * (rackHeight + gap);
@@ -378,14 +379,14 @@ namespace Racks
                         if (inst == null) continue;
                         inst.isWindowClosing = true;
                         var win = _controller._subWindows.FirstOrDefault(w => w.Instance == inst);
-                        Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(inst.GetKeyLocation(), false);
+                        Racks.Util.ProfileRegistry.CurrentUser.DeleteSubKeyTree(inst.GetKeyLocation(), false);
                         if (win != null) { win.Close(); _controller.RemoveInstance(inst, win); }
                         else _controller.Instances.Remove(inst);
                     }
                 }
                 undo.RemoveCreatedFolders();                // Lay the returned files out in a clean grid on the desktop.
                 var back = new List<string>();
-                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                string desktop = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.Desktop);
                 foreach (var m in undo.Moved)
                     if (System.IO.File.Exists(m.OriginalPath) || System.IO.Directory.Exists(m.OriginalPath))
                         back.Add(m.OriginalPath);
@@ -445,6 +446,7 @@ namespace Racks
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
+            if (NativeProfile.IsIsolated) return;
             var hwnd = new WindowInteropHelper(this).Handle;
             int exStyle = (int)GetWindowLong(hwnd, GWL_EXSTYLE);
             exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;

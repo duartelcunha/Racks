@@ -1,3 +1,5 @@
+using Registry = Racks.Util.ProfileRegistry;
+using RegistryKey = Racks.Util.ProfileRegistryKey;
 using Microsoft.Win32;
 using System.Diagnostics;
 

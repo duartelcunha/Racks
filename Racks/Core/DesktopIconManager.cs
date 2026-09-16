@@ -12,12 +12,14 @@ namespace Racks.Core
             try
             {
                 // Create the workspace folder
-                RacksWorkspacePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "RacksWorkspace");
+                RacksWorkspacePath = Path.Combine(Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.UserProfile), "RacksWorkspace");
                 if (!Directory.Exists(RacksWorkspacePath))
                 {
                     DirectoryInfo di = Directory.CreateDirectory(RacksWorkspacePath);
                     di.Attributes |= FileAttributes.Hidden; // Hide the workspace folder itself from the user's home directory so it's not messy
                 }
+
+                if (Racks.Util.NativeProfile.IsIsolated) return;
 
                 ApplyWorkspaceIcon();
                 CreateDesktopLibrary();
@@ -75,12 +77,12 @@ namespace Racks.Core
         {
             try
             {
-                string librariesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Libraries");
+                string librariesPath = Path.Combine(Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Libraries");
                 if (!Directory.Exists(librariesPath)) return;
 
                 string libraryFile = Path.Combine(librariesPath, "DesktopWorkspace.library-ms");
                 
-                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                string desktopPath = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.Desktop);
 
                 string xml = $@"<?xml version=""1.0"" encoding=""UTF-8""?>
 <libraryDescription xmlns=""http://schemas.microsoft.com/windows/2009/library"">

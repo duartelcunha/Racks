@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><IsPackable>false</IsPackable><IsTestProject>true</IsTestProject></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../../src/Racks.Core/Racks.Core.csproj" /><Compile Include="../../Racks/Util/SafeMove.cs" Link="Legacy/SafeMove.cs" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../../src/Racks.Core/Racks.Core.csproj" /><Compile Include="../../Racks/Util/SafeMove.cs" Link="Legacy/SafeMove.cs" /><Compile Include="../../Racks/Util/NativeProfile.cs" Link="Legacy/NativeProfile.cs" /></ItemGroup>
   <ItemGroup><PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.0" /><PackageReference Include="xunit" Version="2.9.3" /><PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" PrivateAssets="all" /></ItemGroup>
 </Project>

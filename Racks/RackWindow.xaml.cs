@@ -1,3 +1,5 @@
+using Registry = Racks.Util.ProfileRegistry;
+using RegistryKey = Racks.Util.ProfileRegistryKey;
 #pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604, CS8618, CS8622, CS8625
 using Racks.ViewModels;
 using Racks.Core;
@@ -1231,6 +1233,7 @@ namespace Racks
 
         private void SetAsDesktopChild()
         {
+            if (Util.NativeProfile.IsIsolated) { ShowInTaskbar = true; Title = Instance.TitleText ?? Instance.Name; return; }
             // Explorer briefly has no SHELLDLL_DefView while it's restarting (a common
             // user troubleshooting step). This used to retry with no delay and no cap -
             // a 100%-CPU spin on the UI thread that never gave up, hanging the whole
@@ -1372,12 +1375,14 @@ namespace Racks
 
         public void SetAsToolWindow()
         {
+            if (Util.NativeProfile.IsIsolated) return;
             WindowInteropHelper wih = new WindowInteropHelper(this);
             IntPtr dwNew = new IntPtr(((long)Interop.GetWindowLong(wih.Handle, Interop.GWL_EXSTYLE).ToInt32() | 128L | 0x00200000L) & 4294705151L);
             Interop.SetWindowLong((nint)new HandleRef(this, wih.Handle), Interop.GWL_EXSTYLE, dwNew);
         }
         public void SetNoActivate()
         {
+            if (Util.NativeProfile.IsIsolated) return;
             if (_isTopmost)
             {
                 return;
@@ -1520,7 +1525,7 @@ namespace Racks
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
 
             int exStyle = (int)Interop.GetWindowLong(hwnd, Interop.GWL_EXSTYLE);
-            Interop.SetWindowLong(hwnd, Interop.GWL_EXSTYLE, exStyle | Interop.WS_EX_NOACTIVATE);
+            if (!Util.NativeProfile.IsIsolated) Interop.SetWindowLong(hwnd, Interop.GWL_EXSTYLE, exStyle | Interop.WS_EX_NOACTIVATE);
             WindowChrome.SetWindowChrome(this, Instance.IsLocked ?
                 new WindowChrome
                 {
@@ -1611,7 +1616,7 @@ namespace Racks
         {
             try
             {
-                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                string desktopPath = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.Desktop);
                 string p = Path.Combine(desktopPath, fileName);
                 return File.Exists(p) || Directory.Exists(p);
             }
@@ -1794,7 +1799,7 @@ namespace Racks
             // sandbox or the legacy DeskFrame AppData path so users upgrading from
             // the old build keep working racks.
             string legacyAppDataPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeskFrame");
+                Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeskFrame");
             if (!string.IsNullOrEmpty(instance.Folder)
                 && (InstanceController.IsInsideVirtualFramesRoot(instance.Folder)
                     || instance.Folder.StartsWith(legacyAppDataPath, StringComparison.OrdinalIgnoreCase)))
@@ -2419,6 +2424,7 @@ namespace Racks
 
         private void KeepWindowBehind()
         {
+            if (Util.NativeProfile.IsIsolated) return;
             if (_isTopmost)
             {
                 return;
@@ -3844,186 +3850,11 @@ namespace Racks
 
         public BitmapSource? GetThumbnail(string filePath, int size)
         {
-            try
-            {
-                ShellObject shellObject = ShellObject.FromParsingName(filePath);
-                ShellThumbnail shellThumbnail = shellObject.Thumbnail;
-                shellThumbnail.CurrentSize = new System.Windows.Size(size, size);
-                BitmapSource thumbnail = shellThumbnail.BitmapSource;
-                thumbnail.Freeze();
-                return thumbnail;
-            }
-            catch
-            {
-                return null;
-            }
+            return Racks.Services.NativeShellImage.Load(filePath, size);
         }
 
-        private async Task<BitmapSource?> GetThumbnailAsync(string path)
-        {
-            return await Task.Run(async () =>
-            {
-                if (string.IsNullOrWhiteSpace(path) || (!File.Exists(path) && !Directory.Exists(path)))
-                {
-                    return null;
-                }
-                IntPtr hBitmap = IntPtr.Zero;
-                BitmapSource? thumbnail = null;
-                int iconSize = (int)(Instance.IconSize * _windowsScalingFactor);
-                if (Path.GetExtension(path).ToLower() == ".svg")
-                {
-                    try
-                    {
-                        thumbnail = await LoadSvgThumbnailAsync(path, iconSize);
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.WriteLine(e);
-                    }
-                    return thumbnail;
-                }
-                string ext = Path.GetExtension(path).ToLowerInvariant();
-                bool isLink = ext == ".lnk" || ext == ".url";
-
-                if (isLink)
-                {
-                    try
-                    {
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            thumbnail = GetThumbnail(path, iconSize);
-                        });
-                        if (Instance.ShowShortcutArrow)
-                        {
-                            return Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                IntPtr[] overlayIcons = new IntPtr[1];
-                                int overlayExtracted = ExtractIconEx(
-                                    Environment.SystemDirectory + "\\shell32.dll",
-                                    29,
-                                    overlayIcons,
-                                    null,
-                                    1);
-
-                                if (overlayExtracted > 0 && overlayIcons[0] != IntPtr.Zero)
-                                {
-                                    var overlay = Imaging.CreateBitmapSourceFromHIcon(
-                                                  overlayIcons[0],
-                                                  Int32Rect.Empty,
-                                                  BitmapSizeOptions.FromEmptyOptions());
-                                    DestroyIcon(overlayIcons[0]);
-
-                                    var visual = new DrawingVisual();
-                                    using (var dc = visual.RenderOpen())
-                                    {
-                                        Debug.WriteLine("iconsize: " + iconSize);
-                                        double scale = iconSize / Math.Max(thumbnail.PixelWidth, thumbnail.PixelHeight);
-                                        double thumbnailWidth = thumbnail.PixelWidth * scale;
-                                        double thumbnailHeight = thumbnail.PixelHeight * scale;
-
-                                        double thumbnailX = (iconSize - thumbnailWidth) / 2.0;
-                                        double thumbnailY = (iconSize - thumbnailHeight) / 2.0;
-
-                                        dc.DrawImage(
-                                            thumbnail,
-                                            new Rect(
-                                                thumbnailX,
-                                                thumbnailY,
-                                                thumbnailWidth,
-                                                thumbnailHeight)
-                                        );
-                                        double overlayScale = (iconSize < 32 ? iconSize / 32.0 : 1.0);
-                                        if (_windowsScalingFactor != 1.0)
-                                        {
-                                            overlayScale *= (1 / _windowsScalingFactor);
-                                        }
-                                        if (overlayScale != 1.0)
-                                        {
-                                            overlay = new TransformedBitmap(overlay, new ScaleTransform(overlayScale, overlayScale));
-                                            overlay.Freeze();
-                                        }
-                                        double overlayX = thumbnailX;
-                                        double overlayY = thumbnailY + thumbnailHeight - overlay.PixelHeight;
-                                        dc.DrawImage(overlay,
-                                            new Rect(
-                                            overlayX,
-                                            overlayY,
-                                            overlay.PixelWidth,
-                                            overlay.PixelHeight)
-                                        );
-                                    }
-
-                                    var rtb = new RenderTargetBitmap(
-                                        iconSize,
-                                        iconSize,
-                                        thumbnail.DpiX,
-                                        thumbnail.DpiY,
-                                        PixelFormats.Pbgra32);
-                                    rtb.Render(visual);
-                                    rtb.Freeze();
-                                    return rtb;
-                                }
-                                return thumbnail;
-                            });
-                        }
-                        return thumbnail;
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.WriteLine(e);
-                    }
-                }
-                else
-                {
-                    try
-                    {
-                        int attempt = 0;
-                        while (attempt < 3 && thumbnail == null)
-                        {
-                            ShellObject? shellObj = null;
-                            shellObj = Directory.Exists(path) ? ShellObject.FromParsingName(path) : ShellFile.FromFilePath(path);
-                            if (shellObj != null)
-                            {
-                                try
-                                {
-                                    Application.Current.Dispatcher.Invoke(() =>
-                                    {
-                                        thumbnail = GetThumbnail(path, iconSize);
-                                    });
-                                    if (thumbnail != null)
-                                    {
-                                        return thumbnail;
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Debug.WriteLine("Failed to fetch thumbnail:" + ex.Message);
-                                }
-                                finally
-                                {
-                                    shellObj?.Dispose();
-                                }
-                            }
-                            attempt++;
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.WriteLine(e);
-                    }
-                }
-                if (thumbnail != null)
-                {
-                    return thumbnail;
-                }
-
-                Debug.WriteLine("Failed to retrieve thumbnail after 3 attempts.");
-                return null;
-            });
-        }
-
-
-
+        private Task<BitmapSource?> GetThumbnailAsync(string path) =>
+            Racks.Services.ThumbnailService.GetThumbnailAsync(path, Instance.IconSize, Instance.ShowShortcutArrow, _windowsScalingFactor);
         private async Task<BitmapSource?> LoadSvgThumbnailAsync(string path, int iconSize)
         {
             try
@@ -4697,6 +4528,7 @@ namespace Racks
 private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             contextMenu = new ContextMenu();
+            if (!(Util.NativeProfile.DesignPreview && Instance.Name == "Original")) Util.CossTheme.Attach(contextMenu);
             if (_itemCurrentlyRenaming != null)
             {
                 _itemCurrentlyRenaming.IsRenaming = false;
@@ -5043,7 +4875,7 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
                 string body;
                 bool isSandboxed = Instance.IsShortcutsOnly
                     && InstanceController.IsInsideVirtualFramesRoot(Instance.Folder);
-                string deskPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                string deskPath = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.Desktop);
                 bool isOnDesktop = !string.IsNullOrEmpty(Instance.Folder) &&
                     System.IO.Path.GetDirectoryName(Instance.Folder.TrimEnd('\\', '/'))?.Equals(deskPath, StringComparison.OrdinalIgnoreCase) == true;
 

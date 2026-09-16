@@ -10,6 +10,7 @@ try {
     if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
         & $Dotnet test tests/Racks.Windows.Tests -c Release --logger 'trx;LogFileName=windows.trx' --warnaserror
         if ($LASTEXITCODE) { throw 'Windows regression tests failed.' }
+        & "$PSScriptRoot/Test-NativePreview.ps1" -Dotnet $Dotnet -Configuration Release
     }
     & "$PSScriptRoot/Test-Desktop.ps1" -Dotnet $Dotnet -Configuration Release
     & "$PSScriptRoot/Test-ReleaseSigning.ps1" -Dotnet $Dotnet

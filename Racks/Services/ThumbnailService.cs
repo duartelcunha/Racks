@@ -16,19 +16,7 @@ namespace Racks.Services
     {
         public static BitmapSource? GetThumbnail(string filePath, int size)
         {
-            try
-            {
-                ShellObject shellObject = ShellObject.FromParsingName(filePath);
-                ShellThumbnail shellThumbnail = shellObject.Thumbnail;
-                shellThumbnail.CurrentSize = new System.Windows.Size(size, size);
-                BitmapSource thumbnail = shellThumbnail.BitmapSource;
-                thumbnail.Freeze();
-                return thumbnail;
-            }
-            catch
-            {
-                return null;
-            }
+            return Racks.Services.NativeShellImage.Load(filePath, size);
         }
 
         public static async Task<BitmapSource?> GetThumbnailAsync(string path, int iconSize, bool showShortcutArrow, double windowsScalingFactor)
@@ -60,10 +48,7 @@ namespace Racks.Services
                 {
                     try
                     {
-                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            thumbnail = GetThumbnail(path, actualIconSize);
-                        });
+                        thumbnail = GetThumbnail(path, actualIconSize);
                         if (showShortcutArrow && thumbnail != null)
                         {
                             return System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -145,49 +130,14 @@ namespace Racks.Services
                 }
                 else
                 {
-                    try
-                    {
-                        int attempt = 0;
-                        while (attempt < 3 && thumbnail == null)
-                        {
-                            ShellObject? shellObj = null;
-                            shellObj = Directory.Exists(path) ? ShellObject.FromParsingName(path) : ShellFile.FromFilePath(path);
-                            if (shellObj != null)
-                            {
-                                try
-                                {
-                                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                                    {
-                                        thumbnail = GetThumbnail(path, actualIconSize);
-                                    });
-                                    if (thumbnail != null)
-                                    {
-                                        return thumbnail;
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Debug.WriteLine("Failed to fetch thumbnail:" + ex.Message);
-                                }
-                                finally
-                                {
-                                    shellObj?.Dispose();
-                                }
-                            }
-                            attempt++;
-                        }
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.WriteLine(e);
-                    }
+                    thumbnail = GetThumbnail(path, actualIconSize);
                 }
                 if (thumbnail != null)
                 {
                     return thumbnail;
                 }
 
-                Debug.WriteLine("Failed to retrieve thumbnail after 3 attempts.");
+                Debug.WriteLine("Shell thumbnail and icon are unavailable.");
                 return null;
             });
         }

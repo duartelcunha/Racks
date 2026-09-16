@@ -1,6 +1,6 @@
-# Racks overhaul implementation
+# Historical shared overhaul evidence
 
-The Windows WPF application remains available while the shared .NET/Avalonia application is verified. User files are never migration inputs to move or delete.
+> Superseded product direction: the rejected beta is withdrawn. See [Native Windows recovery](NATIVE-RECOVERY.md) for current work and release gates. The checks below describe the preserved shared/Avalonia implementation; they do not certify the WPF recovery build.
 
 ## Release gates
 
@@ -25,7 +25,7 @@ Core racks, simple organization and routing, search, JSON settings, durable undo
 
 ## Verification record
 
-Windows [2.0.0-beta.1](https://github.com/duartelcunha/Racks/releases/tag/v2.0.0-beta.1) is published from `57d93d3bb3949447aca1cfd6d6d4d2a0fd3616e3`. [Windows/Mac CI](https://github.com/duartelcunha/Racks/actions/runs/35112890006) and the [signed packaging workflow](https://github.com/duartelcunha/Racks/actions/runs/35112955019) passed. All three release assets match the SHA-256 manifest; the feed and installer also passed Ed25519 verification against the tracked public key. A real strict NetSparkle client retrieved the published HTTPS feed, offered the beta to an older client, downloaded the 54,025,429-byte public installer, and verified its signature without executing it. The feed and its signature were published in one commit. Stable remains v1.1.4.
+The now-withdrawn Windows `2.0.0-beta.1` was published from `57d93d3bb3949447aca1cfd6d6d4d2a0fd3616e3`. [Windows/Mac CI](https://github.com/duartelcunha/Racks/actions/runs/35112890006) and the [signed packaging workflow](https://github.com/duartelcunha/Racks/actions/runs/35112955019) passed. All three release assets match the SHA-256 manifest; the feed and installer also passed Ed25519 verification against the tracked public key. A real strict NetSparkle client retrieved the published HTTPS feed, offered the beta to an older client, downloaded the 54,025,429-byte public installer, and verified its signature without executing it. The feed and its signature were published in one commit. Stable remains v1.1.4.
 
 The final isolated interactive fixture measured 0.0021 CPU cores before UI Automation inspection and 0.0664 afterward, over 15 seconds each. This run did not reproduce the earlier CPU spike; it does not erase that evidence or certify frame presentation. The owned fixture process was closed normally. PresentMon capture remains unavailable under the current Windows ETW permissions; no OS permission changes were made.
 

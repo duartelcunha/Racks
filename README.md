@@ -32,23 +32,25 @@
 
 ---
 
-## Overhaul development
+## Native Windows recovery
 
-The existing WPF application remains the stable Windows release. [Racks 2.0.0-beta.1 for Windows x64](https://github.com/duartelcunha/Racks/releases/tag/v2.0.0-beta.1) is available for testing the shared .NET 10 / Avalonia overhaul. Read the beta's validation limits before trying it; it is not yet a stable replacement.
+The stable Windows release remains **v1.1.4**. The rejected `2.0.0-beta.1` has been withdrawn: its signed beta feed is empty and the release is a draft. Its tag and artifacts are retained, and installed users are not automatically downgraded.
 
-The new application has rack management, grid/list views, filename search, editable organization previews, ordered routing, versioned JSON settings, persistent file-operation records, and signed-update integration. Test it with an isolated profile:
+Development now refines the original **WPF application**, with native controls adapted from the MIT-licensed Coss UI designs. Real file icons, thumbnails, custom backgrounds and optional physics remain part of Racks. The Avalonia source and tests are preserved; that interface and the Mac release are deferred.
+
+The first review milestone compares an original-style rack with a Coss rack and its appearance dialog, using isolated files:
 
 ```powershell
-dotnet build Racks.Overhaul.sln -c Release
-dotnet run --project src/Racks.Desktop -- --profile "$PWD/.artifacts/my-test-profile"
+dotnet build Racks/Racks.csproj -c Release
+dotnet run --project Racks -- --profile "$PWD/.artifacts/native-review" --design-preview
 ./scripts/Test-All.ps1
 ```
 
-Isolated profiles use their own Desktop, workspace, settings, and operation records. They do not import your registry or start automatic update checks. Use test files only. [Implementation and release gates](docs/OVERHAUL.md) describe remaining validation; [development guide](docs/DEVELOPMENT.md) explains the structure and test commands.
+Use a fresh preview folder and test files. The preview has its own JSON settings, Desktop and workspace, and skips personal registry import, global hooks and desktop attachment. It is a development comparison, not a replacement installer. [Native recovery status and release gates](docs/NATIVE-RECOVERY.md) distinguish completed checks from outstanding work.
 
-The packaged beta includes a trusted public key and signed beta feed. **Settings → Updates** offers automatic checks/downloads, a manual **Check for updates**, pause, and a safe restart to install verified packages. The stable release stays on its separate channel. Source builds without release configuration show the latest stable GitHub version and a **View releases** link instead of automatic installation.
+No corrected beta will be published before the running design review and required acceptance tests pass. Signed updates remain part of the recovery plan; the existing shared updater still needs its WPF integration.
 
-The sections below describe the existing Windows application.
+The sections below describe the original Windows application.
 ## Why Racks?
 
 Your desktop shouldn't be a dumping ground. Racks lives quietly in your system tray and lets you create translucent floating panels on your wallpaper. Drop files in and they leave the mess behind for a tidy, safe home you can reach in one click.

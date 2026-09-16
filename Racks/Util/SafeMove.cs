@@ -130,7 +130,7 @@ namespace Racks.Util
             foreach (var sf in _protectedSpecialFolders)
             {
                 string sfPath;
-                try { sfPath = Environment.GetFolderPath(sf); }
+                try { sfPath = Racks.Util.NativeProfile.GetFolderPath(sf); }
                 catch { continue; }
                 if (string.IsNullOrEmpty(sfPath)) continue;
                 if (string.Equals(full, Canonicalize(sfPath), StringComparison.OrdinalIgnoreCase))
@@ -143,7 +143,7 @@ namespace Racks.Util
             // Downloads isn't in the SpecialFolder enum, so check the standard path.
             try
             {
-                string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                string profile = Racks.Util.NativeProfile.GetFolderPath(Environment.SpecialFolder.UserProfile);
                 string downloads = Path.Combine(profile, "Downloads");
                 if (string.Equals(full, Canonicalize(downloads), StringComparison.OrdinalIgnoreCase))
                 {
