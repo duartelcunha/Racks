@@ -56,6 +56,8 @@ Automatic checks download verified updates; installation is a user-selected safe
 
 Inno Setup keeps the existing application ID and retains files/settings outside the installation directory. Installer startup refuses a running app instead of forcibly terminating it. Validate upgrade, uninstall, and reinstall in a disposable Windows VM, including upgrades from the last published installer.
 
+`scripts/Test-Installer.ps1 -DisposableRunner` is restricted to GitHub-hosted Windows runners. It verifies the published v1.1.4 installer against GitHub's SHA-256 digest, upgrades it with a locally built package, then uninstalls and reinstalls while checking registry and file fixtures. The new installer must overwrite the old uninstall log: appending would retain v1.1.4's destructive cleanup entries. Only exact obsolete application filenames are removed; user-data folders are never recursively deleted.
+
 Mac CI runs the shared build, core tests, and a native-window experiment on an Apple Silicon runner. This is not a substitute for Finder/Spaces, multi-monitor, sleep/resume, accessibility, signed package, and notarization checks on a real Mac session.
 
 `bash scripts/Publish-Mac.sh` builds an Apple Silicon `.app`, signs its native binaries and bundle, submits it using an existing `notarytool` keychain profile, staples the ticket, and produces a ZIP. It requires `RACKS_PUBLIC_KEY`, `RACKS_FEED_BASE`, `RACKS_CODESIGN_IDENTITY`, and `RACKS_NOTARY_PROFILE`. The script has not been exercised with production signing credentials. NetSparkle feed/package signing remains a separate maintainer step; neither publishing script uploads a release.

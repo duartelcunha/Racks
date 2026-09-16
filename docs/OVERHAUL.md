@@ -8,7 +8,9 @@ The Windows WPF application remains available while the shared .NET/Avalonia app
 - [x] Shared create / drop / return / persisted undo flow runs in native Windows and Mac CI.
 - [x] Registry snapshot conversion preserves file references, rack appearance, and paused routing rules in tests.
 - [x] Separate-process restoration and persistent undo verified locally.
-- [ ] Open/reveal and actual OS drag gestures verified end to end.
+- [x] Windows Open/Reveal and keyboard Quick Finder checked against isolated real files.
+- [x] Native rack drag reaches collision choices; Cancel preserves the original.
+- [ ] Explorer/Finder cross-application drag gestures verified end to end.
 - [ ] Redesigned Windows workflows and accessibility verified interactively.
 - [ ] Signed update feed and packages configured with a maintainer-owned public key.
 - [ ] Real Windows installer upgrade / uninstall verified in an isolated environment.
@@ -25,6 +27,10 @@ Core racks, simple organization and routing, search, JSON settings, durable undo
 GitHub run [35089411903](https://github.com/duartelcunha/Racks/actions/runs/35089411903) passed the shared builds on Windows and Apple Silicon, 37 core tests on both platforms, 10 Windows-specific tests, and both native-app smoke runs. The smoke run verifies 5,000 files with 94 realized visual elements. The Windows runner measured 0.00625 CPU cores at idle; Mac measured 0.00097. Frame callback p95 was 31.9 ms on the Windows hosted runner and 17.9 ms on Mac. Those are diagnostic measurements, not a 60 fps presentation guarantee.
 
 The expanded local suite passed 39 core tests, 11 Windows-specific tests, live routing/pause checks, and separate-process restoration/undo. After correcting the smoke harness to use actual app-owned windows, its latest 5,000-file run passed the idle gate at 0.181 CPU cores, with frame callback p95 18.3 ms. Earlier local tracing showed sustained Windows UI Automation queries without application refreshes or settings writes. The higher local idle result and frame outliers still need visual/performance acceptance; do not describe this as performance-complete.
+
+Interactive Windows checks verified dark/light management surfaces, Ctrl+K, filename filtering, keyboard Open into Notepad, Reveal selecting the fixture in Explorer, Escape dismissal, and native drag cancellation. The drag check caught button event handling swallowing the drag start; the corrected handler observes the tunnelling pointer event. New racks use opaque backgrounds and wider tiles for readable filenames. Cross-window drag cannot be completed with the current automation tool, which rejects endpoints outside the source window.
+
+The disposable installer test reproduced inherited destructive uninstall entries after upgrading v1.1.4. Inno's default append behavior retained the old AppData/registry deletion commands. The installer now overwrites that log and removes only explicitly named obsolete application binaries. CI validates the full upgrade/uninstall/reinstall path before this gate is marked complete.
 
 ## Deliberately deferred from the shared preview
 

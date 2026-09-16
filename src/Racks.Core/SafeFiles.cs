@@ -7,7 +7,10 @@ namespace Racks.Core;
 
 public static class SafeFiles
 {
-    public static StringComparison PathComparison => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+    // Windows and normal macOS volumes are case-insensitive. Be conservative
+    // about case aliases on case-sensitive Mac volumes too: a false rejection
+    // is safer than moving a protected folder through an alternate spelling.
+    public static StringComparison PathComparison => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
     public static bool Exists(string path) => File.Exists(path) || Directory.Exists(path);
     public static bool IsLeafName(string? name) => !string.IsNullOrWhiteSpace(name) && name is not "." and not ".." &&
         name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && !name.Contains('/') && !name.Contains('\\') &&

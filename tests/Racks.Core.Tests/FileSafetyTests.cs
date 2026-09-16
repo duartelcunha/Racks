@@ -44,6 +44,18 @@ public sealed class FileSafetyTests : IDisposable
         Assert.Equal(ItemOutcome.Failed, record.Items[0].Outcome); Assert.True(File.Exists(record.Items[0].Destination)); Assert.Null(operations.LastUndo());
         Assert.True(operations.ReadRecords(out _).Single().NeedsAttention); Assert.Equal(1, actions.MoveCalls);
     }
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task DiskFullOrPermissionFailurePreservesOriginalAndDurableIntent(bool permissionDenied)
+    {
+        var source = FileAt(paths.Desktop);
+        actions.BeforeMove = () => { if (permissionDenied) throw new UnauthorizedAccessException("Access denied"); throw new IOException("Disk full", unchecked((int)0x80070070)); };
+        var result = await operations.ExecuteAsync(Move(source), CollisionChoice.Skip);
+        Assert.Equal("original content", File.ReadAllText(source));
+        Assert.False(File.Exists(result.Items[0].Destination));
+        var reloaded = new FileOperations(paths, actions).ReadRecords(out var errors);
+        Assert.Empty(errors); Assert.True(Assert.Single(reloaded).NeedsAttention);
+        Assert.Equal(ItemOutcome.Failed, reloaded[0].Items[0].Outcome);
+    }
     [Fact] public async Task CancellationBetweenItemsPreservesTheRemainder()
     {
         using var cancellation = new CancellationTokenSource(); actions.AfterMove = cancellation.Cancel;
@@ -111,6 +123,12 @@ public sealed class FileSafetyTests : IDisposable
         if (!OperatingSystem.IsWindows()) return;
         var source = FileAt(paths.Desktop);
         Assert.Throws<IOException>(() => SafeFiles.ValidateMove(@"\\?\" + paths.Desktop, Path.Combine(paths.Workspace, "desktop"), [paths.Desktop]));
+        Assert.True(File.Exists(source));
+    }
+    [Fact] public void CaseAliasCannotBypassProtectedDirectory()
+    {
+        var source = FileAt(paths.Desktop);
+        Assert.ThrowsAny<IOException>(() => SafeFiles.ValidateMove(paths.Desktop.ToUpperInvariant(), Path.Combine(paths.Workspace, "desktop"), [paths.Desktop]));
         Assert.True(File.Exists(source));
     }
     [Fact] public async Task LockedFileKeepsOriginalOnWindows()
