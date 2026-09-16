@@ -29,6 +29,9 @@ jobs:
       - name: Isolated real application smoke test
         shell: pwsh
         run: ./scripts/Test-Desktop.ps1 -Dotnet dotnet -Configuration Release
+      - name: Upgrade, uninstall and reinstall on disposable runner
+        shell: pwsh
+        run: ./scripts/Test-Installer.ps1 -DisposableRunner
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -38,6 +41,8 @@ jobs:
             tests/**/TestResults/*.trx
             .artifacts/smoke-*/smoke-result.json
             .artifacts/smoke-*/restart-result.json
+            .artifacts/installer-result.json
+            .artifacts/installer-logs/*.log
           retention-days: 14
   mac:
     name: Mac Apple Silicon foundation checks
