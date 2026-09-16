@@ -34,7 +34,7 @@
 
 ## Overhaul development
 
-The existing WPF application remains the current Windows release. The shared .NET 10 / Avalonia application is being verified alongside it; it is not yet a stable replacement.
+The existing WPF application remains the stable Windows release. [Racks 2.0.0-beta.1 for Windows x64](https://github.com/duartelcunha/Racks/releases/tag/v2.0.0-beta.1) is available for testing the shared .NET 10 / Avalonia overhaul. Read the beta's validation limits before trying it; it is not yet a stable replacement.
 
 The new application has rack management, grid/list views, filename search, editable organization previews, ordered routing, versioned JSON settings, persistent file-operation records, and signed-update integration. Test it with an isolated profile:
 
@@ -46,7 +46,7 @@ dotnet run --project src/Racks.Desktop -- --profile "$PWD/.artifacts/my-test-pro
 
 Isolated profiles use their own Desktop, workspace, settings, and operation records. They do not import your registry or start automatic update checks. Use test files only. [Implementation and release gates](docs/OVERHAUL.md) describe remaining validation; [development guide](docs/DEVELOPMENT.md) explains the structure and test commands.
 
-In the preview, open **Settings → Updates → Check for updates** to see the latest stable release and your installed version. **View releases** opens official downloads and release notes. Builds configured with a trusted key and signed feed also support automatic checks/downloads, pause, and a safe restart to install. Production signing and feed setup remain release prerequisites.
+The packaged beta includes a trusted public key and signed beta feed. **Settings → Updates** offers automatic checks/downloads, a manual **Check for updates**, pause, and a safe restart to install verified packages. The stable release stays on its separate channel. Source builds without release configuration show the latest stable GitHub version and a **View releases** link instead of automatic installation.
 
 The sections below describe the existing Windows application.
 ## Why Racks?

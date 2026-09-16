@@ -12,7 +12,7 @@ The Windows WPF application remains available while the shared .NET/Avalonia app
 - [x] Native rack drag reaches collision choices; Cancel preserves the original.
 - [ ] Explorer/Finder cross-application drag gestures verified end to end.
 - [ ] Redesigned Windows workflows and accessibility verified interactively.
-- [ ] Signed update feed and packages configured with a maintainer-owned public key.
+- [x] Signed Windows beta feed and package configured with a persistent public key; public download verified by a real NetSparkle client.
 - [x] Published Windows installer upgrade / uninstall / reinstall preserves isolated file and registry fixtures.
 - [ ] Mac desktop integration, signing and notarization verified on a Mac.
 - [ ] Consistent 60 fps and low idle CPU accepted on target hardware, including accessibility clients.
@@ -24,6 +24,10 @@ Do not treat successful compilation or cross-publishing as Mac verification. Do 
 Core racks, simple organization and routing, search, JSON settings, durable undo and interrupted-operation records, and standard signed updates. No database, watchdog, remote repair scripts, cloud accounts, content indexing, or automatic version rollback.
 
 ## Verification record
+
+Windows [2.0.0-beta.1](https://github.com/duartelcunha/Racks/releases/tag/v2.0.0-beta.1) is published from `57d93d3bb3949447aca1cfd6d6d4d2a0fd3616e3`. [Windows/Mac CI](https://github.com/duartelcunha/Racks/actions/runs/35112890006) and the [signed packaging workflow](https://github.com/duartelcunha/Racks/actions/runs/35112955019) passed. All three release assets match the SHA-256 manifest; the feed and installer also passed Ed25519 verification against the tracked public key. A real strict NetSparkle client retrieved the published HTTPS feed, offered the beta to an older client, downloaded the 54,025,429-byte public installer, and verified its signature without executing it. The feed and its signature were published in one commit. Stable remains v1.1.4.
+
+The final isolated interactive fixture measured 0.0021 CPU cores before UI Automation inspection and 0.0664 afterward, over 15 seconds each. This run did not reproduce the earlier CPU spike; it does not erase that evidence or certify frame presentation. The owned fixture process was closed normally. PresentMon capture remains unavailable under the current Windows ETW permissions; no OS permission changes were made.
 
 The update hardening pass adds real HTTP integration checks for trusted, altered, missing-signature and wrong-key feeds; altered packages; failed-download retry; pause/resume; and installer signature revalidation/veto. It fixes a configuration that skipped graceful shutdown, a retry lockout after download errors, cancellation before the response body starts, and the Mac ZIP extraction directory. Update caches cannot receive user files or become move sources. Current automated coverage is 67 Core cases and 25 Windows cases, plus native smoke/restart and feed-signing scripts.
 
@@ -51,4 +55,4 @@ The disposable installer test reproduced inherited destructive uninstall entries
 
 The existing Windows application's optional collision physics remains available there. The shared preview exposes no unfinished physics switch or thumbnail engine; it uses lightweight file-type tiles. Named layouts, content search, local AI, custom rollback/watchdog systems, and a database migration remain out of scope. Background-image and other legacy appearance values are retained in the imported settings even when the new surface has no equivalent control yet.
 
-The shared app is a development preview beside the current Windows release. A green build does not authorize promoting it to stable. Production feeds, signing credentials, installer lifecycle verification, real Mac integration/accessibility checks, and measured visual acceptance remain release gates.
+The shared app is a Windows beta beside the current stable release. A green build does not authorize promoting it to stable. Windows signed feeds and installer lifecycle checks are complete. Cross-application drag, monitor/sleep behavior, real Mac integration/accessibility and Apple signing, and measured visual/performance acceptance remain release gates.
