@@ -44,7 +44,7 @@ public sealed class HomeWindow : Window
         session.RacksChanged += () => { if (currentPage == "Racks") ShowRacks(); };
         Closing += (_, e) => { if (session.CurrentOperation != null) { e.Cancel = true; session.Status = "Finish or cancel the file operation before quitting."; } else app.Exit(); };
         KeyDown += (_, e) => { if (e.Key == Key.K && (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0) { new FinderWindow(session).Show(this); e.Handled = true; } };
-        Navigate("Racks");
+        Navigate(session.ReadOnly ? "Recovery" : "Racks");
     }
     private void Navigate(string name)
     {
@@ -56,6 +56,7 @@ public sealed class HomeWindow : Window
     private void ShowRacks()
     {
         var header = Ui.Stack(Ui.Text("Your desktop, in order.", 30), Ui.Text("Drop files into a rack. Keep the things you need within reach.", 14, true));
+        if (session.SafeMode) header.Children.Add(Ui.Text("Safe mode: routing and desktop attachment are paused. Open Recovery for details.", 13));
         var actions = Ui.Row(Ui.AsyncButton("+ Create rack", this, async () => { var rack = await Ui.NewRack(this, session); if (rack != null) app.ShowRack(rack); }, true),
             Ui.AsyncButton("Add folder", this, async () => { var rack = await Ui.NewRack(this, session, true); if (rack != null) app.ShowRack(rack); }),
             Ui.Button("Organize…", () => new OrganizeWindow(session).Show(this)));

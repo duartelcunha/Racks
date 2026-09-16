@@ -135,7 +135,12 @@ public sealed class RackWindow : Window
             Height = Rack.Collapsed ? 68 : Math.Clamp(Rack.Height, 120, Math.Max(120, a.Height / screen.Scaling));
             desired = new PixelPoint(Math.Clamp(desired.X, a.X, Math.Max(a.X, a.Right - (int)(Width * screen.Scaling))), Math.Clamp(desired.Y, a.Y, Math.Max(a.Y, a.Bottom - (int)(Height * screen.Scaling))));
         }
-        session.Platform.SetScreenPosition(this, desired); restoring = false;
+        session.Platform.SetScreenPosition(this, desired);
+        Rack.X = desired.X; Rack.Y = desired.Y; Rack.Width = Width;
+        if (!Rack.Collapsed) Rack.Height = Height;
+        var nextColumns = ColumnCount();
+        if (nextColumns != columns && !Rack.ListView) { columns = nextColumns; RenderItems(); }
+        restoring = false; SaveSoon();
     }
     private void ApplyAppearance()
     {
@@ -180,7 +185,7 @@ public sealed class RackWindow : Window
         }
     }
     private string PresentationKey() => $"{Rack.ListView}|{Rack.FontSize}|{Rack.Accent}|{Rack.Foreground}";
-    private int ColumnCount() => Math.Clamp((int)(Bounds.Width / Math.Max(148, Rack.FontSize * 10 + 18)), 2, 10);
+    private int ColumnCount() => Math.Clamp((int)((double.IsFinite(Width) ? Width : Bounds.Width) / Math.Max(148, Rack.FontSize * 10 + 18)), 2, 10);
     private Control Tile(CatalogItem item, bool compact)
     {
         var label = Ui.Text(item.Name, Rack.FontSize); label.MaxLines = compact ? 1 : 2; label.TextTrimming = TextTrimming.CharacterEllipsis;
@@ -271,10 +276,10 @@ internal static class RackEditor
         var presets = Ui.Row(Ui.Button("Forest", () => { accent.Text = "#58C4AD"; background.Text = "#18252B"; foreground.Text = "#F1F5F5"; }), Ui.Button("Ink", () => { accent.Text = "#B8ADFF"; background.Text = "#1D1D28"; foreground.Text = "#F5F2FF"; }), Ui.Button("Paper", () => { accent.Text = "#316D64"; background.Text = "#F0F1EB"; foreground.Text = "#23312B"; }));
         var save = Ui.AsyncButton("Save changes", window, () =>
         {
-            if (string.IsNullOrWhiteSpace(title.Text)) throw new IOException("Enter a rack name.");
+            if (string.IsNullOrWhiteSpace(title.Text) || title.Text.Trim().Length > 200) throw new IOException("Enter a rack name between 1 and 200 characters.");
             foreach (var input in new[] { accent, background, foreground }) if (!Color.TryParse(input.Text, out _)) throw new IOException("Use a color such as #58C4AD.");
             rack.Title = title.Text.Trim(); rack.Accent = accent.Text!; rack.Background = background.Text!; rack.Foreground = foreground.Text!; rack.FontSize = (double)(size.Value ?? 13); rack.Opacity = opacity.Value; rack.Sort = (string?)sort.SelectedItem ?? "Name"; rack.Descending = descending.IsChecked == true; rack.Snap = snap.IsChecked == true;
-            session.Save(); window.Close(); return Task.CompletedTask;
+            session.SaveRackChanges(); window.Close(); return Task.CompletedTask;
         }, true);
         window.Content = new ScrollViewer { Content = Ui.Stack(Ui.Text("Make it yours.", 25), Ui.Field("Name", title), presets, Ui.Field("Accent", accent), Ui.Field("Background", background), Ui.Field("Text", foreground), Ui.Row(Ui.Field("Text size", size), Ui.Field("Sort by", sort)), Ui.Field("Background opacity", opacity), descending, snap, Ui.Row(Ui.Button("Cancel", () => window.Close()), save)) };
         await window.ShowDialog(owner);

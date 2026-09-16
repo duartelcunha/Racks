@@ -38,6 +38,14 @@ internal static class Smoke
             var rack = session.CreateRack("Smoke rack", RackKind.Owned); app.ShowRack(rack);
             var window = app.GetRackWindow(rack);
             var originalPosition = session.Platform.ScreenPosition(window);
+            rack.X = -50000; rack.Y = -50000; rack.Width = 9000; rack.Height = 9000;
+            window.RestorePosition();
+            await Task.Delay(100); window.FlushPosition();
+            var restoredPosition = session.Platform.ScreenPosition(window);
+            var activeScreen = window.Screens.All.First(screen => screen.WorkingArea.Contains(restoredPosition));
+            Check(window.Width * activeScreen.Scaling <= activeScreen.WorkingArea.Width + 1 && window.Height * activeScreen.Scaling <= activeScreen.WorkingArea.Height + 1, "Off-screen and oversized rack restores within the current monitor");
+            Check(session.Store.Load().Racks.Single(x => x.Id == rack.Id).X == restoredPosition.X, "Clamped rack position persists");
+            rack.X = originalPosition.X; rack.Y = originalPosition.Y; rack.Width = 320; rack.Height = 360; window.RestorePosition();
             if (OperatingSystem.IsWindows())
             {
                 var attached = session.Platform.AttachToDesktop(window);

@@ -55,6 +55,10 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - name: Validate Mac packaging inputs
+        run: |
+          bash -n scripts/Publish-Mac.sh
+          plutil -lint installer/mac/Info.plist installer/mac/entitlements.plist
       - name: Build shared application
         run: dotnet build Racks.Overhaul.sln -c Release --warnaserror
       - name: Core regression tests

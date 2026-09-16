@@ -80,6 +80,7 @@ public sealed class Session : INotifyPropertyChanged, IDisposable
         SaveCount++;
         RequireWritable(); Store.Save(Settings); SettingsChanged?.Invoke();
     }
+    public void SaveRackChanges() { Save(); RacksChanged?.Invoke(); }
 
     public async Task InitializeAsync()
     {

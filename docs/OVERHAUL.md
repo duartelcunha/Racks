@@ -13,8 +13,9 @@ The Windows WPF application remains available while the shared .NET/Avalonia app
 - [ ] Explorer/Finder cross-application drag gestures verified end to end.
 - [ ] Redesigned Windows workflows and accessibility verified interactively.
 - [ ] Signed update feed and packages configured with a maintainer-owned public key.
-- [ ] Real Windows installer upgrade / uninstall verified in an isolated environment.
+- [x] Published Windows installer upgrade / uninstall / reinstall preserves isolated file and registry fixtures.
 - [ ] Mac desktop integration, signing and notarization verified on a Mac.
+- [ ] Consistent 60 fps and low idle CPU accepted on target hardware, including accessibility clients.
 
 Do not treat successful compilation or cross-publishing as Mac verification. Do not run `test/Test-Racks.ps1` against a personal application profile.
 
@@ -24,13 +25,13 @@ Core racks, simple organization and routing, search, JSON settings, durable undo
 
 ## Verification record
 
-GitHub run [35089411903](https://github.com/duartelcunha/Racks/actions/runs/35089411903) passed the shared builds on Windows and Apple Silicon, 37 core tests on both platforms, 10 Windows-specific tests, and both native-app smoke runs. The smoke run verifies 5,000 files with 94 realized visual elements. The Windows runner measured 0.00625 CPU cores at idle; Mac measured 0.00097. Frame callback p95 was 31.9 ms on the Windows hosted runner and 17.9 ms on Mac. Those are diagnostic measurements, not a 60 fps presentation guarantee.
+GitHub run [35093580222](https://github.com/duartelcunha/Racks/actions/runs/35093580222) passed the shared builds on Windows and Apple Silicon, 42 core cases on both platforms (platform-specific cases have guards), 11 Windows-specific tests, both native-app smoke/restart runs, and the real Windows installer lifecycle. The smoke run verifies 5,000 files with 94 realized visual elements. Windows measured 0.00624 CPU cores at idle and Mac measured 0.00187. Frame callback p95 was 31.9 ms on the Windows hosted runner and 18.5 ms on Mac. These measurements do not certify 60 fps presentation.
 
-The expanded local suite passed 39 core tests, 11 Windows-specific tests, live routing/pause checks, and separate-process restoration/undo. After correcting the smoke harness to use actual app-owned windows, its latest 5,000-file run passed the idle gate at 0.181 CPU cores, with frame callback p95 18.3 ms. Earlier local tracing showed sustained Windows UI Automation queries without application refreshes or settings writes. The higher local idle result and frame outliers still need visual/performance acceptance; do not describe this as performance-complete.
+Local unit/integration tests pass. Native performance is inconsistent: earlier runs passed at 0.11–0.18 CPU cores and frame callback p95 around 18 ms; a subsequent run failed at 0.75 CPU cores and p95 33.6 ms. Tracing showed sustained Windows UI Automation queries without application refreshes or settings writes. The idle threshold has not been relaxed. Performance remains an open release blocker despite green CI. Off-screen/oversized window restoration and persistence pass locally.
 
 Interactive Windows checks verified dark/light management surfaces, Ctrl+K, filename filtering, keyboard Open into Notepad, Reveal selecting the fixture in Explorer, Escape dismissal, and native drag cancellation. The drag check caught button event handling swallowing the drag start; the corrected handler observes the tunnelling pointer event. New racks use opaque backgrounds and wider tiles for readable filenames. Cross-window drag cannot be completed with the current automation tool, which rejects endpoints outside the source window.
 
-The disposable installer test reproduced inherited destructive uninstall entries after upgrading v1.1.4. Inno's default append behavior retained the old AppData/registry deletion commands. The installer now overwrites that log and removes only explicitly named obsolete application binaries. CI validates the full upgrade/uninstall/reinstall path before this gate is marked complete.
+The disposable installer test reproduced inherited destructive uninstall entries after upgrading v1.1.4. Inno's default append behavior retained the old AppData/registry deletion commands. The installer now overwrites that log, removes only explicitly named obsolete application binaries, and updates existing startup paths without enabling startup for new users. The full upgrade/uninstall/reinstall regression now passes.
 
 ## Deliberately deferred from the shared preview
 

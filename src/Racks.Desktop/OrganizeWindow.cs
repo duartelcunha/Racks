@@ -2,21 +2,34 @@ using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
+using Avalonia.Data;
 using Racks.Core;
 
 namespace Racks.Desktop;
 
 public sealed class OrganizeWindow : Window
 {
-    private sealed class Entry { public string Path { get; init; } = ""; public bool Included { get; set; } = true; }
-    private sealed class Group { public string Name { get; set; } = ""; public Entry[] Entries { get; init; } = []; }
+    private sealed class Entry { public string Path { get; init; } = ""; public bool Included { get; set; } = true; public override string ToString() => System.IO.Path.GetFileName(Path); }
+    private sealed class Group : INotifyPropertyChanged
+    {
+        private string name = "";
+        public string Name { get => name; set { if (name != value) { name = value; PropertyChanged?.Invoke(this, new(nameof(Name))); } } }
+        public Entry[] Entries { get; init; } = [];
+        public event PropertyChangedEventHandler? PropertyChanged;
+        public override string ToString() => Name;
+    }
     public OrganizeWindow(Session session)
     {
         Title = "Organize"; Width = 760; Height = 680; MinWidth = 620; MinHeight = 450; Padding = new Thickness(28); WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Group[] groups = []; Group? current = null;
         var folder = Ui.Text("Choose a folder to preview. Nothing moves until you apply.", 13, true);
         var groupList = new ListBox { Width = 205 }; var files = new ListBox(); var name = Ui.Input("Group name"); var progress = Ui.Text("", 12, true);
-        groupList.ItemTemplate = new FuncDataTemplate<Group>((g, _) => g == null ? null : Ui.Stack(Ui.Text(g.Name, 15), Ui.Text($"{g.Entries.Length} items", 12, true)));
+        groupList.ItemTemplate = new FuncDataTemplate<Group>((g, _) =>
+        {
+            if (g == null) return null;
+            var label = Ui.Text(g.Name, 15); label.Bind(TextBlock.TextProperty, new Binding(nameof(Group.Name)) { Source = g });
+            return Ui.Stack(label, Ui.Text($"{g.Entries.Length} items", 12, true));
+        });
         files.ItemTemplate = new FuncDataTemplate<Entry>((entry, _) =>
         {
             if (entry == null) return null; var check = new CheckBox { Content = Path.GetFileName(entry.Path), IsChecked = entry.Included }; check.IsCheckedChanged += (_, _) => entry.Included = check.IsChecked == true; return check;
@@ -44,9 +57,10 @@ public sealed class OrganizeWindow : Window
         previewGrid.Children.Add(groupList); var right = new Grid { RowDefinitions = new RowDefinitions("Auto,*"), RowSpacing = 12 }; right.Children.Add(name); Grid.SetRow(files, 1); right.Children.Add(files); Grid.SetColumn(right, 1); previewGrid.Children.Add(right);
         var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*,Auto,Auto"), RowSpacing = 16 };
         var cancel = Ui.Button("Cancel operation", () => session.CurrentOperation?.Cancel());
+        cancel.IsVisible = session.CurrentOperation != null;
         Control[] controls = [Ui.Text("A little order. A clearer desktop.", 27), Ui.Text("Files are grouped by type. Rename groups and exclude items, then apply one undoable operation.", 14, true), Ui.Stack(pick, folder), previewGrid, progress, Ui.Row(cancel, apply)];
         for (var i = 0; i < controls.Length; i++) { Grid.SetRow(controls[i], i); grid.Children.Add(controls[i]); } Content = grid;
-        PropertyChangedEventHandler changed = (_, _) => { if (session.CurrentOperation != null) progress.Text = session.Status; }; session.PropertyChanged += changed;
+        PropertyChangedEventHandler changed = (_, _) => { cancel.IsVisible = session.CurrentOperation != null; if (session.CurrentOperation != null) progress.Text = session.Status; }; session.PropertyChanged += changed;
         Closed += (_, _) => session.PropertyChanged -= changed;
         Closing += (_, e) => { if (session.CurrentOperation != null) { session.CurrentOperation.Cancel(); e.Cancel = true; progress.Text = "Cancelling. Wait for the current item to finish."; } };
     }

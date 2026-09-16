@@ -60,6 +60,6 @@ public sealed partial class App : Application
         if (Session.CurrentOperation != null) { Session.Status = "Finish or cancel the active file operation before quitting."; ShowHome(); return; }
         exiting = true;
         foreach (var window in windows.Values) { window.FlushPosition(); window.CloseForApp(); }
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop) desktop.Shutdown();
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop) desktop.Shutdown(Environment.ExitCode);
     }
 }
