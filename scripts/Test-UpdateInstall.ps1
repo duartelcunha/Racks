@@ -54,7 +54,7 @@ server.serve_forever()
     # ProcessStartInfo.ArgumentList preserves nested installer argument quoting.
     $info = [Diagnostics.ProcessStartInfo]::new($Dotnet)
     $info.UseShellExecute = $false; $info.CreateNoWindow = $true; $info.WindowStyle = 'Hidden'
-    foreach ($argument in @('tests/Racks.UpdateHarness/bin/Release/net10.0/Racks.UpdateHarness.dll', $profile, "$baseUrl/appcast.xml", $publicKey, $installerArguments, $resultPath)) { $info.ArgumentList.Add($argument) }
+    foreach ($argument in @('tests/Racks.UpdateHarness/bin/Release/net10.0/Racks.UpdateHarness.dll', $profile, "$baseUrl/appcast.xml", $publicKey, $installerArguments, $resultPath, $InstallPath)) { $info.ArgumentList.Add($argument) }
     $harness = [Diagnostics.Process]::Start($info)
     if (!$harness.WaitForExit(120000)) { throw 'Signed update did not request shutdown within two minutes.' }
     if ($harness.ExitCode -ne 0 -or !(Test-Path -LiteralPath $resultPath) -or [IO.File]::ReadAllText($resultPath) -notlike 'Graceful shutdown*') {
@@ -72,7 +72,35 @@ server.serve_forever()
         if ([DateTime]::UtcNow -gt $deadline) { throw 'Updater exited but the installation did not finish successfully.' }
         Start-Sleep -Milliseconds 500
     }
-    Write-Host 'Actual updater verified the feed/package, requested graceful shutdown, and installed the signed fixture.'
+    $smokePath = Join-Path $profile 'smoke-result.json'
+    $deadline = [DateTime]::UtcNow.AddSeconds(120)
+    while (!(Test-Path -LiteralPath $smokePath)) {
+        if ([DateTime]::UtcNow -gt $deadline) { throw 'The installed application did not relaunch and complete its isolated smoke test.' }
+        Start-Sleep -Milliseconds 500
+    }
+    # The smoke report is atomically replaced before the process exits normally.
+    $smoke = Get-Content -LiteralPath $smokePath -Raw | ConvertFrom-Json
+    Copy-Item -LiteralPath $smokePath -Destination .artifacts/update-relaunch-smoke.json
+    if (!$smoke.Passed) { throw 'The relaunched installed application failed its smoke test.' }
+    $installedExecutable = Join-Path $InstallPath 'Racks.Next.exe'
+    foreach ($process in @(Get-Process -Name Racks.Next -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $installedExecutable })) {
+        if (!$process.WaitForExit(15000)) { throw 'The isolated relaunched application did not exit normally.' }
+    }
+    $restartInfo = [Diagnostics.ProcessStartInfo]::new($installedExecutable)
+    $restartInfo.UseShellExecute = $false; $restartInfo.CreateNoWindow = $true; $restartInfo.WindowStyle = 'Hidden'
+    foreach ($argument in @('--profile', $profile, '--smoke-restart-check')) { $restartInfo.ArgumentList.Add($argument) }
+    $restartProcess = [Diagnostics.Process]::Start($restartInfo)
+    try {
+        if (!$restartProcess.WaitForExit(120000) -or $restartProcess.ExitCode -ne 0) { throw 'Installed application restart verification failed.' }
+    } finally {
+        if (!$restartProcess.HasExited) { $restartProcess.Kill(); $restartProcess.WaitForExit() }
+        $restartProcess.Dispose()
+    }
+    $restartPath = Join-Path $profile 'restart-result.json'
+    $restart = Get-Content -LiteralPath $restartPath -Raw | ConvertFrom-Json
+    Copy-Item -LiteralPath $restartPath -Destination .artifacts/update-relaunch-restart.json
+    if (!$restart.Passed) { throw 'Installed application did not preserve its isolated workspace and undo.' }
+    Write-Host 'Actual updater verified the feed/package, shut down gracefully, installed, and relaunched the app; workspace and undo survived restart.'
 } finally {
     if ($harness -and !$harness.HasExited) { $harness.Kill(); $harness.WaitForExit() }
     if ($server -and !$server.HasExited) { $server.Kill(); $server.WaitForExit() }

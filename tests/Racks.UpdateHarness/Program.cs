@@ -12,7 +12,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         if (!OperatingSystem.IsWindows() || Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true" ||
-            Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT") != "github-hosted" || args.Length != 5)
+            Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT") != "github-hosted" || args.Length != 6)
             throw new InvalidOperationException("Update installation testing is restricted to a disposable GitHub-hosted Windows runner.");
         var feed = new Uri(args[1]);
         if (!feed.IsLoopback) throw new InvalidOperationException("The fixture feed must be local.");
@@ -34,7 +34,9 @@ internal sealed class UpdateApp : Application
         desktop.MainWindow = window;
         var session = new Session(Program.Inputs[0], true);
         var updater = UpdateService.CreateUpdater(Program.Inputs[1], Program.Inputs[2], session.Paths.Updates);
-        updater.RelaunchAfterUpdate = false;
+        updater.RestartExecutablePath = Program.Inputs[5];
+        updater.RestartExecutableName = Path.Combine(Program.Inputs[5], "Racks.Next.exe");
+        updater.RelaunchAfterUpdateCommandSuffix = "--profile \"" + Program.Inputs[0] + "\" --smoke-test";
         updater.CustomInstallerArguments = Program.Inputs[3];
         var updates = new UpdateService(session, updater);
         var resultPath = Program.Inputs[4];

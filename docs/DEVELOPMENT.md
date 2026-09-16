@@ -8,7 +8,7 @@ The current Windows app is in `Racks/`. The shared app lives alongside it so the
 - `src/Racks.Desktop`: Avalonia surfaces, application session, and small Windows/Mac platform integrations.
 - `tests/Racks.Core.Tests`: isolated filesystem and persistence regressions; runs on Windows and Mac.
 - `tests/Racks.Windows.Tests`: tests the actual legacy assembly, settings conversion, Windows shortcuts, and update signatures.
-- `tests/Racks.UpdateHarness`: runs the real update service on a disposable hosted Windows VM. It holds the application mutex until graceful shutdown, allowing CI to verify the updater-to-installer handoff.
+- `tests/Racks.UpdateHarness`: runs the real update service on a disposable hosted Windows VM. It holds the application mutex until graceful shutdown, then lets the updater install and relaunch the installed app into an isolated native smoke test. A further process restart checks retained rack state and undo.
 
 Use .NET 10. `global.json` accepts installed .NET 10 feature releases. No global SDK change is required.
 

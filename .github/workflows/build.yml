@@ -47,6 +47,7 @@ jobs:
             .artifacts/smoke-*/smoke-result.json
             .artifacts/smoke-*/restart-result.json
             .artifacts/installer-result.json
+            .artifacts/update-relaunch-*.json
             .artifacts/installer-logs/*.log
           retention-days: 14
   mac:

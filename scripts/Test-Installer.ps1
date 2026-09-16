@@ -67,7 +67,7 @@ try {
     if (Test-Path -LiteralPath (Join-Path $installPath 'Racks.Next.exe')) { throw 'Uninstall left the application executable installed.' }
     Run-Installer $installer 'reinstall.log'
     Assert-Preserved
-    @{ Passed = $true; Baseline = 'v1.1.4'; Checks = @('Signed feed and package verified by actual updater', 'Updater requested graceful shutdown before installation', 'Published installer upgraded', 'Startup preference preserved during upgrade', 'Files and registry survived uninstall', 'Reinstall retained files and settings') } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repoRoot '.artifacts/installer-result.json')
+    @{ Passed = $true; Baseline = 'v1.1.4'; Checks = @('Signed feed and package verified by actual updater', 'Updater requested graceful shutdown before installation', 'Published installer upgraded', 'Updater relaunched the installed application and its native smoke test passed', 'Installed application restored rack state and undo after another restart', 'Startup preference preserved during upgrade', 'Files and registry survived uninstall', 'Reinstall retained files and settings') } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $repoRoot '.artifacts/installer-result.json')
 } finally {
     $logs = Join-Path $repoRoot '.artifacts/installer-logs'
     New-Item -ItemType Directory -Path $logs -Force | Out-Null
