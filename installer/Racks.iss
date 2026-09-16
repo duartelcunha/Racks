@@ -68,6 +68,10 @@ SetupIconFile=..\Racks\Icon\ico.ico
 WizardSmallImageFile=..\Racks\Icon\logo_small.bmp
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
+; Older releases recorded recursive AppData deletion and registry cleanup.
+; Appending would preserve those destructive entries even after an upgrade.
+; Reset that log; this full installer records every current application file.
+UninstallLogMode=overwrite
 ; Single-arch — Racks targets x64 only (see csproj <Platforms>x64</Platforms>).
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -84,6 +88,24 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 ; Pull every file from the publish output. Recurse so the localization
 ; subfolders (cs-CZ, ko-KR, zh-CN, ...) come along.
 Source: "{#SourceRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+#if AppExeName != "Racks.exe"
+[InstallDelete]
+; Exact obsolete files from the published WPF package. Never wildcard-delete
+; the installation folder or traverse any user-data directory during upgrade.
+Type: files; Name: "{app}\Racks.exe"
+Type: files; Name: "{app}\Racks.pdb"
+Type: files; Name: "{app}\Racks.dll"
+Type: files; Name: "{app}\Racks.deps.json"
+Type: files; Name: "{app}\Racks.runtimeconfig.json"
+Type: files; Name: "{app}\wpfgfx_cor3.dll"
+Type: files; Name: "{app}\vcruntime140_cor3.dll"
+Type: files; Name: "{app}\PresentationNative_cor3.dll"
+Type: files; Name: "{app}\PenImc_cor3.dll"
+Type: files; Name: "{app}\LdaNative.dll"
+Type: files; Name: "{app}\D3DCompiler_47_cor3.dll"
+Type: files; Name: "{app}\Icon\WorkspaceFolder.ico"
+#endif
 
 [Icons]
 ; Start menu shortcut only by default. Desktop shortcut is intentionally

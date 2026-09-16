@@ -51,6 +51,7 @@ try {
     Run-Installer $installer 'upgrade.log'
     if ((Get-ItemPropertyValue -LiteralPath $startupPath -Name Racks) -ne 'Existing startup preference') { throw 'Upgrade changed the startup preference.' }
     if (!(Test-Path -LiteralPath (Join-Path $installPath 'Racks.Next.exe'))) { throw 'Upgrade did not install the shared app.' }
+    if (Test-Path -LiteralPath (Join-Path $installPath 'Racks.exe')) { throw 'Upgrade left the obsolete executable available.' }
     function Assert-Preserved {
         foreach ($folder in $fixtureFolders) { if ((Get-Content -LiteralPath (Join-Path $folder 'preserve-me.txt') -Raw).Trim() -ne 'Racks installer preservation fixture') { throw 'Installer lost user data.' } }
         if ((Get-Content -LiteralPath (Join-Path $legacyFolder 'user-file.txt') -Raw).Trim() -ne 'Existing rack file') { throw 'Installer lost an existing rack file.' }
