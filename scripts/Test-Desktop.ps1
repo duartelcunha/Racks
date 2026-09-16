@@ -13,3 +13,8 @@ if (!(Test-Path -LiteralPath $reportPath)) { throw 'Application exited without a
 $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
 $report | ConvertTo-Json -Depth 8
 if (!$report.Passed) { throw 'Application smoke checks failed.' }
+& $Dotnet $assembly --profile $profilePath --smoke-restart-check
+if ($LASTEXITCODE -ne 0) { throw 'Application restart verification failed.' }
+$restart = Get-Content -LiteralPath (Join-Path $profilePath 'restart-result.json') -Raw | ConvertFrom-Json
+$restart | ConvertTo-Json -Depth 8
+if (!$restart.Passed) { throw 'Restart checks failed.' }

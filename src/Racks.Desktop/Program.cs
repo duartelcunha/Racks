@@ -7,6 +7,7 @@ internal static class Program
     public static string? Profile { get; private set; }
     public static bool ForceSafeMode { get; private set; }
     public static bool SmokeTest { get; private set; }
+    public static bool RestartCheck { get; private set; }
     private static Mutex? instance;
 
     [STAThread]
@@ -17,8 +18,9 @@ internal static class Program
             if (args[i] == "--profile" && i + 1 < args.Length) Profile = Path.GetFullPath(args[++i]);
             if (args[i] == "--safe-mode") ForceSafeMode = true;
             if (args[i] == "--smoke-test") SmokeTest = true;
+            if (args[i] == "--smoke-restart-check") RestartCheck = true;
         }
-        if (SmokeTest && Profile == null) throw new ArgumentException("Smoke tests require an isolated --profile.");
+        if ((SmokeTest || RestartCheck) && Profile == null) throw new ArgumentException("Smoke tests require an isolated --profile.");
         var suffix = Profile == null ? "SingleInstance-2C9D" : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Profile)))[..16];
         instance = new Mutex(true, (OperatingSystem.IsWindows() ? @"Local\" : "") + "Racks-" + suffix, out var created);
         if (!created) { instance.Dispose(); return 0; }

@@ -53,6 +53,18 @@ public sealed class LegacyRegressionTests : IDisposable
         var settings = new AppSettings(); LegacyImporter.ImportSnapshot(new(root), settings, new() { ["Sandbox"] = new() { ["Folder"] = folder } });
         Assert.Equal(RackKind.Owned, Assert.Single(settings.Racks).Kind); Assert.Equal(folder, settings.Racks[0].Folder);
     }
+    [Fact] public void ImportRetainsLocalizedDecimalSettings()
+    {
+        var before = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new("pt-PT");
+            var settings = new AppSettings();
+            LegacyImporter.ImportSnapshot(new(root), settings, new() { ["Localized"] = new() { ["Folder"] = root, ["PosX"] = "250,5", ["ItemFontSize"] = "14,5" } });
+            Assert.Equal(250.5, settings.Racks[0].X); Assert.Equal(14.5, settings.Racks[0].FontSize);
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = before; }
+    }
     [Fact] public void RealShellShortcutDoesNotOverwriteExistingFile()
     {
         var source = Path.Combine(root, "source.txt"); var target = Path.Combine(root, "target.lnk"); File.WriteAllText(source, "source");

@@ -1,7 +1,7 @@
 name: build
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -33,9 +33,11 @@ jobs:
         if: always()
         with:
           name: windows-test-results
+          include-hidden-files: true
           path: |
             tests/**/TestResults/*.trx
             .artifacts/smoke-*/smoke-result.json
+            .artifacts/smoke-*/restart-result.json
           retention-days: 14
   mac:
     name: Mac Apple Silicon foundation checks
@@ -57,7 +59,9 @@ jobs:
         if: always()
         with:
           name: mac-foundation-test-results
+          include-hidden-files: true
           path: |
             tests/**/TestResults/*.trx
             .artifacts/smoke-*/smoke-result.json
+            .artifacts/smoke-*/restart-result.json
           retention-days: 14

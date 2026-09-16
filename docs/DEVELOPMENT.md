@@ -20,7 +20,7 @@ dotnet test tests/Racks.Windows.Tests -c Release # Windows only
 ./scripts/Test-All.ps1
 ```
 
-`Test-Desktop.ps1` runs the real native app with a fresh isolated profile. Its JSON report covers create/drop/return, reloaded undo records, partial removal, organization undo, a 5,000-file rack, realized visual count, frame-callback intervals while scrolling, and idle process CPU. Frame callbacks are a diagnostic; they do not measure GPU presentation or certify 60 fps.
+`Test-Desktop.ps1` runs the real native app with a fresh isolated profile. Its JSON reports cover create/drop/return, partial removal, organization undo, live first-match routing and pause, a 5,000-file rack, realized visual count, frame-callback intervals while scrolling, and idle process CPU. It then launches a second process to check restored rack state and persistent undo. Windows also checks desktop attachment/fallback and position preservation on detach. Frame callbacks are a diagnostic; they do not measure GPU presentation or certify 60 fps.
 
 ```powershell
 dotnet run --project src/Racks.Desktop -- --profile "$PWD/.artifacts/manual-profile"
@@ -57,3 +57,5 @@ Automatic checks download verified updates; installation is a user-selected safe
 Inno Setup keeps the existing application ID and retains files/settings outside the installation directory. Installer startup refuses a running app instead of forcibly terminating it. Validate upgrade, uninstall, and reinstall in a disposable Windows VM, including upgrades from the last published installer.
 
 Mac CI runs the shared build, core tests, and a native-window experiment on an Apple Silicon runner. This is not a substitute for Finder/Spaces, multi-monitor, sleep/resume, accessibility, signed package, and notarization checks on a real Mac session.
+
+`bash scripts/Publish-Mac.sh` builds an Apple Silicon `.app`, signs its native binaries and bundle, submits it using an existing `notarytool` keychain profile, staples the ticket, and produces a ZIP. It requires `RACKS_PUBLIC_KEY`, `RACKS_FEED_BASE`, `RACKS_CODESIGN_IDENTITY`, and `RACKS_NOTARY_PROFILE`. The script has not been exercised with production signing credentials. NetSparkle feed/package signing remains a separate maintainer step; neither publishing script uploads a release.

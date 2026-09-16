@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+using System.Text;
 
 namespace Racks.Core;
 
@@ -13,9 +15,30 @@ public static class SafeFiles
 
     public static bool IsWithin(string path, string root)
     {
-        var p = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
-        var r = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
+        var p = CanonicalPath(path).TrimEnd(Path.DirectorySeparatorChar);
+        var r = CanonicalPath(root).TrimEnd(Path.DirectorySeparatorChar);
         return p.Equals(r, PathComparison) || p.StartsWith(r + Path.DirectorySeparatorChar, PathComparison);
+    }
+
+    public static string CanonicalPath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        if (!OperatingSystem.IsWindows()) return full;
+        // Resolve short names and substituted drives before applying safety boundaries.
+        // Missing destinations inherit the identity of their nearest existing parent.
+        if (!Exists(full))
+        {
+            var parent = Path.GetDirectoryName(full.TrimEnd(Path.DirectorySeparatorChar));
+            return string.IsNullOrEmpty(parent) ? full : Path.Combine(CanonicalPath(parent), Path.GetFileName(full));
+        }
+        using var handle = CreateFile(full, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
+        if (handle.IsInvalid) throw new IOException("Cannot verify this location. Use Explorer for this operation.");
+        var buffer = new StringBuilder(32768);
+        var length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0);
+        if (length == 0 || length >= buffer.Capacity) throw new IOException("Cannot verify this location. Use Explorer for this operation.");
+        var result = buffer.ToString();
+        if (result.StartsWith(@"\\?\UNC\", StringComparison.Ordinal)) return @"\\" + result[8..];
+        return result.StartsWith(@"\\?\", StringComparison.Ordinal) ? result[4..] : result;
     }
 
     public static void RejectLinkAncestors(string path)
@@ -38,8 +61,8 @@ public static class SafeFiles
         if (!Exists(source)) throw new FileNotFoundException("The source is unavailable.", source);
         RejectLinkAncestors(source);
         RejectLinkAncestors(Path.GetDirectoryName(destination)!);
-        var full = Path.GetFullPath(source).TrimEnd(Path.DirectorySeparatorChar);
-        if (full.Equals(Path.GetPathRoot(source)!.TrimEnd(Path.DirectorySeparatorChar), PathComparison))
+        var full = CanonicalPath(source).TrimEnd(Path.DirectorySeparatorChar);
+        if (full.Equals(Path.GetPathRoot(full)!.TrimEnd(Path.DirectorySeparatorChar), PathComparison))
             throw new IOException("A drive root cannot be moved.");
         var protectedLocations = Enum.GetValues<Environment.SpecialFolder>()
             .Select(Environment.GetFolderPath).Where(x => !string.IsNullOrEmpty(x))
@@ -86,4 +109,8 @@ public static class SafeFiles
     [DllImport("kernel32.dll", EntryPoint = "MoveFileExW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool MoveFileEx(string source, string destination, uint flags);
     [DllImport("libc", SetLastError = true)] private static extern int renamex_np(string source, string destination, uint flags);
+    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, StringBuilder path, uint size, uint flags);
 }

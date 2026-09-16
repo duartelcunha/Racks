@@ -98,6 +98,21 @@ public sealed class FileSafetyTests : IDisposable
         var source = FileAt(paths.Desktop); var record = await operations.ExecuteAsync(Move(paths.Desktop, Path.Combine(paths.Workspace, "desktop")), CollisionChoice.Skip);
         Assert.Equal(ItemOutcome.Failed, record.Items[0].Outcome); Assert.True(File.Exists(source)); Assert.Equal(0, actions.MoveCalls);
     }
+    [Fact] public async Task NormalizedRecoveryFileCannotBeMoved()
+    {
+        JsonStore.Write(paths.Settings, new AppSettings());
+        var source = Path.Combine(Path.GetDirectoryName(paths.Settings)!, ".", Path.GetFileName(paths.Settings));
+        var record = await operations.ExecuteAsync(Move(source), CollisionChoice.Skip);
+        Assert.Equal(ItemOutcome.Failed, record.Items[0].Outcome);
+        Assert.True(File.Exists(paths.Settings)); Assert.Equal(0, actions.MoveCalls);
+    }
+    [Fact] public void ExtendedWindowsPathCannotBypassProtectedDirectory()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var source = FileAt(paths.Desktop);
+        Assert.Throws<IOException>(() => SafeFiles.ValidateMove(@"\\?\" + paths.Desktop, Path.Combine(paths.Workspace, "desktop"), [paths.Desktop]));
+        Assert.True(File.Exists(source));
+    }
     [Fact] public async Task LockedFileKeepsOriginalOnWindows()
     {
         if (!OperatingSystem.IsWindows()) return;

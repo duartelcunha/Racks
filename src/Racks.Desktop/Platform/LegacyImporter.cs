@@ -31,7 +31,8 @@ public static class LegacyImporter
         {
             string S(string k, string fallback = "") => values.TryGetValue(k, out var v) ? Convert.ToString(v, CultureInfo.InvariantCulture) ?? fallback : fallback;
             bool B(string k) => bool.TryParse(S(k), out var v) && v;
-            double D(string k, double fallback) => double.TryParse(S(k), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && double.IsFinite(v) ? v : fallback;
+            double D(string k, double fallback) => (double.TryParse(S(k), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ||
+                double.TryParse(S(k), NumberStyles.Float, CultureInfo.CurrentCulture, out v)) && double.IsFinite(v) ? v : fallback;
             var folder = S("Folder");
             if (name is "empty" or "Default Style" || string.IsNullOrWhiteSpace(folder) || !Path.IsPathFullyQualified(folder)) continue;
             var filtered = B("IsDesktopFilterRack") || Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar).Equals(paths.Desktop.TrimEnd(Path.DirectorySeparatorChar), SafeFiles.PathComparison);

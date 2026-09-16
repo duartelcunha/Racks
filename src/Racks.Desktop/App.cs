@@ -28,13 +28,17 @@ public sealed partial class App : Application
             desktop.Exit += (_, _) => Session.Dispose();
             Home.Opened += async (_, _) =>
             {
-                try { await Session.InitializeAsync(); SyncRacks(); Session.Startup.Ready(); if (Program.SmokeTest) await Smoke.RunAsync(this); }
+                try { await Session.InitializeAsync(); SyncRacks(); Session.Startup.Ready(); if (Program.SmokeTest) await Smoke.RunAsync(this); else if (Program.RestartCheck) await Smoke.CheckRestartAsync(this); }
                 catch (Exception ex) { await Ui.Error(Home, ex); }
             };
         }
         base.OnFrameworkInitializationCompleted();
     }
-    private void ApplyTheme() => RequestedThemeVariant = Session.Settings.Theme switch { "Light" => ThemeVariant.Light, "Dark" => ThemeVariant.Dark, _ => ThemeVariant.Default };
+    private void ApplyTheme()
+    {
+        RequestedThemeVariant = Session.Settings.Theme switch { "Light" => ThemeVariant.Light, "Dark" => ThemeVariant.Dark, _ => ThemeVariant.Default };
+        Resources["RacksScrollInertia"] = !Session.Settings.ReduceMotion && !Session.SafeMode;
+    }
     public void SyncRacks()
     {
         foreach (var id in windows.Keys.Where(id => !Session.Settings.Racks.Any(x => x.Id == id && x.Visible && ReferenceEquals(x, windows[id].Rack))).ToArray()) { windows[id].CloseForApp(); windows.Remove(id); }
@@ -42,6 +46,7 @@ public sealed partial class App : Application
             if (!windows.ContainsKey(rack.Id)) { var window = new RackWindow(this, rack); windows.Add(rack.Id, window); window.Show(); }
     }
     public void ShowRack(RackDefinition rack) { rack.Visible = true; Session.Save(); SyncRacks(); windows[rack.Id].Activate(); }
+    internal RackWindow GetRackWindow(RackDefinition rack) => windows[rack.Id];
     public void ShowHome() { Home.Show(); Home.Activate(); }
     public void ResetPositions()
     {

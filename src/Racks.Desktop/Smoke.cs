@@ -8,6 +8,22 @@ namespace Racks.Desktop;
 
 internal static class Smoke
 {
+    public static async Task CheckRestartAsync(App app)
+    {
+        var session = app.Session;
+        if (!session.Paths.IsIsolated) throw new InvalidOperationException("Restart testing requires an isolated profile.");
+        try
+        {
+            var rack = session.Settings.Racks.Single(x => x.Title == "Large rack");
+            if (!rack.Locked || !rack.ListView || session.Items.Count(x => x.RackId == rack.Id) != 5001) throw new IOException("Rack state did not survive a new application process.");
+            await session.UndoAsync();
+            if (!File.Exists(Path.Combine(session.Paths.Desktop, "restart-marker.txt"))) throw new IOException("Undo did not survive a new application process.");
+            JsonStore.Write(Path.Combine(session.Paths.Data, "restart-result.json"), new { Passed = true, Checks = new[] { "Rack files, view and lock restored in a new process", "Last operation undone after a real application restart" } });
+        }
+        catch (Exception ex) { JsonStore.Write(Path.Combine(session.Paths.Data, "restart-result.json"), new { Passed = false, Error = ex.ToString() }); Environment.ExitCode = 1; }
+        finally { app.Exit(); }
+    }
+
     public static async Task RunAsync(App app)
     {
         var session = app.Session;
@@ -20,7 +36,18 @@ internal static class Smoke
             var source = Path.Combine(session.Paths.Desktop, "smoke-" + Guid.NewGuid().ToString("N") + ".txt");
             await File.WriteAllTextAsync(source, "Racks isolated verification");
             var rack = session.CreateRack("Smoke rack", RackKind.Owned); app.ShowRack(rack);
-            var window = new RackWindow(app, rack); window.Show();
+            var window = app.GetRackWindow(rack);
+            var originalPosition = session.Platform.ScreenPosition(window);
+            if (OperatingSystem.IsWindows())
+            {
+                var attached = session.Platform.AttachToDesktop(window);
+                var movedPosition = new PixelPoint(originalPosition.X + 24, originalPosition.Y + 24);
+                session.Platform.SetScreenPosition(window, movedPosition);
+                Check(session.Platform.ScreenPosition(window) == movedPosition, attached ? "Attached rack keeps screen coordinates" : "Desktop fallback keeps screen coordinates");
+                session.Platform.Detach(window);
+                Check(session.Platform.ScreenPosition(window) == movedPosition, "Desktop detach retains rack position");
+                session.Platform.SetScreenPosition(window, originalPosition);
+            }
             await window.DropAsync([source], false, CollisionChoice.KeepBoth);
             var destination = Path.Combine(rack.Folder, Path.GetFileName(source));
             Check(File.Exists(destination) && !File.Exists(source), "Drop moves the isolated file");
@@ -36,7 +63,6 @@ internal static class Smoke
             Check(File.Exists(source), "Return to Desktop restores the file");
             await session.RemoveRackAsync(rack, CollisionChoice.Skip);
             Check(!session.Settings.Racks.Any(x => x.Id == rack.Id), "Empty rack removal persists");
-            window.CloseForApp();
             var partialRack = session.CreateRack("Partial return", RackKind.Owned);
             var held = Path.Combine(partialRack.Folder, "held.txt"); var free = Path.Combine(partialRack.Folder, "free.txt");
             await File.WriteAllTextAsync(held, "held"); await File.WriteAllTextAsync(free, "free");
@@ -50,9 +76,23 @@ internal static class Smoke
             await session.OrganizeAsync(FileCatalog.Organize(groupingFolder), CollisionChoice.Skip);
             Check(!File.Exists(grouped), "Organization applies its preview");
             await session.UndoAsync(); Check(File.Exists(grouped), "Organization undo restores the source");
+            var routingSource = Path.Combine(session.Paths.Data, "routing-source"); Directory.CreateDirectory(routingSource);
+            var secondRack = session.CreateRack("Second routing destination", RackKind.Owned);
+            session.Settings.Rules.Add(new() { Source = routingSource, Extensions = ".txt", DestinationRackId = partialRack.Id, Enabled = true });
+            session.Settings.Rules.Add(new() { Source = routingSource, Extensions = ".txt", DestinationRackId = secondRack.Id, Enabled = true });
+            session.Settings.RoutingPaused = false; session.Save(); session.Router.Rebuild();
+            var routed = Path.Combine(routingSource, "route-me.txt"); await File.WriteAllTextAsync(routed, "first match only");
+            var routedDestination = Path.Combine(partialRack.Folder, "route-me.txt");
+            var routingDeadline = Stopwatch.StartNew();
+            while ((!File.Exists(routedDestination) || session.CurrentOperation != null) && routingDeadline.Elapsed < TimeSpan.FromSeconds(15)) await Task.Delay(100);
+            Check(File.Exists(routedDestination) && !File.Exists(routed) && !File.Exists(Path.Combine(secondRack.Folder, "route-me.txt")), "Live routing uses the first matching rule exactly once");
+            session.Settings.RoutingPaused = true; session.Save(); session.Router.Rebuild();
+            var paused = Path.Combine(routingSource, "paused.txt"); await File.WriteAllTextAsync(paused, "leave this in source");
+            await Task.Delay(4500);
+            Check(File.Exists(paused) && !File.Exists(Path.Combine(partialRack.Folder, "paused.txt")), "Paused routing leaves new files in their source folder");
             var stress = session.CreateRack("Large rack", RackKind.Owned);
             await Task.Run(() => { for (var i = 0; i < 5000; i++) File.WriteAllText(Path.Combine(stress.Folder, $"Item-{i:D5}.txt"), "isolated sample"); });
-            await session.RefreshAsync(); var stressWindow = new RackWindow(app, stress); stressWindow.Show();
+            await session.RefreshAsync(); var stressWindow = app.GetRackWindow(stress); stressWindow.Activate();
             await Task.Delay(500);
             Check(session.Items.Count(x => x.RackId == stress.Id) == 5000, "Large rack catalogs 5,000 files");
             var visuals = stressWindow.GetVisualDescendants().Count(); Check(visuals < 1800, "Large rack virtualizes off-screen tiles");
@@ -80,14 +120,16 @@ internal static class Smoke
             diagnostics["IdleRefreshes"] = session.RefreshCount - refreshes;
             diagnostics["IdleSettingsSaves"] = session.SaveCount - saves;
             Check(idleCores < .2, "Idle CPU stays below 20% of one core in isolated run");
-            stressWindow.CloseForApp();
+            var restartMarker = Path.Combine(session.Paths.Desktop, "restart-marker.txt"); await File.WriteAllTextAsync(restartMarker, "Persistent undo across an actual process restart");
+            await session.MoveIntoAsync(stress, [restartMarker], false, CollisionChoice.Skip);
+            stress.Locked = true; stress.ListView = true; session.Save();
             JsonStore.Write(Path.Combine(session.Paths.Data, "smoke-result.json"), new { Passed = true, Checks = report, Performance = new { Files = 5000, RealizedVisuals = visuals, ScrollFrameP95Ms = p95, ScrollFramesOver25Ms = frames.Count(x => x > 25), IdleCpuCores = idleCores }, PerformanceNote = "Frame callback timing is diagnostic, not a GPU presentation or 60 fps certification." });
             app.Exit();
         }
         catch (Exception ex)
         {
             JsonStore.Write(Path.Combine(session.Paths.Data, "smoke-result.json"), new { Passed = false, Checks = report, Performance = diagnostics, Error = ex.ToString() });
-            app.Exit(); Environment.ExitCode = 1;
+            Environment.ExitCode = 1; app.Exit();
         }
     }
 }

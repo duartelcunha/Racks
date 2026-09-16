@@ -12,9 +12,10 @@ internal sealed class SettingsView : ScrollViewer
     {
         var session = app.Session;
         var theme = new ComboBox { ItemsSource = new[] { "System", "Light", "Dark" }, SelectedItem = session.Settings.Theme, HorizontalAlignment = HorizontalAlignment.Stretch };
-        var reduce = new CheckBox { Content = "Reduce motion", IsChecked = session.Settings.ReduceMotion };
+        var reduce = new CheckBox { Content = "Reduce motion — disable inertial scrolling", IsChecked = session.Settings.ReduceMotion };
         var desktop = new CheckBox { Content = "Keep racks on the desktop", IsChecked = session.Settings.DesktopIntegration };
         var auto = new CheckBox { Content = "Automatically check and download signed updates", IsChecked = session.Settings.AutoUpdates };
+        auto.IsVisible = session.Updates.Configured;
         var updates = Ui.Text(session.Updates.Status, 13, true);
         var restart = Ui.AsyncButton("Restart and install", owner, session.Updates.InstallAsync); restart.IsVisible = session.Updates.Ready;
         void Changed() { updates.Text = session.Updates.Status; restart.IsVisible = session.Updates.Ready; }

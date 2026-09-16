@@ -19,6 +19,7 @@
   </Application.Resources>
   <Application.Styles>
     <FluentTheme />
+    <Style Selector="ScrollViewer"><Setter Property="IsScrollInertiaEnabled" Value="{DynamicResource RacksScrollInertia}"/></Style>
     <Style Selector="Window"><Setter Property="FontFamily" Value="Inter, Segoe UI"/><Setter Property="FontSize" Value="14"/><Setter Property="Background" Value="{DynamicResource RacksBackground}"/><Setter Property="Foreground" Value="{DynamicResource RacksText}"/></Style>
     <Style Selector="Button"><Setter Property="CornerRadius" Value="8"/><Setter Property="Padding" Value="14,9"/><Setter Property="MinHeight" Value="36"/></Style>
     <Style Selector="Button.primary"><Setter Property="Background" Value="#58C4AD"/><Setter Property="Foreground" Value="#102620"/><Setter Property="FontWeight" Value="SemiBold"/></Style>

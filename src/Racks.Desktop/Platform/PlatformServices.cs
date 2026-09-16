@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Xml;
+using Avalonia;
 using Avalonia.Controls;
 using Racks.Core;
 
@@ -83,7 +84,7 @@ public sealed class PlatformServices : IFileActions
                 desktop = candidate; return false;
             }, IntPtr.Zero);
             if (desktop == IntPtr.Zero) return false;
-            var position = window.Position;
+            var position = ScreenPosition(window);
             SetParent(handle.Handle, desktop);
             if (GetParent(handle.Handle) != desktop) return false;
             var style = GetWindowLong(handle.Handle, -16);
@@ -108,17 +109,40 @@ public sealed class PlatformServices : IFileActions
         if (window.TryGetPlatformHandle() is not { } handle) return;
         if (OperatingSystem.IsWindows())
         {
+            var position = ScreenPosition(window);
             SetParent(handle.Handle, IntPtr.Zero);
             var style = GetWindowLong(handle.Handle, -16);
             SetWindowLong(handle.Handle, -16, (style & ~0x40000000) | unchecked((int)0x80000000));
+            SetScreenPosition(window, position);
         }
         else if (OperatingSystem.IsMacOS()) ObjcSendLong(handle.Handle, Selector("setLevel:"), 0);
+    }
+
+    public PixelPoint ScreenPosition(Window window) => OperatingSystem.IsWindows() &&
+        window.TryGetPlatformHandle() is { } handle && GetWindowRect(handle.Handle, out var rect)
+            ? new PixelPoint(rect.Left, rect.Top) : window.Position;
+
+    public void SetScreenPosition(Window window, PixelPoint position)
+    {
+        if (OperatingSystem.IsWindows() && window.TryGetPlatformHandle() is { } handle)
+        {
+            var point = new NativePoint { X = position.X, Y = position.Y };
+            if ((GetWindowLong(handle.Handle, -16) & 0x40000000) != 0)
+            {
+                var parent = GetParent(handle.Handle);
+                if (parent != IntPtr.Zero) ScreenToClient(parent, ref point);
+            }
+            SetWindowPos(handle.Handle, IntPtr.Zero, point.X, point.Y, 0, 0, 0x0001 | 0x0004 | 0x0010);
+        }
+        else window.Position = position;
     }
 
     public bool DesktopConnectionAlive(Window window) => !OperatingSystem.IsWindows() ||
         (window.TryGetPlatformHandle() is { } h && GetParent(h.Handle) != IntPtr.Zero && IsWindow(GetParent(h.Handle)));
 
     [StructLayout(LayoutKind.Sequential)] private struct NativePoint { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] private struct NativeRect { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window, out NativeRect rect);
     private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr parameter);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string name, string? title);

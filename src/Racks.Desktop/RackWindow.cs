@@ -80,7 +80,16 @@ public sealed class RackWindow : Window
         saveTimer.Tick += (_, _) => { saveTimer.Stop(); FlushPosition(); };
         session.PropertyChanged += SessionChanged; session.SettingsChanged += ApplyAppearance;
         Opened += (_, _) => { RestorePosition(); ApplyAppearance(); RefreshItems(); if (!session.SafeMode && session.Settings.DesktopIntegration && !session.Paths.IsIsolated) ConnectDesktop(); integrationTimer.Start(); };
-        integrationTimer.Tick += (_, _) => { if (attached && !session.Platform.DesktopConnectionAlive(this)) { attached = false; if (reconnects++ < 2) ConnectDesktop(); else { session.Platform.Detach(this); session.Status = "Desktop connection unavailable. Racks are accessible as ordinary windows."; integrationTimer.Stop(); } } };
+        integrationTimer.Tick += (_, _) =>
+        {
+            if (attached && !session.Platform.DesktopConnectionAlive(this))
+            {
+                attached = false;
+                if (reconnects++ < 2) ConnectDesktop();
+                else { session.Platform.Detach(this); session.Status = "Desktop connection unavailable. Racks are accessible as ordinary windows."; }
+            }
+            if (!Screens.All.Any(s => s.WorkingArea.Contains(session.Platform.ScreenPosition(this)))) RestorePosition();
+        };
         Closing += (_, e) => { if (!appClosing) { e.Cancel = true; rack.Visible = false; FlushPosition(); session.Save(); app.SyncRacks(); } };
         Closed += (_, _) => { saveTimer.Stop(); integrationTimer.Stop(); session.PropertyChanged -= SessionChanged; session.SettingsChanged -= ApplyAppearance; };
         ApplyAppearance();
@@ -96,9 +105,10 @@ public sealed class RackWindow : Window
     {
         if (!dirty || restoring || session.ReadOnly) return;
         dirty = false;
-        if (!attached) { Rack.X = Position.X; Rack.Y = Position.Y; }
+        var position = session.Platform.ScreenPosition(this);
+        Rack.X = position.X; Rack.Y = position.Y;
         if (!Rack.Collapsed) { Rack.Width = Math.Max(280, Bounds.Width); Rack.Height = Math.Max(120, Bounds.Height); }
-        if (Rack.Snap && !Rack.Locked && !attached)
+        if (Rack.Snap && !Rack.Locked)
         {
             var screen = Screens.ScreenFromWindow(this)?.WorkingArea;
             if (screen is { } area)
@@ -108,7 +118,7 @@ public sealed class RackWindow : Window
                 if (Math.Abs(Rack.X + width - area.Right) < 20) Rack.X = area.Right - width;
                 if (Math.Abs(Rack.Y - area.Y) < 20) Rack.Y = area.Y;
                 if (Math.Abs(Rack.Y + height - area.Bottom) < 20) Rack.Y = area.Bottom - height;
-                restoring = true; Position = new((int)Rack.X, (int)Rack.Y); restoring = false;
+                restoring = true; session.Platform.SetScreenPosition(this, new((int)Rack.X, (int)Rack.Y)); restoring = false;
             }
         }
         try { session.Save(); } catch (Exception ex) { session.Status = "Position could not be saved: " + ex.Message; }
@@ -121,11 +131,11 @@ public sealed class RackWindow : Window
         if (screen != null)
         {
             var a = screen.WorkingArea;
-            desired = new PixelPoint(Math.Clamp(desired.X, a.X, Math.Max(a.X, a.Right - 160)), Math.Clamp(desired.Y, a.Y, Math.Max(a.Y, a.Bottom - 80)));
             Width = Math.Clamp(Rack.Width, 280, Math.Max(280, a.Width / screen.Scaling));
             Height = Rack.Collapsed ? 68 : Math.Clamp(Rack.Height, 120, Math.Max(120, a.Height / screen.Scaling));
+            desired = new PixelPoint(Math.Clamp(desired.X, a.X, Math.Max(a.X, a.Right - (int)(Width * screen.Scaling))), Math.Clamp(desired.Y, a.Y, Math.Max(a.Y, a.Bottom - (int)(Height * screen.Scaling))));
         }
-        Position = desired; restoring = false;
+        session.Platform.SetScreenPosition(this, desired); restoring = false;
     }
     private void ApplyAppearance()
     {
@@ -147,12 +157,12 @@ public sealed class RackWindow : Window
         query = Rack.Sort switch { "Modified" => query.OrderBy(x => x.Modified), "Type" => query.OrderBy(x => x.Kind).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase), "Size" => query.OrderBy(x => x.Size), _ => query.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase) };
         if (Rack.Descending) query = query.Reverse();
         var next = query.ToArray(); count.Text = $"{next.Length} items";
-        if (items.SequenceEqual(next) && Equals(list.Tag, Rack.ListView)) return;
+        if (items.SequenceEqual(next) && Equals(list.Tag, PresentationKey())) return;
         items = next; selected.IntersectWith(items.Select(x => x.Path)); RenderItems();
     }
     private void RenderItems()
     {
-        list.Tag = Rack.ListView;
+        list.Tag = PresentationKey();
         if (Rack.ListView)
         {
             list.ItemTemplate = new FuncDataTemplate<CatalogItem>((item, _) => item == null ? null : Tile(item, true));
@@ -169,13 +179,15 @@ public sealed class RackWindow : Window
             list.ItemsSource = items.Chunk(columns).ToArray();
         }
     }
+    private string PresentationKey() => $"{Rack.ListView}|{Rack.FontSize}|{Rack.Accent}|{Rack.Foreground}";
     private Control Tile(CatalogItem item, bool compact)
     {
         var label = Ui.Text(item.Name, Rack.FontSize); label.MaxLines = compact ? 1 : 2; label.TextTrimming = TextTrimming.CharacterEllipsis;
+        label.Foreground = ParseBrush(Rack.Foreground, "#F1F5F5");
         var symbol = Ui.Text(item.IsDirectory ? "▰" : (item.Kind.Length == 0 ? "FILE" : item.Kind[..Math.Min(5, item.Kind.Length)]), compact ? 12 : 13);
         symbol.Foreground = ParseBrush(Rack.Accent, "#58C4AD"); symbol.FontWeight = FontWeight.SemiBold;
         var content = compact ? Ui.Row(symbol, label) : Ui.Stack(symbol, label); content.Spacing = 8;
-        var button = new ToggleButton { Content = content, HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch, MinWidth = 0, Height = compact ? 42 : 102, Padding = new Thickness(10), CornerRadius = new CornerRadius(9), Background = Brushes.Transparent, IsChecked = selected.Contains(item.Path) };
+        var button = new ToggleButton { Content = content, HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Stretch, MinWidth = 0, Height = compact ? Math.Max(42, Rack.FontSize * 1.8 + 16) : Math.Max(104, Rack.FontSize * 2.8 + 40), Padding = new Thickness(10), CornerRadius = new CornerRadius(9), Background = Brushes.Transparent, IsChecked = selected.Contains(item.Path) };
         AutomationProperties.SetName(button, item.Name + ", " + item.Kind); ToolTip.SetTip(button, item.Name);
         button.Click += (_, _) => { if (button.IsChecked == true) selected.Add(item.Path); else selected.Remove(item.Path); };
         button.DoubleTapped += async (_, e) => { e.Handled = true; await OpenAsync(item); };
@@ -197,6 +209,11 @@ public sealed class RackWindow : Window
                 }
                 await DragDrop.DoDragDropAsync(press, data, DragDropEffects.Copy | DragDropEffects.Move);
                 // The target owns the transfer. A drag effect is never proof that it is safe to delete.
+                if (Rack.IncludedNames != null && Directory.Exists(Rack.Folder))
+                {
+                    foreach (var path in paths.Where(path => !SafeFiles.Exists(path))) Rack.IncludedNames.Remove(Path.GetFileName(path));
+                    session.Save();
+                }
                 await session.RefreshAsync();
             }
             catch (Exception ex) { await Ui.Error(this, ex); }

@@ -81,7 +81,7 @@ public sealed class FileOperations(AppPaths paths, IFileActions actions)
                     {
                         if (!Path.IsPathFullyQualified(item.Source) || !Path.IsPathFullyQualified(item.Destination)) throw new IOException("Invalid file location.");
                         if (SafeFiles.IsWithin(item.Source, paths.Operations) || SafeFiles.IsWithin(item.Source, AppContext.BaseDirectory) ||
-                            new[] { paths.Settings, paths.LastUndo, paths.Startup }.Any(x => item.Source.Equals(x, SafeFiles.PathComparison)))
+                            new[] { paths.Settings, paths.LastUndo, paths.Startup }.Any(x => SafeFiles.CanonicalPath(item.Source).Equals(SafeFiles.CanonicalPath(x), SafeFiles.PathComparison)))
                             throw new IOException("Application and recovery files cannot be moved into a rack.");
                         if (SafeFiles.Exists(item.Destination))
                         {
