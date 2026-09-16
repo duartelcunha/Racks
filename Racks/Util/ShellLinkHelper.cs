@@ -13,6 +13,8 @@ namespace Racks.Util
                                   string workingDirectory = null, string description = null)
         {
             IShellLinkW link = (IShellLinkW)new CShellLink();
+            try
+            {
             link.SetPath(targetPath);
             if (!string.IsNullOrEmpty(workingDirectory)) link.SetWorkingDirectory(workingDirectory);
             if (!string.IsNullOrEmpty(description))
@@ -21,6 +23,8 @@ namespace Racks.Util
             }
             IPersistFile file = (IPersistFile)link;
             file.Save(shortcutPath, false);
+            }
+            finally { if (OperatingSystem.IsWindows()) Marshal.FinalReleaseComObject(link); }
         }
 
         [ComImport, Guid("00021401-0000-0000-C000-000000000046")]

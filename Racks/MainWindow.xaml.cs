@@ -200,6 +200,16 @@ namespace Racks
                 var dialog = new Racks.Views.AutoOrganizePreviewDialog(clusters);
                 if (dialog.ShowDialog() == true && dialog.Result != Racks.Views.OrganizeChoice.Cancel)
                 {
+                    if (Racks.Core.MagicOrganizeUndo.Last?.HasAnything == true)
+                    {
+                        if (Racks.Core.MagicOrganizeUndo.Last.HasUnresolved)
+                        {
+                            Racks.Views.RacksMessageBox.Show("An interrupted organization needs attention. Its recovery record is preserved in RacksData/legacy-organize-undo.json. Inspect both recorded locations in Explorer before organizing again.", "Organization needs attention");
+                            return;
+                        }
+                        if (!Racks.Views.RacksMessageBox.Confirm("Organizing again replaces the previous undo record. Keep the earlier organization and continue?", "Previous organization", "Keep and continue", "Cancel")) return;
+                        Racks.Core.MagicOrganizeUndo.Clear();
+                    }
                     if (dialog.Result == Racks.Views.OrganizeChoice.Racks)
                     {
                         var undo = Racks.Core.MagicOrganizeUndo.Begin(Racks.Core.MagicOrganizeUndo.Mode.Racks);
@@ -259,7 +269,9 @@ namespace Racks
                                 string fileName = System.IO.Path.GetFileName(fp);
                                 string destPath = System.IO.Path.Combine(Racks.Core.DesktopIconManager.RacksWorkspacePath, fileName);
                                 
+                                undo.RecordIntent(fp, destPath);
                                 var moveResult = Racks.Util.SafeMove.TryMove(fp, destPath, out string reason);
+                                if (moveResult != Racks.Util.SafeMove.Result.Moved) undo.CancelIntent(fp, destPath);
                                 if (moveResult == Racks.Util.SafeMove.Result.Moved)
                                 {
                                     Racks.Util.Interop.NotifyShellMove(fp, destPath, System.IO.Directory.Exists(fp));
@@ -269,6 +281,7 @@ namespace Racks
                                 }
                             }
                             undo.CreatedRackNames.Add(inst.Name);
+                            undo.Save();
 
                             try
                             {
@@ -309,6 +322,7 @@ namespace Racks
                             {
                                 System.IO.Directory.CreateDirectory(folderPath);
                                 undo.CreatedFolders.Add(folderPath);
+                                undo.Save();
                             }
 
                             foreach (var fp in cluster.FilePaths)
@@ -316,7 +330,9 @@ namespace Racks
                                 string fileName = System.IO.Path.GetFileName(fp);
                                 string destPath = System.IO.Path.Combine(folderPath, fileName);
 
+                                undo.RecordIntent(fp, destPath);
                                 var moveResult = Racks.Util.SafeMove.TryMove(fp, destPath, out string reason);
+                                if (moveResult != Racks.Util.SafeMove.Result.Moved) undo.CancelIntent(fp, destPath);
                                 if (moveResult == Racks.Util.SafeMove.Result.Moved)
                                 {
                                     Racks.Util.Interop.NotifyShellMove(fp, destPath, System.IO.Directory.Exists(fp));
@@ -346,26 +362,28 @@ namespace Racks
             if (undo == null || !undo.HasAnything) return;
             try
             {
+                int restored = undo.RestoreFiles();
+                // Keep rack definitions and the journal until EVERY item is restored.
+                // Collisions, missing files and interrupted intents remain recoverable.
+                if (undo.Moved.Count > 0)
+                {
+                    Racks.Views.RacksMessageBox.Show($"Returned {restored} item(s). {undo.Moved.Count} item(s) still need attention; the racks and undo record were kept. Resolve the recorded locations in Explorer and try again.", "Undo incomplete");
+                    return;
+                }
                 if (undo.OrganizeMode == Racks.Core.MagicOrganizeUndo.Mode.Racks)
                 {
-                    // Close and delete the racks this run created (before moving files back, so
-                    // their file-watchers/claims are gone).
                     foreach (var name in undo.CreatedRackNames)
                     {
                         var inst = _controller.Instances.FirstOrDefault(i => i.Name == name);
                         if (inst == null) continue;
                         inst.isWindowClosing = true;
                         var win = _controller._subWindows.FirstOrDefault(w => w.Instance == inst);
-                        try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(inst.GetKeyLocation(), false); } catch { }
-                        if (win != null) { try { win.Close(); } catch { } _controller.RemoveInstance(inst, win); }
+                        Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(inst.GetKeyLocation(), false);
+                        if (win != null) { win.Close(); _controller.RemoveInstance(inst, win); }
                         else _controller.Instances.Remove(inst);
                     }
                 }
-
-                int restored = undo.RestoreFiles();
-                undo.RemoveCreatedFolders();
-
-                // Lay the returned files out in a clean grid on the desktop.
+                undo.RemoveCreatedFolders();                // Lay the returned files out in a clean grid on the desktop.
                 var back = new List<string>();
                 string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                 foreach (var m in undo.Moved)

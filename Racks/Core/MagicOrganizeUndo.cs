@@ -16,45 +16,88 @@ namespace Racks.Core
         {
             public string OriginalPath { get; set; } = "";   // where it was on the desktop
             public string NewPath { get; set; } = "";        // where Magic Organize put it
+            public bool Completed { get; set; }
+            public bool UndoPending { get; set; }
+            public long Length { get; set; }
+            public DateTime LastWriteUtc { get; set; }
+            public bool IsDirectory { get; set; }
         }
 
         public Mode OrganizeMode { get; set; }
-        public List<MovedItem> Moved { get; } = new();
-        public List<string> CreatedRackNames { get; } = new();   // instance names to remove (Racks mode)
-        public List<string> CreatedFolders { get; } = new();     // desktop folders to remove (Folders mode)
+        public List<MovedItem> Moved { get; set; } = new();
+        public List<string> CreatedRackNames { get; set; } = new();
+        public List<string> CreatedFolders { get; set; } = new();
 
         // Only the most recent run is undoable (kept in memory + persisted for safety).
-        public static MagicOrganizeUndo? Last { get; private set; }
+        private static string StoragePath => Path.Combine(
+            Environment.GetEnvironmentVariable("RACKS_TEST_PROFILE") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RacksData"), "legacy-organize-undo.json");
+        private static MagicOrganizeUndo? _last;
+        public static MagicOrganizeUndo? Last
+        {
+            get
+            {
+                if (_last == null && File.Exists(StoragePath)) _last = JsonStore.Read<MagicOrganizeUndo>(StoragePath);
+                return _last;
+            }
+            private set => _last = value;
+        }
+        public void Save() => JsonStore.Write(StoragePath, this);
 
         public static MagicOrganizeUndo Begin(Mode mode)
         {
+            if (Last?.Moved.Count > 0) throw new InvalidOperationException("An earlier organize operation is still available to undo. Keep or undo it before organizing again.");
             Last = new MagicOrganizeUndo { OrganizeMode = mode };
+            Last.Save();
             return Last;
         }
 
-        public void RecordMove(string original, string moved) =>
+        public void RecordIntent(string original, string moved)
+        {
             Moved.Add(new MovedItem { OriginalPath = original, NewPath = moved });
+            Save();
+        }
+        public void RecordMove(string original, string moved)
+        {
+            var item = Moved.Find(x => x.OriginalPath == original && x.NewPath == moved);
+            if (item == null) { item = new MovedItem { OriginalPath = original, NewPath = moved }; Moved.Add(item); }
+            item.Completed = true;
+            item.IsDirectory = Directory.Exists(moved);
+            item.Length = item.IsDirectory ? 0 : new FileInfo(moved).Length;
+            item.LastWriteUtc = File.GetLastWriteTimeUtc(moved);
+            Save();
+        }
+        public void CancelIntent(string original, string moved)
+        {
+            Moved.RemoveAll(x => !x.Completed && x.OriginalPath == original && x.NewPath == moved);
+            Save();
+        }
 
         public bool HasAnything => Moved.Count > 0 || CreatedRackNames.Count > 0 || CreatedFolders.Count > 0;
+        public bool HasUnresolved => Moved.Exists(x => !x.Completed || x.UndoPending);
 
         // Move everything back where it came from. Returns how many items were restored.
         // Leaves the undo record cleared afterwards (can only undo once).
         public int RestoreFiles()
         {
             int restored = 0;
-            foreach (var m in Moved)
+            foreach (var m in Moved.ToArray())
             {
                 try
                 {
-                    if (!File.Exists(m.NewPath) && !Directory.Exists(m.NewPath)) continue;
+                    if (!m.Completed || m.UndoPending || (!File.Exists(m.NewPath) && !Directory.Exists(m.NewPath))) continue;
                     // If something already sits at the original spot, don't clobber it.
                     if (File.Exists(m.OriginalPath) || Directory.Exists(m.OriginalPath)) continue;
+                    if (!m.IsDirectory && (new FileInfo(m.NewPath).Length != m.Length || File.GetLastWriteTimeUtc(m.NewPath) != m.LastWriteUtc)) continue;
+                    m.UndoPending = true; Save();
 
                     if (Racks.Util.SafeMove.TryMove(m.NewPath, m.OriginalPath, out _) == Racks.Util.SafeMove.Result.Moved)
                     {
                         Racks.Util.Interop.NotifyShellMove(m.NewPath, m.OriginalPath, Directory.Exists(m.OriginalPath));
                         restored++;
+                        Moved.Remove(m);
+                        Save();
                     }
+                    else { m.UndoPending = false; Save(); }
                 }
                 catch { /* best-effort per item */ }
             }
@@ -76,6 +119,10 @@ namespace Racks.Core
             }
         }
 
-        public static void Clear() => Last = null;
+        public static void Clear()
+        {
+            if (File.Exists(StoragePath)) File.Delete(StoragePath);
+            Last = null;
+        }
     }
 }

@@ -404,3 +404,7 @@ test/last-test-result.json
 # Stray native-build artifacts / scratch test exes (dead feature; must not be tracked)
 Racks/RacksHook.*
 Racks/Test*.exe
+# Local development SDK and isolated application profiles
+.tools/
+.artifacts/
+TestResults/

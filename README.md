@@ -32,6 +32,21 @@
 
 ---
 
+## Overhaul development
+
+The existing WPF application remains the current Windows release. The shared .NET 10 / Avalonia application is being verified alongside it; it is not yet a stable replacement.
+
+The new application has rack management, grid/list views, filename search, editable organization previews, ordered routing, versioned JSON settings, persistent file-operation records, and signed-update integration. Test it with an isolated profile:
+
+```powershell
+dotnet build Racks.Overhaul.sln -c Release
+dotnet run --project src/Racks.Desktop -- --profile "$PWD/.artifacts/my-test-profile"
+./scripts/Test-All.ps1
+```
+
+Isolated profiles use their own Desktop, workspace, settings, and operation records. They do not import your registry or start update checks. Use test files only. [Implementation and release gates](docs/OVERHAUL.md) describe remaining validation; [development guide](docs/DEVELOPMENT.md) explains the structure and test commands.
+
+The sections below describe the existing Windows application.
 ## Why Racks?
 
 Your desktop shouldn't be a dumping ground. Racks lives quietly in your system tray and lets you create translucent floating panels on your wallpaper. Drop files in and they leave the mess behind for a tidy, safe home you can reach in one click.
@@ -49,7 +64,7 @@ Drop a file, folder, or shortcut onto a rack and it's tidied away instantly.
 - **Default drop** — the item is **moved** into the rack (off your desktop, into a private sandbox).
 - **`Ctrl` + drop** — a **shortcut** is created instead; the original stays where it is.
 - **`Shift` + drop** — force a move even on a link-mode rack.
-- **Drag an item out** — it comes back to your desktop as a single file, no duplicate.
+- **Drag an item out** — Explorer handles the move or copy. Racks keeps the source unless Explorer has actually moved it; it never deletes a source based on a guessed drag result.
 
 Two kinds of rack:
 
@@ -84,7 +99,7 @@ The settings panel snaps next to the rack you're editing and updates **live** �
 
 - **No accidental deletes.** The Delete option is blocked for files inside a rack, so you can't wipe a folder a rack points at. Want it gone? Drag it out first.
 - **Open in File Explorer** — one click from any rack item to reveal the real file in its folder.
-- **Removing a rack returns everything** to your desktop, laid out in a clean grid.
+- **Removing an owned rack returns its files** to Desktop. If a return fails, the rack stays so you can resolve it. Removing a folder rack leaves the folder in place.
 
 <br />
 

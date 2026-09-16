@@ -12,13 +12,14 @@
     pwsh -File test\Test-Racks.ps1 -ExePath "path\to\Racks.exe"
 
   Exits 0 if every assertion passes, 1 otherwise. Also writes a JSON result
-  next to this script (last-test-result.json). Safe to re-run: it kills any
-  existing Racks first (all Racks instances during a test session are ours) and
+  next to this script (last-test-result.json). Run only in a disposable account: it refuses any
+  existing Racks process or rack settings and
   cleans up the throwaway "New Rack" it creates. It never touches other racks.
 #>
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)][string]$ExePath,
+  [switch]$DisposableWindowsAccount,
   [int]$StartupWaitMs = 4000,
   [int]$TrayPersistWaitMs = 6000,
   [int]$CpuSampleSeconds = 6,
@@ -26,6 +27,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if (!$DisposableWindowsAccount) { throw 'This legacy UI test requires a disposable Windows account or VM. Use scripts/Test-All.ps1 for isolated verification in your normal account.' }
+if (Get-Process Racks -ErrorAction SilentlyContinue) { throw 'An existing Racks process is running. This test never terminates personal instances.' }
+if (Test-Path 'HKCU:\Software\Racks\Instances') { throw 'Existing rack settings found. Use a fresh disposable account.' }
 $results = [System.Collections.Generic.List[object]]::new()
 $script:allPass = $true
 
@@ -124,10 +128,6 @@ function Sample-Cpu([System.Diagnostics.Process]$p, [int]$seconds) {
 # ---- pre-flight: clean slate ------------------------------------------------
 if (-not (Test-Path $ExePath)) { Step "exe exists" $false $ExePath; exit 1 }
 Info "Testing: $ExePath"
-Get-Process Racks -ErrorAction SilentlyContinue | ForEach-Object {
-  Info "Killing pre-existing Racks pid $($_.Id)"
-  Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
-}
 Start-Sleep -Milliseconds 800
 
 $crashLog = Join-Path $env:AppData 'Racks\crash.log'

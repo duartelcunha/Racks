@@ -18,9 +18,13 @@
 
 #define AppName "Racks"
 #define AppPublisher "Duarte L. Cunha"
-#define AppExeName "Racks.exe"
+#ifndef AppExeName
+  #define AppExeName "Racks.exe"
+#endif
 #define AppUrl "https://github.com/duartelcunha/Racks"
-#define SourceRoot "..\publish"
+#ifndef SourceRoot
+  #define SourceRoot "..\publish"
+#endif
 
 [Setup]
 ; Stable, unique-to-Racks GUID. Don't change this — it identifies the install
@@ -57,7 +61,7 @@ SolidCompression=yes
 ; Block a second installer from starting on top of a running one. Without this
 ; you can end up with half-extracted .exes on disk if the user double-clicks
 ; the setup twice.
-SetupMutex=Racks-Setup-{#AppVersion}
+SetupMutex=Racks-Setup
 OutputBaseFilename=Racks-Setup-{#AppVersion}
 OutputDir=Output
 SetupIconFile=..\Racks\Icon\ico.ico
@@ -67,9 +71,9 @@ UninstallDisplayName={#AppName}
 ; Single-arch — Racks targets x64 only (see csproj <Platforms>x64</Platforms>).
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; Auto-close a running Racks instance so we can replace the .exe on upgrade.
-; No "please close the app" modal — just take care of it.
-CloseApplications=force
+; An active file operation must never be terminated by an installer.
+AppMutex=Racks-SingleInstance-2C9D
+CloseApplications=no
 CloseApplicationsFilter=*.exe
 RestartApplications=no
 
@@ -93,52 +97,8 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 ; nowait + skipifsilent + postinstall so an /SILENT install just runs it.
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
 
-[UninstallRun]
-; Kill running instance silently so the uninstaller instance can run without hitting the Mutex
-Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExeName} /F"; Flags: runhidden; RunOnceId: "KillRacks"
-; The farewell animation is played from [Code] at usPostUninstall (after everything is
-; removed), from a temp copy of the exe, so it appears when uninstall FINISHES.
-
-[UninstallDelete]
-Type: filesandordirs; Name: "{userappdata}\{#AppName}"
-Type: filesandordirs; Name: "{localappdata}\{#AppName}"
-
+; App files are removed by Inno's installation log. User files, settings and
+; recovery records are deliberately retained. Never recursively remove AppData.
 [Registry]
-Root: HKCU; Subkey: "Software\{#AppName}"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Racks"; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "DesktopRacks"; Flags: uninsdeletevalue
-
-[Code]
-// Play the farewell animation AFTER the uninstall has finished. The app exe is
-// self-contained (needs its sibling .NET files), and Inno removes {app} during
-// uninstall - so at usUninstall we copy the whole app folder to a temp location,
-// then at usPostUninstall (everything already removed) we launch the animation from
-// that copy. The copy self-deletes via a delayed cmd so nothing is left behind.
-var
-  AnimDir: String;
-
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-var
-  ResultCode: Integer;
-  Exe: String;
-begin
-  if CurUninstallStep = usUninstall then
-  begin
-    // Snapshot the app folder before it's deleted.
-    AnimDir := ExpandConstant('{tmp}\RacksFarewell');
-    Exec(ExpandConstant('{cmd}'), '/C xcopy "' + ExpandConstant('{app}') + '" "' + AnimDir + '" /E /I /Q /Y', '',
-      SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  end
-  else if CurUninstallStep = usPostUninstall then
-  begin
-    Exe := AnimDir + '\{#AppExeName}';
-    if FileExists(Exe) then
-    begin
-      // Run the animation, wait for it, then schedule the temp copy for deletion.
-      Exec(Exe, '--uninstall-anim', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
-      Exec(ExpandConstant('{cmd}'),
-        '/C ping 127.0.0.1 -n 2 > nul & rmdir /S /Q "' + AnimDir + '"', '',
-        SW_HIDE, ewNoWait, ResultCode);
-    end;
-  end;
-end;
