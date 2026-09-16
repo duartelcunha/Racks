@@ -124,3 +124,29 @@ Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Racks"; Flags: dontcreatekey uninsdeletevalue
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "DesktopRacks"; Flags: dontcreatekey uninsdeletevalue
+
+#if AppExeName != "Racks.exe"
+[Code]
+procedure UpdateExistingStartup(const ValueName: String);
+var
+  Existing, OldExecutable, NewExecutable: String;
+begin
+  if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', ValueName, Existing) then
+  begin
+    OldExecutable := ExpandConstant('{app}\Racks.exe');
+    NewExecutable := ExpandConstant('{app}\{#AppExeName}');
+    if (CompareText(Existing, OldExecutable) = 0) or
+       (CompareText(Existing, '"' + OldExecutable + '"') = 0) then
+      RegWriteStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', ValueName, '"' + NewExecutable + '"');
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    UpdateExistingStartup('Racks');
+    UpdateExistingStartup('DesktopRacks');
+  end;
+end;
+#endif

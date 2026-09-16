@@ -32,7 +32,7 @@ public sealed class RackDefinition
     public string FontFamily { get; set; } = "Inter";
     public double FontSize { get; set; } = 13;
     public int IconSize { get; set; } = 32;
-    public double Opacity { get; set; } = .94;
+    public double Opacity { get; set; } = 1;
     public string BackgroundImage { get; set; } = "";
     // Preserve settings that don't yet have a cross-platform presentation equivalent.
     public Dictionary<string, string> LegacyAppearance { get; set; } = new();

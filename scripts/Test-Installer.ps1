@@ -15,7 +15,9 @@ if ((Test-Path -LiteralPath $registryPath) -or ($fixtureFolders | Where-Object {
 $compiler = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if (!$compiler) { throw 'The runner must provide Inno Setup 6.' }
 New-Item -ItemType Directory -Path $outputRoot | Out-Null
-$published = Invoke-RestMethod 'https://api.github.com/repos/duartelcunha/Racks/releases/tags/v1.1.4'
+$releaseHeaders = @{ Accept = 'application/vnd.github+json' }
+if ($env:GH_TOKEN) { $releaseHeaders.Authorization = 'Bearer ' + $env:GH_TOKEN }
+$published = Invoke-RestMethod 'https://api.github.com/repos/duartelcunha/Racks/releases/tags/v1.1.4' -Headers $releaseHeaders
 $asset = $published.assets | Where-Object name -eq 'Racks-Setup-1.1.4.exe' | Select-Object -First 1
 if (!$asset) { throw 'The expected published upgrade baseline is unavailable.' }
 $baseline = Join-Path $outputRoot $asset.name
@@ -40,6 +42,7 @@ New-Item -Path $rackKey -Force | Out-Null
 Set-ItemProperty -LiteralPath $rackKey -Name Folder -Value $legacyFolder
 $startupPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 Set-ItemProperty -LiteralPath $startupPath -Name Racks -Value 'Existing startup preference'
+Set-ItemProperty -LiteralPath $startupPath -Name DesktopRacks -Value ('"' + (Join-Path $installPath 'Racks.exe') + '"')
 Push-Location $repoRoot
 try {
     $publishPath = Join-Path $outputRoot 'publish'
@@ -50,6 +53,7 @@ try {
     $installer = Join-Path $repoRoot 'installer/Output/Racks-Setup-2.0.0-beta.1.exe'
     Run-Installer $installer 'upgrade.log'
     if ((Get-ItemPropertyValue -LiteralPath $startupPath -Name Racks) -ne 'Existing startup preference') { throw 'Upgrade changed the startup preference.' }
+    if ((Get-ItemPropertyValue -LiteralPath $startupPath -Name DesktopRacks) -ne ('"' + (Join-Path $installPath 'Racks.Next.exe') + '"')) { throw 'Upgrade did not update the existing app startup path.' }
     if (!(Test-Path -LiteralPath (Join-Path $installPath 'Racks.Next.exe'))) { throw 'Upgrade did not install the shared app.' }
     if (Test-Path -LiteralPath (Join-Path $installPath 'Racks.exe')) { throw 'Upgrade left the obsolete executable available.' }
     function Assert-Preserved {

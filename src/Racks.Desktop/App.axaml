@@ -23,6 +23,8 @@
     <Style Selector="Window"><Setter Property="FontFamily" Value="Inter, Segoe UI"/><Setter Property="FontSize" Value="14"/><Setter Property="Background" Value="{DynamicResource RacksBackground}"/><Setter Property="Foreground" Value="{DynamicResource RacksText}"/></Style>
     <Style Selector="Button"><Setter Property="CornerRadius" Value="8"/><Setter Property="Padding" Value="14,9"/><Setter Property="MinHeight" Value="36"/></Style>
     <Style Selector="Button.primary"><Setter Property="Background" Value="#58C4AD"/><Setter Property="Foreground" Value="#102620"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#75D4BD"/><Setter Property="Foreground" Value="#102620"/></Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="#44A990"/><Setter Property="Foreground" Value="#102620"/></Style>
     <Style Selector="Button.quiet"><Setter Property="Background" Value="Transparent"/></Style>
     <Style Selector="Button.nav"><Setter Property="Background" Value="Transparent"/><Setter Property="HorizontalAlignment" Value="Stretch"/><Setter Property="HorizontalContentAlignment" Value="Left"/><Setter Property="Padding" Value="14,12"/></Style>
     <Style Selector="Button.nav.active"><Setter Property="Background" Value="#2458C4AD"/><Setter Property="FontWeight" Value="SemiBold"/></Style>

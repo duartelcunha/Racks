@@ -29,7 +29,7 @@ public sealed class RackWindow : Window
     private readonly DispatcherTimer integrationTimer = new() { Interval = TimeSpan.FromSeconds(10) };
     private CatalogItem[] items = [];
     private bool appClosing, restoring, attached, dirty;
-    private int reconnects, columns = 3;
+    private int reconnects, columns = 2;
     private Point? dragStart;
     private PointerPressedEventArgs? dragEvent;
     private bool dragging;
@@ -76,7 +76,7 @@ public sealed class RackWindow : Window
         list.DoubleTapped += async (_, _) => { if (rack.ListView && list.SelectedItem is CatalogItem item) await OpenAsync(item); };
         KeyDown += OnKeyDown;
         PositionChanged += (_, _) => { if (!restoring) SaveSoon(); };
-        SizeChanged += (_, _) => { if (!restoring) { var next = Math.Clamp((int)(Bounds.Width / 110), 2, 10); if (next != columns && !rack.ListView) { columns = next; RenderItems(); } SaveSoon(); } };
+        SizeChanged += (_, _) => { if (!restoring) { var next = ColumnCount(); if (next != columns && !rack.ListView) { columns = next; RenderItems(); } SaveSoon(); } };
         saveTimer.Tick += (_, _) => { saveTimer.Stop(); FlushPosition(); };
         session.PropertyChanged += SessionChanged; session.SettingsChanged += ApplyAppearance;
         Opened += (_, _) => { RestorePosition(); ApplyAppearance(); RefreshItems(); if (!session.SafeMode && session.Settings.DesktopIntegration && !session.Paths.IsIsolated) ConnectDesktop(); integrationTimer.Start(); };
@@ -170,19 +170,21 @@ public sealed class RackWindow : Window
         }
         else
         {
-            list.ItemTemplate = new FuncDataTemplate<CatalogItem[]>((row, _) =>
+            list.ItemTemplate = new FuncDataTemplate<CatalogRow>((row, _) =>
             {
                 var grid = new Grid { ColumnDefinitions = new ColumnDefinitions(string.Join(",", Enumerable.Repeat("*", columns))), ColumnSpacing = 4 };
-                if (row != null) for (var i = 0; i < row.Length; i++) { var tile = Tile(row[i], false); Grid.SetColumn(tile, i); grid.Children.Add(tile); }
+                if (row != null) for (var i = 0; i < row.Items.Length; i++) { var tile = Tile(row.Items[i], false); Grid.SetColumn(tile, i); grid.Children.Add(tile); }
                 return grid;
             });
-            list.ItemsSource = items.Chunk(columns).ToArray();
+            list.ItemsSource = items.Chunk(columns).Select(row => new CatalogRow(row)).ToArray();
         }
     }
     private string PresentationKey() => $"{Rack.ListView}|{Rack.FontSize}|{Rack.Accent}|{Rack.Foreground}";
+    private int ColumnCount() => Math.Clamp((int)(Bounds.Width / Math.Max(148, Rack.FontSize * 10 + 18)), 2, 10);
     private Control Tile(CatalogItem item, bool compact)
     {
         var label = Ui.Text(item.Name, Rack.FontSize); label.MaxLines = compact ? 1 : 2; label.TextTrimming = TextTrimming.CharacterEllipsis;
+        label.TextWrapping = compact ? TextWrapping.NoWrap : TextWrapping.WrapWithOverflow;
         label.Foreground = ParseBrush(Rack.Foreground, "#F1F5F5");
         var symbol = Ui.Text(item.IsDirectory ? "▰" : (item.Kind.Length == 0 ? "FILE" : item.Kind[..Math.Min(5, item.Kind.Length)]), compact ? 12 : 13);
         symbol.Foreground = ParseBrush(Rack.Accent, "#58C4AD"); symbol.FontWeight = FontWeight.SemiBold;
@@ -191,10 +193,13 @@ public sealed class RackWindow : Window
         AutomationProperties.SetName(button, item.Name + ", " + item.Kind); ToolTip.SetTip(button, item.Name);
         button.Click += (_, _) => { if (button.IsChecked == true) selected.Add(item.Path); else selected.Remove(item.Path); };
         button.DoubleTapped += async (_, e) => { e.Handled = true; await OpenAsync(item); };
+        button.AddHandler(KeyDownEvent, async (_, e) => { if (e.Key == Key.Enter) { e.Handled = true; await OpenAsync(item); } }, RoutingStrategies.Tunnel);
         button.ContextMenu = new ContextMenu { ItemsSource = new[] { Menu("Open", () => OpenAsync(item)), Menu("Reveal", () => { session.Platform.Reveal(item.Path); return Task.CompletedTask; }), Menu("Rename…", async () => { var name = await Ui.Prompt(this, "Rename file", "Filename", item.Name); if (name != null) await session.RenameAsync(item, name); }), Menu("Return to Desktop", async () => { var choice = await Ui.Collision(this); if (choice != null) await session.ReturnAsync([item], choice.Value); }) } };
-        button.PointerPressed += (_, e) => { if (e.GetCurrentPoint(button).Properties.IsLeftButtonPressed) { dragStart = e.GetPosition(this); dragEvent = e; } };
-        button.PointerReleased += (_, _) => { dragStart = null; dragEvent = null; };
-        button.PointerMoved += async (_, e) =>
+        // Buttons handle the bubbling press themselves. Observe the tunnelling
+        // event so native dragging is not silently swallowed by tile selection.
+        button.AddHandler(PointerPressedEvent, (_, e) => { if (e.GetCurrentPoint(button).Properties.IsLeftButtonPressed) { dragStart = e.GetPosition(this); dragEvent = e; } }, RoutingStrategies.Tunnel, true);
+        button.AddHandler(PointerReleasedEvent, (_, _) => { dragStart = null; dragEvent = null; }, RoutingStrategies.Tunnel, true);
+        button.AddHandler(PointerMovedEvent, async (_, e) =>
         {
             if (dragging || dragStart is not { } start || dragEvent == null || !e.GetCurrentPoint(button).Properties.IsLeftButtonPressed || Math.Sqrt(Math.Pow(e.GetPosition(this).X - start.X, 2) + Math.Pow(e.GetPosition(this).Y - start.Y, 2)) < 8) return;
             dragging = true; var press = dragEvent; dragStart = null;
@@ -218,7 +223,7 @@ public sealed class RackWindow : Window
             }
             catch (Exception ex) { await Ui.Error(this, ex); }
             finally { dragging = false; dragEvent = null; }
-        };
+        }, RoutingStrategies.Tunnel, true);
         return button;
     }
     private IEnumerable<CatalogItem> Selected() => items.Where(x => selected.Contains(x.Path));
@@ -248,6 +253,10 @@ public sealed class RackWindow : Window
         catch (Exception ex) { await Ui.Error(this, ex); }
     }
     public void CloseForApp() { appClosing = true; Close(); }
+    private sealed record CatalogRow(CatalogItem[] Items)
+    {
+        public override string ToString() => string.Join(", ", Items.Select(item => item.Name));
+    }
 }
 
 internal static class RackEditor
