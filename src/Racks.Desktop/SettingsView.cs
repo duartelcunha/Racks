@@ -25,11 +25,13 @@ internal sealed class SettingsView : ScrollViewer
             session.Settings.Theme = (string?)theme.SelectedItem ?? "System"; session.Settings.ReduceMotion = reduce.IsChecked == true; session.Settings.DesktopIntegration = desktop.IsChecked == true; session.Settings.AutoUpdates = auto.IsChecked == true;
             session.Save(); if (!session.Settings.AutoUpdates) session.Updates.Pause(); session.Status = "Preferences saved. Enabling desktop attachment takes effect on next launch."; return Task.CompletedTask;
         }, true);
-        var updateButtons = Ui.Row(Ui.AsyncButton("Check now", owner, session.Updates.CheckAsync), Ui.Button("Pause download", session.Updates.Pause), restart);
-        updateButtons.IsVisible = session.Updates.Configured;
+        var pause = Ui.Button("Pause download", session.Updates.Pause); pause.IsVisible = session.Updates.Configured;
+        var installButtons = Ui.Row(pause, restart); installButtons.IsVisible = session.Updates.Configured;
+        var updateButtons = Ui.Stack(Ui.Row(Ui.AsyncButton("Check for updates", owner, session.Updates.CheckAsync),
+            Ui.Button("View releases", () => session.Platform.OpenLink(ReleaseCheck.ReleasesUrl))), installButtons);
         Content = Ui.Stack(Ui.Text("Feel at home.", 30), Ui.Text("A few choices. The same dependable workspace.", 14, true),
             Ui.Card(Ui.Stack(Ui.Field("Appearance", theme), reduce, desktop, auto, save)),
-            Ui.Card(Ui.Stack(Ui.Text("Updates", 20), updates, updateButtons)),
+            Ui.Card(Ui.Stack(Ui.Text("Updates", 20), Ui.Text("Installed version: " + session.Updates.CurrentVersion, 13, true), updates, updateButtons)),
             Ui.Card(Ui.Stack(Ui.Text("Your files stay yours.", 20), Ui.Text("Layouts contain settings and folder references. They do not contain your files. Keep a separate backup of the files themselves.", 13, true),
                 Ui.Row(Ui.AsyncButton("Export layout…", owner, async () =>
                 {

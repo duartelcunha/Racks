@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using NetSparkleUpdater;
 using NetSparkleUpdater.Enums;
 using NetSparkleUpdater.SignatureVerifiers;
+using Racks.Core;
 
 namespace Racks.Desktop;
 
@@ -11,12 +12,14 @@ public sealed class UpdateService : IDisposable
 {
     private readonly Session session;
     private readonly SparkleUpdater? updater;
+    private readonly HttpClient releaseClient = new() { Timeout = TimeSpan.FromSeconds(10) };
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromHours(6) };
     private AppCastItem? ready;
     private string? downloadedPath;
     private bool checking;
     private bool paused;
-    public string Status { get; private set; } = "This development build has no release feed configured.";
+    public string Status { get; private set; } = "Check for the latest stable release on GitHub. Automatic installation is available in builds configured for signed updates.";
+    public string CurrentVersion { get; } = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "Unknown";
     public bool Configured => updater != null;
     public bool Ready => ready != null;
     public bool Installing { get; private set; }
@@ -50,20 +53,28 @@ public sealed class UpdateService : IDisposable
     }
 
     private void SetStatus(string value) => Dispatcher.UIThread.Post(() => { Status = value; Changed?.Invoke(); });
-    public void Start() { timer.Start(); if (session.Settings.AutoUpdates) _ = CheckAsync(); }
+    public void Start() { if (!Configured) return; timer.Start(); if (session.Settings.AutoUpdates) _ = CheckAsync(); }
     public async Task CheckAsync()
     {
-        if (updater == null || checking || Ready || Installing) return;
-        checking = true; paused = false; SetStatus("Checking signed release feed…");
+        if (checking || Ready || Installing) return;
+        checking = true; paused = false; SetStatus(Configured ? "Checking signed release feed…" : "Checking GitHub for the latest stable release…");
         try
         {
+            if (updater == null)
+            {
+                var latest = await ReleaseCheck.LatestStableVersionAsync(releaseClient);
+                SetStatus(latest == null ? "No stable release has been published yet. You can view previews on the releases page." :
+                    $"Latest stable release: {latest}. You’re running {CurrentVersion}. View releases for downloads and release notes; previews may be newer than the stable release.");
+                return;
+            }
             var info = await updater.CheckForUpdatesQuietly();
             if (info.Status == UpdateStatus.UpdateAvailable && !paused && info.Updates.FirstOrDefault() is { } item && !updater.IsDownloadingItem(item))
                 await updater.InitAndBeginDownload(item);
             if (info.Status == UpdateStatus.UpdateNotAvailable) SetStatus("You have the latest release.");
             else if (info.Status == UpdateStatus.CouldNotDetermine) SetStatus("Could not verify the release feed. Try again later.");
         }
-        catch (Exception ex) { SetStatus("Update check failed: " + ex.Message); }
+        catch (OperationCanceledException) { SetStatus("The update check timed out. Check your connection and try again, or view releases in your browser."); }
+        catch (Exception ex) { SetStatus("Update check failed: " + ex.Message + " You can try again or view releases in your browser."); }
         finally { checking = false; }
     }
     public void Pause() { paused = true; updater?.CancelFileDownload(); }
@@ -75,5 +86,5 @@ public sealed class UpdateService : IDisposable
         try { await updater.InstallUpdate(ready, downloadedPath); }
         catch { Installing = false; throw; }
     }
-    public void Dispose() { timer.Stop(); updater?.Dispose(); }
+    public void Dispose() { timer.Stop(); updater?.Dispose(); releaseClient.Dispose(); }
 }

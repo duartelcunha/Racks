@@ -26,7 +26,7 @@ dotnet test tests/Racks.Windows.Tests -c Release # Windows only
 dotnet run --project src/Racks.Desktop -- --profile "$PWD/.artifacts/manual-profile"
 ```
 
-The isolated profile never imports registry settings or checks for updates. Its Desktop and workspace are inside that profile. The default production profile is `%LOCALAPPDATA%\RacksData` on Windows, or `~/Library/Application Support/Racks` on Mac. Owned files are outside the installer, in `~/RacksWorkspace`; imported racks keep their existing locations.
+The isolated profile never imports registry settings or starts automatic update checks. An explicit click on **Check for updates** still checks the release server. Its Desktop and workspace are inside that profile. The default production profile is `%LOCALAPPDATA%\RacksData` on Windows, or `~/Library/Application Support/Racks` on Mac. Owned files are outside the installer, in `~/RacksWorkspace`; imported racks keep their existing locations.
 
 Do not run `test/Test-Racks.ps1` in a normal Windows account. That older WPF tray test requires a fresh disposable account/VM, the explicit `-DisposableWindowsAccount` switch, and no existing rack settings or Racks process. It never kills an existing personal instance.
 
@@ -60,7 +60,7 @@ The Windows publishing script requires a maintainer-owned Ed25519 **public** key
 
 NetSparkle uses strict verification for both feeds and packages. The application chooses `win-x64/appcast.xml` or `osx-arm64/appcast.xml` beneath the configured base. Publish each feed with its `.signature`, and sign every enclosed package using NetSparkle's standard appcast generator. Keep private signing keys outside this repository. Do not generate a replacement production trust root during a build.
 
-Automatic checks download verified updates; installation is a user-selected safe restart and refuses active file operations. A development build without a key/feed does not expose inactive update buttons or contact a release server.
+Automatic checks run at startup and every six hours when enabled, and download verified updates; installation is a user-selected safe restart and refuses active file operations. Settings provides manual checks, pause, and restart controls. A development build without a key/feed only contacts GitHub when **Check for updates** is clicked, shows the latest published stable version alongside the installed version, and provides **View releases** for downloads and release notes. This discovery does not download or install packages. GitHub failures and timeouts allow retry; only the signed updater can offer automatic installation.
 
 Inno Setup keeps the existing application ID and retains files/settings outside the installation directory. Installer startup refuses a running app instead of forcibly terminating it. Validate upgrade, uninstall, and reinstall in a disposable Windows VM, including upgrades from the last published installer.
 

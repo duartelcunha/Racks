@@ -44,7 +44,9 @@ dotnet run --project src/Racks.Desktop -- --profile "$PWD/.artifacts/my-test-pro
 ./scripts/Test-All.ps1
 ```
 
-Isolated profiles use their own Desktop, workspace, settings, and operation records. They do not import your registry or start update checks. Use test files only. [Implementation and release gates](docs/OVERHAUL.md) describe remaining validation; [development guide](docs/DEVELOPMENT.md) explains the structure and test commands.
+Isolated profiles use their own Desktop, workspace, settings, and operation records. They do not import your registry or start automatic update checks. Use test files only. [Implementation and release gates](docs/OVERHAUL.md) describe remaining validation; [development guide](docs/DEVELOPMENT.md) explains the structure and test commands.
+
+In the preview, open **Settings → Updates → Check for updates** to see the latest stable release and your installed version. **View releases** opens official downloads and release notes. Builds configured with a trusted key and signed feed also support automatic checks/downloads, pause, and a safe restart to install. Production signing and feed setup remain release prerequisites.
 
 The sections below describe the existing Windows application.
 ## Why Racks?
