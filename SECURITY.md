@@ -23,11 +23,11 @@ are in scope.
 The codebase is reviewed against a set of security invariants documented in
 [`docs/SECURITY-INVARIANTS.md`](docs/SECURITY-INVARIANTS.md), including:
 
-- Files inside a rack cannot be deleted through the app; removal goes to the Recycle Bin.
+- The Delete verb is blocked for files inside a rack, and dragging an item out sends the original to the Recycle Bin, never a permanent delete.
 - Path guards are canonicalized (junctions, 8.3 names, `\\?\` aliases) before comparison.
 - User- and import-supplied regular expressions run with a bounded match timeout (no ReDoS).
 - Layout import is validated and atomic (a bad file can never wipe your racks).
-- The updater only downloads the expected signed release asset from the project's GitHub repo.
+- The updater only downloads the expected installer asset (`Racks-Setup-*.exe`) over HTTPS from this project's GitHub releases and checks its size against the release metadata. It does not verify a code signature yet (see below).
 
 ## A note on code signing
 

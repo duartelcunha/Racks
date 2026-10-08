@@ -39,7 +39,7 @@
             <StackPanel>
                 <TextBlock Text="Make racks" FontWeight="Bold" FontSize="14" Margin="0,0,0,4"/>
                 <TextBlock TextWrapping="Wrap" Opacity="0.85">
-                    <Run Text="• New rack — tray menu &gt; New rack. Drag any shortcut/file/folder in; a .lnk is created in the sandbox. The original is never moved."/>
+                    <Run Text="• New rack — tray menu &gt; New rack. Drag any shortcut/file/folder in; it is moved into the rack. Hold Ctrl while dropping to create a shortcut instead."/>
                     <LineBreak/>
                     <Run Text="• New folder rack — tray menu &gt; New folder rack. Drag a folder onto the empty rack to bind it to that folder on disk."/>
                 </TextBlock>
@@ -52,9 +52,9 @@
                     <LineBreak/>
                     <Run Text="• Hold Shift while dropping: force move even if the rack is set to link-mode."/>
                     <LineBreak/>
-                    <Run Text="• Per-rack default: right-click rack title &gt; Create shortcuts instead of moving."/>
+                    <Run Text="• Per-rack default: right-click rack title &gt; Link on drop."/>
                     <LineBreak/>
-                    <Run Text="• Safety: virtual racks move into a private sandbox under %AppData%\Racks. Removing a rack only deletes inside that sandbox — real folders are never touched."/>
+                    <Run Text="• Safety: virtual racks move into a private sandbox under %UserProfile%\RacksWorkspace. Removing a rack only deletes inside that sandbox — real folders are never touched."/>
                 </TextBlock>
 
                 <TextBlock Text="Rack title" FontWeight="Bold" FontSize="14" Margin="0,16,0,4"/>
@@ -120,7 +120,7 @@
 
                 <TextBlock Text="Safety" FontWeight="Bold" FontSize="14" Margin="0,16,0,4"/>
                 <TextBlock TextWrapping="Wrap" Opacity="0.85">
-                    <Run Text="• Removing a rack never deletes real folders. Recursive deletes are sandboxed to %AppData%\Racks\VirtualFrames."/>
+                    <Run Text="• Removing a rack never deletes real folders. Recursive deletes are sandboxed to %UserProfile%\RacksWorkspace."/>
                     <LineBreak/>
                     <Run Text="• Drops into a folder-backed rack go into the folder you chose. Drops into a virtual rack go into the private sandbox."/>
                     <LineBreak/>
