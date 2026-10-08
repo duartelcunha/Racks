@@ -15,7 +15,7 @@
                    Name="TrayIcon" MenuOnRightClick="True"
                    TooltipText="Racks" >
         <tray:NotifyIcon.Menu>
-            <ContextMenu MinWidth="65">
+            <ContextMenu MinWidth="65" Opened="TrayMenu_Opened">
                 <MenuItem Name="versionHeader" StaysOpenOnClick="True" Focusable="False" Background="{x:Null}">
                     <MenuItem.Header>
                         <Grid HorizontalAlignment="Stretch" MinWidth="240">

@@ -77,19 +77,12 @@ namespace Racks
             }
         }
 
+        // "Auto update" only stores the preference; MainWindow checks for a new release shortly
+        // after startup when it is on. It used to add or remove the app from Windows startup,
+        // which is the tray menu's "Start on login" job.
         private void AutoUpdateToggleSwitch_Click(object sender, RoutedEventArgs e)
         {
-            if ((bool)AutoUpdateToggleSwitch.IsChecked!)
-            {
-
-                _controller.reg.AddToAutoRun(InstanceController.appName, Process.GetCurrentProcess().MainModule!.FileName);
-            }
-            else
-            {
-                _controller.reg.RemoveFromAutoRun(InstanceController.appName);
-                _controller.reg.RemoveFromAutoRun(InstanceController.LegacyAppName);
-            }
-            _controller.reg.WriteToRegistryRoot("AutoUpdate", AutoUpdateToggleSwitch.IsChecked);
+            _controller.reg.WriteToRegistryRoot("AutoUpdate", AutoUpdateToggleSwitch.IsChecked == true);
         }
 
         private void ManageFrameButton_Click(object sender, RoutedEventArgs e)

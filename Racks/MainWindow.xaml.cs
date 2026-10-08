@@ -135,7 +135,12 @@ namespace Racks
                 HotCornerHideToggle.IsChecked = true;
                 StartHotCornerWatch();
             }
-            // Auto-update is disabled in this fork (no release pipeline yet).
+            SyncLockAllToggle();
+            // Opt-in: check GitHub for a newer release a little after startup (Settings > Auto update).
+            if (_controller.reg.KeyExistsRoot("AutoUpdate") && _controller.reg.ReadKeyValueRoot("AutoUpdate") as bool? == true)
+            {
+                _ = CheckForUpdatesInBackgroundAsync();
+            }
         }
         private void HandleGlobalDoubleClick(object? sender, MouseEventArgs e)
         {
@@ -451,12 +456,26 @@ namespace Racks
             trayRetry.Tick += (_, _) => { trayRetry.Stop(); RegisterTrayIcon(); };
             trayRetry.Start();
 
-            // Ctrl+Shift+Space opens the cross-rack quick finder.
-            try { Interop.RegisterHotKey(_mainHwnd, QUICK_FINDER_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x20); }
+            // Ctrl+Shift+Space opens the cross-rack quick finder; Ctrl+Shift+N spawns a new virtual
+            // rack. RegisterHotKey returns false (it does not throw) when another app already owns
+            // the combination, so check the result and tell the user instead of failing silently.
+            bool quickFinderOk = false, newRackOk = false;
+            try { quickFinderOk = Interop.RegisterHotKey(_mainHwnd, QUICK_FINDER_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x20); }
             catch (Exception ex) { Debug.WriteLine($"RegisterHotKey QuickFinder failed: {ex.Message}"); }
-            // Ctrl+Shift+N spawns a new virtual rack.
-            try { Interop.RegisterHotKey(_mainHwnd, NEW_RACK_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x4E /* VK_N */); }
+            try { newRackOk = Interop.RegisterHotKey(_mainHwnd, NEW_RACK_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x4E /* VK_N */); }
             catch (Exception ex) { Debug.WriteLine($"RegisterHotKey NewRack failed: {ex.Message}"); }
+            if (!quickFinderOk || !newRackOk)
+            {
+                try
+                {
+                    var toast = new Microsoft.Toolkit.Uwp.Notifications.ToastContentBuilder()
+                        .AddText(Racks.Properties.Lang.Hotkey_Conflict_Title);
+                    if (!quickFinderOk) toast.AddText(Racks.Properties.Lang.Hotkey_Conflict_QuickFinder);
+                    if (!newRackOk) toast.AddText(Racks.Properties.Lang.Hotkey_Conflict_NewRack);
+                    toast.Show();
+                }
+                catch (Exception ex) { Debug.WriteLine($"Hotkey conflict toast failed: {ex.Message}"); }
+            }
             // First-launch welcome animation: a Racks icon drops from the
             // center of the screen into the system tray and a toast follows
             // pointing the user at where the app now lives. Gated by a
@@ -521,8 +540,23 @@ namespace Racks
         // Flip IsLocked on every rack at once. Persists per-rack AND tells each running
         // rack window to apply the new chrome — without ApplyLockedState the WindowChrome
         // wouldn't update at runtime and the lock would only "stick" after a relaunch.
+        private bool _syncingLockAllToggle;
+
+        // The switch reflects reality: on only when there is at least one rack and every rack is
+        // locked. Called at startup and each time the tray menu opens (racks can be locked one by
+        // one from their own menu), without re-applying the change to the racks.
+        private void SyncLockAllToggle()
+        {
+            _syncingLockAllToggle = true;
+            try { LockAllToggle.IsChecked = _controller.Instances.Count > 0 && _controller.Instances.All(i => i.IsLocked); }
+            finally { _syncingLockAllToggle = false; }
+        }
+
+        private void TrayMenu_Opened(object sender, RoutedEventArgs e) => SyncLockAllToggle();
+
         private void LockAllToggle_CheckChanged(object sender, RoutedEventArgs e)
         {
+            if (_syncingLockAllToggle) return;
             bool locked = LockAllToggle.IsChecked == true;
             foreach (var inst in _controller.Instances)
             {
@@ -547,10 +581,21 @@ namespace Racks
         // Manual "Check for updates": queries the GitHub releases API and shows a toast
         // (either "new release" with an Install button, or "up to date"). Same code path the
         // auto-update toast uses; Install is handled in App.ToastActivatedHandler.
+        // Silent: shows a toast only when a newer release exists (Updater stays quiet on a first
+        // failure such as being offline).
+        private static async System.Threading.Tasks.Task CheckForUpdatesInBackgroundAsync()
+        {
+            try
+            {
+                await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(20));
+                await Updater.CheckUpdateAsync(Updater.LatestReleaseApi, showToastIfNoUpdate: false);
+            }
+            catch (Exception ex) { Debug.WriteLine($"Background update check failed: {ex.Message}"); }
+        }
+
         private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
         {
-            const string latestReleaseApi = "https://api.github.com/repos/duartelcunha/Racks/releases/latest";
-            try { await Updater.CheckUpdateAsync(latestReleaseApi, showToastIfNoUpdate: true); }
+            try { await Updater.CheckUpdateAsync(Updater.LatestReleaseApi, showToastIfNoUpdate: true); }
             catch (Exception ex) { Debug.WriteLine($"Manual update check failed: {ex.Message}"); }
         }
 
