@@ -9,6 +9,7 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 - Repository maintenance: cleaned contributor metadata from the git history.
 
 ### Fixed
+- When Explorer restarts, racks no longer freeze Racks (and the tray icon) for up to 10 seconds waiting for the desktop window. They check once, keep checking in the background for up to 30 seconds, and attach as soon as it appears.
 - A rack no longer piles up timers and event handlers over a long session: the mouse-leave timer is created once instead of on every mouse-leave, the shell right-click menu keeps at most one "closed" and one "rename" handler (a rename handler from a menu where Rename was never chosen used to fire on a later menu), and list items are wired once instead of every time the list refreshes.
 - **"Hide desktop icons" also hid every rack.** Racks live inside the desktop window, and the option hid that whole window. It now hides only the icon list, so racks stay visible.
 - Desktop icons hidden by Racks are shown again when Racks exits normally (tray Exit, an update, Windows shutdown), when you uninstall, and a desktop left blank by an older version is repaired at startup. Icons you hid yourself with Windows' own option are never touched.
