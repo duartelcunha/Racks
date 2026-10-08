@@ -22,6 +22,24 @@ public class ArchitectureRatchetTests
             $"RackWindow.xaml.cs has {lines} lines, baseline is {Baseline["rackWindowLines"]}. Extract code instead of adding to it.");
     }
 
+    // RackWindow is split into partial files (RackWindow.*.cs). The split must not become a place to
+    // hide growth: no single part may grow past its baseline, and the parts together may not grow.
+    [Fact]
+    public void RackWindow_parts_do_not_grow()
+    {
+        var parts = Directory.EnumerateFiles(Path.Combine(Root, "Racks"), "RackWindow*.cs")
+            .ToDictionary(Path.GetFileName, f => File.ReadAllLines(f).Length);
+        Assert.True(parts.Count > 1, "expected RackWindow.xaml.cs plus partial files");
+
+        var biggest = parts.MaxBy(p => p.Value);
+        Assert.True(biggest.Value <= Baseline["rackWindowPartMaxLines"],
+            $"{biggest.Key} has {biggest.Value} lines, the largest allowed part is {Baseline["rackWindowPartMaxLines"]}. Extract a class instead.");
+
+        int total = parts.Values.Sum();
+        Assert.True(total <= Baseline["rackWindowTotalLines"],
+            $"RackWindow*.cs total {total} lines, baseline is {Baseline["rackWindowTotalLines"]}. Move logic out of the window instead of adding to it.");
+    }
+
     [Fact]
     public void Static_service_locator_usage_does_not_grow()
     {

@@ -5,6 +5,7 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 ## [Unreleased]
 
 ### Changed
+- `RackWindow.xaml.cs` (5,600 lines) is split into focused partial files: sorting, Win32/desktop hosting, moving, hover, search, drag and drop, files and thumbnails, item interactions, the rack menu, and visuals. No behaviour change; the main file is now about 640 lines. Ratchet tests stop any part, and the parts together, from growing.
 - Every window now uses one shared font list with Chinese, Japanese and Korean fallbacks, and the app tells WPF the interface language (not the regional format), so translated text picks the right glyph forms. `RACKS_LANG` previews a language, including its fonts.
 
 ## [1.3.0] - 2026-10-08

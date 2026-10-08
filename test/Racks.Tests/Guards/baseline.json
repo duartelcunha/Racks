@@ -1,5 +1,7 @@
 {
-  "rackWindowLines": 5581,
+  "rackWindowLines": 637,
+  "rackWindowPartMaxLines": 983,
+  "rackWindowTotalLines": 6245,
   "controllerUsages": 30,
   "xamlLiterals": 119
 }
