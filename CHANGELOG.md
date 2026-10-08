@@ -13,6 +13,8 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 - `dotnet build` regenerates `Lang.Designer.cs` from `Lang.resx`, so new strings no longer need Visual Studio. Localization tests check translation keys and satellite loading.
 
 ### Changed
+- Tray menu: every item and tooltip now comes from `Lang.resx`, so it can be translated. New strings fall back to English until a translator fills them in.
+- Tray tooltips corrected: "New rack" moves dropped files (Ctrl+drop makes a shortcut), Import no longer claims a restart is needed, Magic Organize no longer says "AI".
 - Removed unused `Microsoft.CodeAnalysis` and `Microsoft.Windows.CsWinRT`; a single `<Version>` in the csproj.
 - Repository hygiene: `.editorconfig`, `Directory.Build.props`, `global.json`, Dependabot, PR template.
 

@@ -40,6 +40,12 @@ public class LocalizationTests(ITestOutputHelper output)
         => Assert.Equal("退出", Lang.ResourceManager.GetString("TrayContextMenu.Exit", new CultureInfo("zh-CN")));
 
     [Fact]
+    public void Untranslated_keys_fall_back_to_English()
+        => Assert.Equal(
+            Lang.ResourceManager.GetString("Tray.NewRack", CultureInfo.InvariantCulture),
+            Lang.ResourceManager.GetString("Tray.NewRack", new CultureInfo("zh-CN")));
+
+    [Fact]
     public void Report_missing_translations_per_culture()
     {
         // Informational only: a missing key falls back to English at runtime.
