@@ -5,6 +5,8 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 ## [Unreleased]
 
 ### Fixed
+- "Reset default style" no longer wipes unrelated settings. It used to delete every saved global value, which turned physics, hide-icons and start-on-login back to defaults and replayed the first-run welcome and one-time migrations. It now removes only the default rack style, and asks for confirmation first.
+- Hovering a rack in Settings > Manage racks no longer saves its green highlight. A crash while hovering could leave the rack's border green for good.
 - Racks lost their "transparent background" setting on restart. It is now saved and loaded.
 - Renaming a rack (or choosing a new folder for a missing-folder rack) could drop settings (drop shadow, gradient, disabled animations, and the files a desktop rack owns), and picking a folder with the same name deleted the rack's saved settings entirely, so it vanished on restart. Both save paths now share one list of settings.
 
