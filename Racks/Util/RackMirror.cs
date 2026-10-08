@@ -103,30 +103,35 @@ namespace Racks.Util
             return removed;
         }
 
-        // Undo PinToQuickAccess. Best-effort: the shell verb exists on Windows 10 and 11
-        // ("unpinfromhome"); if it is missing the pin simply goes stale once the folder is gone.
+        // Undo PinToQuickAccess. Works on the Quick Access namespace itself (invoking the verb on
+        // the folder through its parent does nothing), so it also removes a stale pin whose folder
+        // is already gone. Best-effort, like pinning.
         public static void UnpinFromQuickAccess()
         {
             try
             {
-                if (!Directory.Exists(MirrorRoot)) return;
                 Type? shellAppType = Type.GetTypeFromProgID("Shell.Application");
                 if (shellAppType == null) return;
                 dynamic? shell = Activator.CreateInstance(shellAppType);
                 if (shell == null) return;
-                string? parent = Path.GetDirectoryName(MirrorRoot);
-                string? leaf = Path.GetFileName(MirrorRoot);
-                if (string.IsNullOrEmpty(parent) || string.IsNullOrEmpty(leaf)) return;
-                dynamic ns = shell.NameSpace(parent);
-                dynamic? item = ns?.ParseName(leaf);
-                try { item?.InvokeVerb("unpinfromhome"); } catch { }
-                if (item is object) Marshal.FinalReleaseComObject(item);
-                if (ns is object) Marshal.FinalReleaseComObject(ns);
+                dynamic? quickAccess = shell.NameSpace("shell:::{679f85cb-0220-4080-b29b-5540cc05aab6}");
+                if (quickAccess != null)
+                {
+                    foreach (dynamic item in quickAccess.Items())
+                    {
+                        string? path = item.Path;
+                        if (string.Equals(path, MirrorRoot, StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { item.InvokeVerb("unpinfromhome"); } catch { }
+                        }
+                    }
+                    Marshal.FinalReleaseComObject(quickAccess);
+                }
                 Marshal.FinalReleaseComObject(shell);
             }
             catch
             {
-                // Best-effort, like pinning.
+                // Best-effort.
             }
         }
 

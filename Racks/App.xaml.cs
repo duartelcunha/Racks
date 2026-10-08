@@ -59,8 +59,17 @@ namespace Racks
             e.SetObserved();
         }
 
+        // True while running as part of the uninstaller (--uninstall-cleanup / --uninstall-anim).
+        // Those runs must not recreate %AppData%\Racks after the uninstaller has removed it.
+        private static bool s_runningForUninstaller;
+
         private static void LogUnhandledException(Exception ex, string source)
         {
+            if (s_runningForUninstaller)
+            {
+                Debug.WriteLine($"{source}: {ex}");
+                return;
+            }
             try
             {
                 string dir = Path.Combine(
@@ -136,6 +145,11 @@ namespace Racks
             // Headless: no windows, no mutex, no registry migration.
             if (e.Args.Length > 0 && e.Args[0] == "--uninstall-cleanup")
             {
+                s_runningForUninstaller = true;
+                // Watchdog: the uninstaller waits for this process, so it must never hang
+                // (e.g. a shell COM call that never returns). Exit after 2 minutes regardless.
+                new Thread(() => { Thread.Sleep(TimeSpan.FromMinutes(2)); Environment.Exit(2); })
+                { IsBackground = true }.Start();
                 RunUninstallCleanup(e.Args.Length > 1 ? e.Args[1] : null);
                 Shutdown(0);
                 return;
@@ -147,6 +161,7 @@ namespace Racks
             // menu). Has to run before any menu is shown.
             Racks.Util.DarkModeHelper.EnableForApp();
             bool isUninstallAnim = e.Args.Length > 0 && e.Args[0] == "--uninstall-anim";
+            if (isUninstallAnim) s_runningForUninstaller = true;
 #if !DEBUG
             if (!isUninstallAnim)
             {
@@ -171,6 +186,10 @@ namespace Racks
             }
 
             PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Critical;
+            // Set here rather than in App.xaml so the headless modes above (--uninstall-cleanup,
+            // --uninstall-anim, second instance) never load MainWindow. WPF reads StartupUri after
+            // OnStartup returns, and it cannot be cleared once set.
+            StartupUri = new Uri("MainWindow.xaml", UriKind.Relative);
             base.OnStartup(e);
 
             // Two distinct animations:
