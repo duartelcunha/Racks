@@ -8,6 +8,8 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 - Repository maintenance: cleaned contributor metadata from the git history.
 
 ### Fixed
+- `crash.log` no longer grows forever: at 1 MB it moves to `crash.log.1` (replacing an older one), so at most about 2 MB is kept. The uninstaller removes both.
+- When Racks swallows an unexpected error to keep running, it now says so once per session in a notification and points to `crash.log`. Before, you never knew anything had gone wrong.
 - A rack showing a folder no longer reloads over and over while a file in it is being downloaded or copied. Content changes are now reported once the file has been quiet for a moment; new, deleted and renamed files still show up immediately.
 - If the folder watcher loses events (a burst of changes overflowed its buffer), the rack now rebuilds the watcher and rescans instead of silently going stale.
 - "Check for updates" now reports a failure the first time too. It used to say nothing when GitHub could not be reached on the first click.

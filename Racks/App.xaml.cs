@@ -70,17 +70,30 @@ namespace Racks
                 Debug.WriteLine($"{source}: {ex}");
                 return;
             }
+            string dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                InstanceController.appName);
+            Racks.Util.CrashLog.Append(dir,
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {source}{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}");
+            Debug.WriteLine($"{source}: {ex}");
+            TellUserOnce();
+        }
+
+        private static int s_toldUser;
+
+        // The exception is swallowed so Racks keeps running, which also meant the user never knew
+        // anything went wrong. Say so once per session, with where the details are.
+        private static void TellUserOnce()
+        {
+            if (System.Threading.Interlocked.Exchange(ref s_toldUser, 1) != 0) return;
             try
             {
-                string dir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    InstanceController.appName);
-                Directory.CreateDirectory(dir);
-                File.AppendAllText(Path.Combine(dir, "crash.log"),
-                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {source}{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}");
+                new ToastContentBuilder()
+                    .AddText(Racks.Properties.Lang.Crash_Toast_Title)
+                    .AddText(Racks.Properties.Lang.Crash_Toast_Body)
+                    .Show();
             }
-            catch { /* logging is best-effort; never let it mask the original exception */ }
-            Debug.WriteLine($"{source}: {ex}");
+            catch { /* best-effort */ }
         }
 
         private static void RunUninstallCleanup(string? reportPath)

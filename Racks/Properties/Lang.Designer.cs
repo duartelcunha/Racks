@@ -58,6 +58,24 @@ namespace Racks.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Racks kept running. Details were saved to crash.log in %AppData%\Racks. Please include it if you report a bug..
+        /// </summary>
+        public static string Crash_Toast_Body {
+            get {
+                return ResourceManager.GetString("Crash.Toast.Body", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Racks hit an unexpected error.
+        /// </summary>
+        public static string Crash_Toast_Title {
+            get {
+                return ResourceManager.GetString("Crash.Toast.Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Date modified.
         /// </summary>
         public static string FrameGridView_DateModified {
