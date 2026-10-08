@@ -608,4 +608,10 @@
   <data name="Hotkey.Conflict.NewRack" xml:space="preserve">
     <value>Ctrl+Shift+N (new rack) is already used by another app.</value>
   </data>
+  <data name="Crash.Toast.Title" xml:space="preserve">
+    <value>Racks hit an unexpected error</value>
+  </data>
+  <data name="Crash.Toast.Body" xml:space="preserve">
+    <value>Racks kept running. Details were saved to crash.log in %AppData%\Racks. Please include it if you report a bug.</value>
+  </data>
 </root>
