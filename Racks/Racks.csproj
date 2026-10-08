@@ -71,4 +71,7 @@
   </ItemGroup>
   <ItemGroup>
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Racks.Tests" />
+  </ItemGroup>
 </Project>

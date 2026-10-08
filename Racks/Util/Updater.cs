@@ -94,14 +94,14 @@ namespace Racks
         // FileVersion is a 4-part "1.1.4.0" - a plain string Contains() compare misfires (it
         // reported an update even when identical). Normalize both to major.minor.build and
         // compare numerically so "up to date" is actually detected.
-        private static bool IsNewer(string latestTag, string currentRaw)
+        internal static bool IsNewer(string latestTag, string currentRaw)
         {
             return Version.TryParse(Norm3(latestTag), out var latest)
                 && Version.TryParse(Norm3(currentRaw), out var current)
                 && latest > current;
         }
 
-        private static string Norm3(string s)
+        internal static string Norm3(string s)
         {
             s = (s ?? "").Trim();
             if (s.StartsWith("v", StringComparison.OrdinalIgnoreCase)) s = s.Substring(1);
