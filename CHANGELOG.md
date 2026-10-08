@@ -5,6 +5,7 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 ## [Unreleased]
 
 ### Changed
+- Removed about 1,150 lines of dead code (an unused second file loader and thumbnail service, unused menu and drag helpers, leftover commented-out blocks). No behaviour change; `RackWindow.xaml.cs` went from 5,870 to 5,603 lines.
 - Repository maintenance: cleaned contributor metadata from the git history.
 
 ### Fixed

@@ -35,13 +35,6 @@ namespace Racks
             this.WindowStartupLocation = WindowStartupLocation.Manual;
             Loaded += (_, _) => Racks.Util.WindowPlacement.CenterOnCursorScreen(this);
         }
-
-        private void blurToggle_CheckChanged(object sender, System.Windows.RoutedEventArgs e)
-        {
-            //   _controller.reg.WriteToRegistryRoot("blurBackground", blurToggle.IsChecked!);
-            //   _controller.ChangeBlur((bool)blurToggle.IsChecked!);
-        }
-
         private void ExportSettingsButton_Click(object sender, RoutedEventArgs e)
         {
             ExportRegistryKey(_controller.reg.regKeyName);
@@ -203,20 +196,6 @@ namespace Racks
             _controller.reg.WriteToRegistryRoot("DoubleClickToHide", DoubleClickToHideSwitch.IsChecked!);
             _window.DoubleClickToHide = (bool)DoubleClickToHideSwitch.IsChecked!;
         }
-
-        private void KofiButtonImage_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            try
-            {
-                ProcessStartInfo sInfo = new ProcessStartInfo($"https://ko-fi.com/J3J61PAH6H") { UseShellExecute = true };
-                _ = Process.Start(sInfo);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Kofi open failed: {ex.Message}");
-            }
-        }
-
         private void ReloadAllFramesButton_Click(object sender, RoutedEventArgs e)
         {
             ReloadAllFramesButton.IsEnabled = false;
