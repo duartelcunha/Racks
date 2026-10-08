@@ -96,92 +96,32 @@ public class InstanceController
             if (s != null && d != null) CopyRegistryKey(s, d);
         }
     }
+    // Persist `instance` under its current name and drop the key it used to live under.
+    // Used when a rack is renamed (the registry key IS the rack name).
+    // Delegates to WriteInstanceToKey so there is exactly one list of persisted values; this method
+    // used to keep its own copy that had drifted (it skipped DropShadowEnabled,
+    // GradientBackgroundEnabled, DisableAnimations, IsDesktopFilterRack and AssignedFiles).
     public void WriteOverInstanceToKey(Instance instance, string oldKey)
     {
+        string? newName = instance.Name;
+        bool isEmptyPlaceholder = newName == "empty";
 
-        try
+        // An un-initialized "empty" rack is never persisted (InitInstances skips it too).
+        if (!isEmptyPlaceholder) WriteInstanceToKey(instance);
+
+        // Only delete the old key when the name really changed. Deleting it when the name is
+        // unchanged removed the key that was just written, so the rack vanished on restart.
+        if (isEmptyPlaceholder || !string.Equals(oldKey, newName, StringComparison.OrdinalIgnoreCase))
         {
-            Debug.WriteLine($"old: {oldKey}\t{instance.Name}");
-
-            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@$"SOFTWARE\{appName}\Instances\{instance.Name}"))
+            try
             {
-                key.SetValue("Name", instance.Name!);
-                key.SetValue("PosX", instance.PosX!);
-                key.SetValue("PosY", instance.PosY!);
-                key.SetValue("Width", instance.Width!);
-                key.SetValue("Height", instance.Height!);
-                key.SetValue("IconSize", instance.IconSize!);
-                key.SetValue("IdleOpacity", instance.IdleOpacity!);
-                key.SetValue("AnimationSpeed", instance.AnimationSpeed!);
-                key.SetValue("MaxGrayScaleStrength", instance.MaxGrayScaleStrength!);
-                key.SetValue("GrayScaleEnabled", instance.GrayScaleEnabled!);
-                key.SetValue("GrayScaleEnabled_InactiveOnly", instance.GrayScaleEnabled_InactiveOnly!);
-                key.SetValue("Minimized", instance.Minimized!);
-                key.SetValue("Folder", instance.Folder!);
-                key.SetValue("TitleFontFamily", instance.TitleFontFamily!);
-                key.SetValue("ItemFontFamily", instance.ItemFontFamily!);
-                key.SetValue("ShowHiddenFiles", instance.ShowHiddenFiles!);
-                key.SetValue("LastAccesedToFirstRow", instance.LastAccesedToFirstRow);
-                key.SetValue("EnableCustomItemsOrder", instance.EnableCustomItemsOrder);
-                key.SetValue("ShowFileExtension", instance.ShowFileExtension!);
-                key.SetValue("ShowFileExtensionIcon", instance.ShowFileExtensionIcon!);
-                key.SetValue("ShowHiddenFilesIcon", instance.ShowHiddenFilesIcon!);
-                key.SetValue("ShowDisplayName", instance.ShowDisplayName!);
-                key.SetValue("IsLocked", instance.IsLocked!);
-                key.SetValue("ShowInGrid", instance.ShowInGrid!);
-                key.SetValue("AutoExpandonCursor", instance.AutoExpandonCursor);
-                key.SetValue("ShowShortcutArrow", instance.ShowShortcutArrow);
-                key.SetValue("FolderOpenInsideFrame", instance.FolderOpenInsideFrame);
-                key.SetValue("HideTitleBarIconsWhenInactive", instance.HideTitleBarIconsWhenInactive);
-                key.SetValue("SnapWidthToIconWidth", instance.SnapWidthToIconWidth);
-                key.SetValue("SnapWidthToIconWidth_PlusScrollbarWidth", instance.SnapWidthToIconWidth_PlusScrollbarWidth);
-                key.SetValue("CheckFolderSize", instance.CheckFolderSize);
-                key.SetValue("LinkOnDrop", instance.LinkOnDrop);
-                key.SetValue("SnapToGrid", instance.SnapToGrid);
-                key.SetValue("GridSize", instance.GridSize);
-                key.SetValue("AutoRouteRegex", instance.AutoRouteRegex ?? "");
-                key.SetValue("BackgroundImagePath", instance.BackgroundImagePath ?? "");
-                key.SetValue("PinToTop", instance.PinToTop);
-                key.SetValue("TitleBarColor", instance.TitleBarColor!);
-                key.SetValue("TitleTextColor", instance.TitleTextColor!);
-                key.SetValue("ActiveTitleTextColor", instance.ActiveTitleTextColor!);
-                key.SetValue("TitleTextAlignment", instance.TitleTextAlignment.ToString());
-                key.SetValue("TitleText", instance.TitleText != null ? instance.TitleText : instance.Name);
-                key.SetValue("BorderColor", instance.BorderColor!);
-                key.SetValue("BorderEnabled", instance.BorderEnabled!);
-                key.SetValue("ActiveBorderEnabled", instance.ActiveBorderEnabled!);
-                key.SetValue("ActiveBackgroundEnabled", instance.ActiveBackgroundEnabled!);
-                key.SetValue("ActiveTitleTextEnabled", instance.ActiveTitleTextEnabled!);
-                key.SetValue("FileFilterRegex", instance.FileFilterRegex!);
-                key.SetValue("FileFilterHideRegex", instance.FileFilterHideRegex!);
-                key.SetValue("ListViewBackgroundColor", instance.ListViewBackgroundColor!);
-                key.SetValue("ActiveBackgroundColor", instance.ActiveBackgroundColor!);
-                key.SetValue("ActiveBorderColor", instance.ActiveBorderColor!);
-                key.SetValue("ListViewFontColor", instance.ListViewFontColor!);
-                key.SetValue("ListViewFontShadowColor", instance.ListViewFontShadowColor!);
-                key.SetValue("Opacity", instance.Opacity);
-                key.SetValue("SortBy", instance.SortBy);
-                key.SetValue("FolderOrder", instance.FolderOrder);
-                if (instance.ShowOnVirtualDesktops != null && instance.ShowOnVirtualDesktops.Length > 0)
-                {
-                    key.SetValue("ShowOnVirtualDesktops", string.Join(",", instance.ShowOnVirtualDesktops));
-                }
-                if (instance.LastAccessedFiles != null && instance.LastAccessedFiles.Count > 0)
-                {
-                    key.SetValue("LastAccessedFiles", instance.LastAccessedFiles.ToArray(), RegistryValueKind.MultiString);
-                }
-                if (instance.CustomOrderFiles != null && instance.CustomOrderFiles.Count > 0)
-                {
-                    key.SetValue("CustomOrderFiles", instance.CustomOrderFiles.Select(t => $"{t.Item1},{t.Item2}").ToArray(), RegistryValueKind.MultiString);
-                }
-                key.SetValue("TitleFontSize", instance.TitleFontSize);
+                Registry.CurrentUser.DeleteSubKey(@$"SOFTWARE\{appName}\Instances\{oldKey}", throwOnMissingSubKey: false);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"WriteOverInstanceToKey: could not remove old key '{oldKey}': {ex.Message}");
             }
         }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"WriteOverInstanceToKey failed: {ex.Message}");
-        }
-        Registry.CurrentUser.DeleteSubKey(@$"SOFTWARE\{appName}\Instances\{oldKey}", throwOnMissingSubKey: false);
     }
     private void InitDetails()
     {
@@ -238,6 +178,7 @@ public class InstanceController
                 key.SetValue("AutoRouteRegex", instance.AutoRouteRegex ?? "");
                 key.SetValue("BackgroundImagePath", instance.BackgroundImagePath ?? "");
                 key.SetValue("PinToTop", instance.PinToTop);
+                key.SetValue("IsTransparent", instance.IsTransparent);
                 key.SetValue("DropShadowEnabled", instance.DropShadowEnabled);
                 key.SetValue("GradientBackgroundEnabled", instance.GradientBackgroundEnabled);
                 key.SetValue("DisableAnimations", instance.DisableAnimations);
@@ -760,6 +701,9 @@ public class InstanceController
                                                 break;
                                             case "PinToTop":
                                                 if (bool.TryParse(value.ToString(), out bool parsed_PinToTop)) temp.PinToTop = parsed_PinToTop;
+                                                break;
+                                            case "IsTransparent":
+                                                if (bool.TryParse(value.ToString(), out bool parsed_IsTransparent)) temp.IsTransparent = parsed_IsTransparent;
                                                 break;
                                             case "DropShadowEnabled":
                                                 if (bool.TryParse(value.ToString(), out bool parsed_DropShadowEnabled)) temp.DropShadowEnabled = parsed_DropShadowEnabled;
