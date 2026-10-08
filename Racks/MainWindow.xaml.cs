@@ -86,7 +86,7 @@ namespace Racks
             RefreshGlobalHiddenFiles();
 
             // Auto-routing: any file landing on the user's Desktop that matches a
-            // rack's AutoRouteRegex gets a .lnk in that rack. Original file stays put.
+            // rack's AutoRouteRegex is moved into that rack.
             try
             {
                 _desktopRouter = new DesktopRouter(
@@ -210,24 +210,12 @@ namespace Racks
                         var undo = Racks.Core.MagicOrganizeUndo.Begin(Racks.Core.MagicOrganizeUndo.Mode.Racks);
                         // User approved, create racks and move files!
                         var workingArea = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
-
-                        int rackWidth = 300;
-                        int rackHeight = 380;
-                        int gap = 30;
-
-                        int cols = (int)Math.Ceiling(Math.Sqrt(clusters.Count));
-                        if (cols == 0) cols = 1;
-                        int rows = (int)Math.Ceiling((double)clusters.Count / cols);
-
-                        int totalWidth = cols * rackWidth + (cols - 1) * gap;
-                        int totalHeight = rows * rackHeight + (rows - 1) * gap;
-
-                        int startX = workingArea.Left + (workingArea.Width - totalWidth) / 2;
-                        int startY = workingArea.Top + (workingArea.Height - totalHeight) / 2;
-
-                        // Fallback if it exceeds screen
-                        if (startX < workingArea.Left) startX = workingArea.Left + 50;
-                        if (startY < workingArea.Top) startY = workingArea.Top + 50;
+                        // Screen sizes are physical pixels; PosX/PosY/Width/Height are WPF units.
+                        double dpiScale = System.Drawing.Graphics.FromHwnd(IntPtr.Zero).DpiX / 96f;
+                        var slots = Racks.Core.MagicOrganizeLayout.Grid(clusters.Count,
+                            workingArea.Left, workingArea.Top, workingArea.Width, workingArea.Height, dpiScale);
+                        double rackWidth = Racks.Core.MagicOrganizeLayout.RackWidth;
+                        double rackHeight = Racks.Core.MagicOrganizeLayout.RackHeight;
 
                         int movedFilesCount = 0;
 
@@ -239,15 +227,12 @@ namespace Racks
                             string safeName = string.Join("_", cluster.Name.Split(System.IO.Path.GetInvalidFileNameChars()));
                             if (string.IsNullOrWhiteSpace(safeName)) safeName = "Cluster_" + Guid.NewGuid().ToString().Substring(0, 4);
 
-                            int col = i % cols;
-                            int row = i / cols;
-
                             var inst = new Instance(safeName, false);
                             inst.TitleText = cluster.Name;
                             inst.Folder = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                             inst.IsDesktopFilterRack = true;
-                            inst.PosX = startX + col * (rackWidth + gap);
-                            inst.PosY = startY + row * (rackHeight + gap);
+                            inst.PosX = slots[i].X;
+                            inst.PosY = slots[i].Y;
                             inst.Width = rackWidth;
                             inst.Height = rackHeight;
 

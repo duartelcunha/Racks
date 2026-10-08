@@ -8,6 +8,11 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 - Repository maintenance: cleaned contributor metadata from the git history.
 
 ### Fixed
+- Sorting: clicking Name, Date modified, Date created or Type in a rack's sort menu never flipped between ascending and descending, and Size flipped from the wrong starting points. Clicking the active key now flips its direction; another key starts ascending.
+- Magic Organize placed racks using screen pixels as if they were WPF units, so on a scaled display (125%, 150%...) the grid was off-centre. It now converts first.
+- New racks move dropped files by default (Ctrl while dropping still makes a shortcut), matching the README and Help. The default used to say "link" while the tray menu created racks that moved.
+- Quick Access pinning no longer depends on English and Portuguese menu captions. It pins once with the language-independent command and checks first whether the folder is already pinned.
+- Comments and the Magic Organize group-name code no longer claim auto-route makes shortcuts; it moves files.
 - `crash.log` no longer grows forever: at 1 MB it moves to `crash.log.1` (replacing an older one), so at most about 2 MB is kept. The uninstaller removes both.
 - When Racks swallows an unexpected error to keep running, it now says so once per session in a notification and points to `crash.log`. Before, you never knew anything had gone wrong.
 - A rack showing a folder no longer reloads over and over while a file in it is being downloaded or copied. Content changes are now reported once the file has been quiet for a moment; new, deleted and renamed files still show up immediately.

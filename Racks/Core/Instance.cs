@@ -72,7 +72,8 @@ public class Instance : INotifyPropertyChanged
     private bool _snapWidthToIconWidth = false;
     private bool _snapWidthToIconWidth_PlusScrollbarWidth = false;
     private bool _hideTitleBarIconsWhenInactive = false;
-    private bool _linkOnDrop = true;
+    // Default drop = MOVE the item into the rack (Ctrl while dropping makes a shortcut instead).
+    private bool _linkOnDrop = false;
     private bool _snapToGrid = false;
     private int _gridSize = 16;
     private string _autoRouteRegex = "";

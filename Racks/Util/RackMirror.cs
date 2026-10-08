@@ -135,6 +135,35 @@ namespace Racks.Util
             }
         }
 
+        // True when the mirror folder is currently pinned to Quick Access.
+        public static bool IsPinnedToQuickAccess()
+        {
+            try
+            {
+                Type? shellAppType = Type.GetTypeFromProgID("Shell.Application");
+                if (shellAppType == null) return false;
+                dynamic? shell = Activator.CreateInstance(shellAppType);
+                if (shell == null) return false;
+                bool pinned = false;
+                dynamic? quickAccess = shell.NameSpace("shell:::{679f85cb-0220-4080-b29b-5540cc05aab6}");
+                if (quickAccess != null)
+                {
+                    foreach (dynamic item in quickAccess.Items())
+                    {
+                        string? path = item.Path;
+                        if (string.Equals(path, MirrorRoot, StringComparison.OrdinalIgnoreCase)) { pinned = true; break; }
+                    }
+                    Marshal.FinalReleaseComObject(quickAccess);
+                }
+                Marshal.FinalReleaseComObject(shell);
+                return pinned;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         // Pin the mirror folder to Quick Access (Win11 "Home" / "Pinned"
         // section). Uses the shell "pintohome" verb via Shell.Application
         // COM automation. Idempotent in practice — pinning an already-pinned
@@ -144,6 +173,7 @@ namespace Racks.Util
             try
             {
                 Directory.CreateDirectory(MirrorRoot);
+                if (IsPinnedToQuickAccess()) return;
                 Type? shellAppType = Type.GetTypeFromProgID("Shell.Application");
                 if (shellAppType == null) return;
                 dynamic? shell = Activator.CreateInstance(shellAppType);
@@ -157,29 +187,11 @@ namespace Racks.Util
                 if (ns == null) return;
                 dynamic item = ns.ParseName(leaf);
                 if (item == null) return;
+                // "pintohome" is the canonical (language independent) verb name. The old fallback
+                // matched translated captions in English and Portuguese only, so on any other Windows
+                // language it could never work; it was removed rather than extended.
                 try { item.InvokeVerb("pintohome"); }
-                catch
-                {
-                    // Older shells used different localized verb names —
-                    // fall back to the localized verb if available.
-                    try
-                    {
-                        dynamic verbs = item.Verbs();
-                        foreach (dynamic v in verbs)
-                        {
-                            string n = (string)v.Name;
-                            if (n != null && (n.Contains("Pin to Quick", StringComparison.OrdinalIgnoreCase)
-                                || n.Contains("Pin to Home", StringComparison.OrdinalIgnoreCase)
-                                || n.Contains("Fixar no Acesso", StringComparison.OrdinalIgnoreCase)
-                                || n.Contains("Fixar em Acesso", StringComparison.OrdinalIgnoreCase)))
-                            {
-                                v.DoIt();
-                                break;
-                            }
-                        }
-                    }
-                    catch { }
-                }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"pintohome failed: {ex.Message}"); }
                 if (item is object) Marshal.FinalReleaseComObject(item);
                 if (ns is object) Marshal.FinalReleaseComObject(ns);
                 if (shell is object) Marshal.FinalReleaseComObject(shell);
