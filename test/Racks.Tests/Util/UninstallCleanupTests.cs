@@ -190,6 +190,68 @@ public sealed class UninstallCleanupTests : IDisposable
         Assert.Equal(0, second.Returned + second.Unlinked + second.Kept);
     }
 
+    // ---- Removing one sandboxed rack (the same rules, for a single rack folder)
+
+    [Fact]
+    public void Removing_a_sandboxed_rack_returns_its_files_and_removes_the_empty_folder()
+    {
+        string sandbox = Sandbox("rackA");
+        Write(Path.Combine(sandbox, "photo.jpg"), "jpg");
+        Write(Path.Combine(sandbox, "Project", "plan.md"), "plan");
+        string target = Path.Combine(_root, "Elsewhere");
+        Write(Path.Combine(target, "keep.txt"), "keep");
+        Assert.True(JunctionHelper.TryCreate(target, Path.Combine(sandbox, "Elsewhere")), "test setup: junction");
+
+        var r = UninstallCleanup.ReturnFolderToDesktop(sandbox, _paths.Desktop);
+
+        Assert.Equal("jpg", File.ReadAllText(Path.Combine(_paths.Desktop, "photo.jpg")));
+        Assert.Equal("plan", File.ReadAllText(Path.Combine(_paths.Desktop, "Project", "plan.md")));
+        Assert.Equal("keep", File.ReadAllText(Path.Combine(target, "keep.txt")));
+        Assert.False(Directory.Exists(sandbox));
+        Assert.Equal(2, r.Returned);
+        Assert.Equal(1, r.Unlinked);
+        Assert.Equal(2, r.ReturnedPaths.Count);
+        Assert.Empty(r.KeptFolders);
+    }
+
+    [Fact]
+    public void Removing_a_sandboxed_rack_with_a_locked_file_keeps_the_folder_and_the_file()
+    {
+        string sandbox = Sandbox("rackB");
+        string locked = Write(Path.Combine(sandbox, "open.docx"), "doc");
+        Write(Path.Combine(sandbox, "free.txt"), "free");
+
+        CleanupReport r;
+        using (new FileStream(locked, FileMode.Open, FileAccess.Read, FileShare.None))
+            r = UninstallCleanup.ReturnFolderToDesktop(sandbox, _paths.Desktop);
+
+        Assert.Equal("free", File.ReadAllText(Path.Combine(_paths.Desktop, "free.txt")));
+        Assert.Equal("doc", File.ReadAllText(locked));
+        Assert.Equal(1, r.Kept);
+        Assert.Contains(sandbox, r.KeptFolders);
+    }
+
+    [Fact]
+    public void Nothing_outside_SafeMove_deletes_folders_recursively()
+    {
+        // INV-REMOVE-1: removing a rack used to SafeDelete its sandbox, which held the user's moved
+        // files. Recursive deletes are only allowed inside SafeMove (partial-copy cleanup and the
+        // source of a completed cross-volume move).
+        var offenders = Directory.EnumerateFiles(Racks.Tests.Guards.RepoPaths.App(), "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .Where(f => Path.GetFileName(f) is not ("SafeMove.cs" or "SafeDelete.cs"))
+            .Where(f =>
+            {
+                // code only: comments may mention the forbidden calls
+                string code = string.Join('\n', File.ReadAllLines(f).Where(l => !l.TrimStart().StartsWith("//")));
+                return code.Contains("SafeDelete.DeleteDirectoryRecursive")
+                    || System.Text.RegularExpressions.Regex.IsMatch(code, @"Directory\.Delete\([^)]*,\s*(recursive:\s*)?true\)");
+            })
+            .Select(Path.GetFileName)
+            .ToList();
+        Assert.Empty(offenders);
+    }
+
     [Fact]
     public void Nothing_to_clean_is_fine()
     {
