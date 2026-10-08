@@ -13,7 +13,7 @@
         AllowsTransparency="True"
         WindowStyle="None"
         ResizeMode="CanResize"
-        FontFamily="Segoe UI Variable Display, Segoe UI"
+        FontFamily="{StaticResource AppFont}"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Ideal"

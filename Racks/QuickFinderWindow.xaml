@@ -9,7 +9,7 @@
         Topmost="True"
         Background="Transparent"
         Foreground="White"
-        FontFamily="Segoe UI Variable Display, Segoe UI"
+        FontFamily="{StaticResource AppFont}"
         ResizeMode="NoResize"
         Title="Find in racks"
         Width="640"

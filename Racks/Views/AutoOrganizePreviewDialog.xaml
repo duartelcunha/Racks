@@ -8,7 +8,7 @@
         Title="Magic Organize Desktop" Height="540" Width="440"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" Foreground="White"
-        FontFamily="Segoe UI Variable Display, Segoe UI"
+        FontFamily="{StaticResource AppFont}"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
     <Border CornerRadius="14" BorderThickness="1" Margin="18"

@@ -148,6 +148,15 @@ namespace Racks
                 }
                 catch (System.Globalization.CultureNotFoundException) { }
             }
+            // Tell WPF which language the text is in (the UI language, not the regional format), so
+            // CJK text picks the right glyph forms and fonts. Must run before any element is created.
+            try
+            {
+                FrameworkElement.LanguageProperty.OverrideMetadata(typeof(FrameworkElement),
+                    new FrameworkPropertyMetadata(System.Windows.Markup.XmlLanguage.GetLanguage(
+                        System.Globalization.CultureInfo.CurrentUICulture.IetfLanguageTag)));
+            }
+            catch (Exception ex) { Debug.WriteLine($"Language override failed: {ex.Message}"); }
             // Belt for ReDoS: cap the runtime of ANY regex without an explicit timeout, so a
             // catastrophic-backtracking pattern (from the registry or an imported layout) can
             // never pin a thread. Explicit-timeout call sites (Util.SafeRegex) still win; this

@@ -8,7 +8,7 @@
         Title="Message" Width="450" SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
         Background="Transparent" Foreground="White"
-        FontFamily="Segoe UI Variable Display, Segoe UI"
+        FontFamily="{StaticResource AppFont}"
         ResizeMode="NoResize" WindowStyle="None" AllowsTransparency="True"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 

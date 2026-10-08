@@ -1785,7 +1785,6 @@ namespace Racks
         public RackWindow(Instance instance)
         {
             InitializeComponent();
-            this.Language = XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
             this.MinWidth = 98;
             this.Loaded += MainWindow_Loaded;
             this.SourceInitialized += MainWindow_SourceInitialized!;

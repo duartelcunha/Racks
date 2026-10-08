@@ -24,7 +24,7 @@
                                        FontWeight="SemiBold"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
-                                       FontFamily="Segoe UI Variable Display, Segoe UI"
+                                       FontFamily="{StaticResource AppFont}"
                                        Foreground="#FFFFFF"/>
                             <Button x:Name="GithubHeaderButton"
                                     Click="visitGithub_Buton_Click"
