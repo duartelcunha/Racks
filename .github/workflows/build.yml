@@ -45,7 +45,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results
           path: TestResults/*.trx
@@ -54,7 +54,7 @@ jobs:
         run: dotnet publish Racks/Racks.csproj -c Release -r win-x64 --self-contained false -o publish --no-restore
 
       - name: Upload portable build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Racks-portable
           path: publish/
