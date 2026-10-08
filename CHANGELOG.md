@@ -5,6 +5,8 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 ## [Unreleased]
 
 ### Fixed
+- A rack showing a folder no longer reloads over and over while a file in it is being downloaded or copied. Content changes are now reported once the file has been quiet for a moment; new, deleted and renamed files still show up immediately.
+- If the folder watcher loses events (a burst of changes overflowed its buffer), the rack now rebuilds the watcher and rescans instead of silently going stale.
 - "Check for updates" now reports a failure the first time too. It used to say nothing when GitHub could not be reached on the first click.
 - Installing an update now closes Racks normally instead of killing it, so the single-instance lock is released and the new version starts cleanly.
 - Settings > "Auto update" now does what it says: with it on, Racks checks GitHub for a new release shortly after startup and shows a toast if there is one. It used to add or remove Racks from Windows startup (that is the tray's "Start on login") and never checked for updates. It is off by default.
