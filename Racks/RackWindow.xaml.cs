@@ -1225,29 +1225,22 @@ namespace Racks
                 _inHandleWindowMove = false;
             }
         }
+        private ShellViewWaiter? _shellViewWaiter;
+
         private void SetAsDesktopChild()
         {
-            // Explorer briefly has no SHELLDLL_DefView while it's restarting (a common
-            // user troubleshooting step). This used to retry with no delay and no cap -
-            // a 100%-CPU spin on the UI thread that never gave up, hanging the whole
-            // app since WPF has one dispatcher. Retry with a real pause instead, and
-            // give up after a bounded wait rather than spinning forever.
-            const int maxAttempts = 10;
-            for (int attempt = 0; shellView == IntPtr.Zero && attempt < maxAttempts; attempt++)
+            // Explorer briefly has no SHELLDLL_DefView while it restarts. Never sleep here (that
+            // froze every rack and the tray for up to 10 s on the UI thread): look once and, if it
+            // is missing, keep polling in the background and attach when it appears.
+            if (shellView == IntPtr.Zero) shellView = ShellViewWaiter.FindDesktopView();
+            if (shellView == IntPtr.Zero)
             {
-                EnumWindows((tophandle, _) =>
-                {
-                    IntPtr shellViewIntPtr = FindWindowEx(tophandle, IntPtr.Zero, "SHELLDLL_DefView", null);
-                    if (shellViewIntPtr != IntPtr.Zero)
-                    {
-                        shellView = shellViewIntPtr;
-                        return false;
-                    }
-                    return true;
-                }, IntPtr.Zero);
-                if (shellView == IntPtr.Zero) Thread.Sleep(1000);
+                (_shellViewWaiter ??= new ShellViewWaiter(ShellViewWaiter.FindDesktopView, new Racks.Core.Abstractions.DispatcherDelayScheduler(),
+                    found: h => { shellView = h; SetAsDesktopChild(); },
+                    gaveUp: () => Debug.WriteLine("SHELLDLL_DefView not found; the rack stays a normal window.")))
+                    .Start();
+                return;
             }
-            if (shellView == IntPtr.Zero) throw new InvalidOperationException("SHELLDLL_DefView not found.");
 
             var interopHelper = new WindowInteropHelper(this);
             interopHelper.EnsureHandle();
@@ -5538,6 +5531,7 @@ namespace Racks
             try { VirtualDesktop.CurrentChanged -= OnVirtualDesktopChanged; } catch { }
             try { _watcherDebounce?.Stop(); } catch { }
             try { _deselectTimer?.Stop(); } catch { }
+            try { _shellViewWaiter?.Dispose(); } catch { }
             try { _mouseLeaveTimer?.Stop(); _mouseLeaveTimer?.Dispose(); _mouseLeaveTimer = null; } catch { }
             try { _menuHandlers?.Clear(); } catch { }
             try { _fileWatcherService.Dispose(); } catch { }
