@@ -64,6 +64,10 @@ namespace Racks
 
         private GrayscaleEffect _grayscaleEffect;
         ShellContextMenu scm = new ShellContextMenu();
+
+        private ShellMenuHandlers? _menuHandlers;
+        private void SetShellMenuHandlers(Action? closed, Action? rename)
+            => (_menuHandlers ??= new ShellMenuHandlers(scm)).Set(closed, rename);
         public Instance Instance { get; set; }
         public string _currentFolderPath;
         private readonly Racks.Services.FileWatcherService _fileWatcherService = new Racks.Services.FileWatcherService();
@@ -386,11 +390,28 @@ namespace Racks
 
             return size;
         }
+        // One timer for the window's lifetime. MouseLeaveWindow used to create a new WinForms timer
+        // (never disposed) on every mouse-leave, and each tick of it could create another
+        // DispatcherTimer, so a rack that was entered and left often kept piling up 1 ms timers.
+        private System.Windows.Forms.Timer? _mouseLeaveTimer;
+        private DispatcherTimer? _deselectTimer;
+        private bool _mouseLeaveAnimateActiveColor = true;
+
         private void MouseLeaveWindow(bool animateActiveColor = true)
         {
-            var timer = new System.Windows.Forms.Timer();
-            timer.Interval = 1;
-            timer.Tick += (s, e) =>
+            _mouseLeaveAnimateActiveColor = animateActiveColor;
+            if (_mouseLeaveTimer == null)
+            {
+                _mouseLeaveTimer = new System.Windows.Forms.Timer { Interval = 1 };
+                _mouseLeaveTimer.Tick += MouseLeaveTimer_Tick;
+            }
+            _mouseLeaveTimer.Start();
+        }
+
+        private void MouseLeaveTimer_Tick(object? sender, EventArgs e)
+        {
+            var timer = _mouseLeaveTimer!;
+            bool animateActiveColor = _mouseLeaveAnimateActiveColor;
             {
                 if (animateActiveColor && !IsCursorWithinWindowBounds() && (GetAsyncKeyState(0x01) & 0x8000) == 0)
                 {
@@ -428,27 +449,27 @@ namespace Racks
                     }
                     if (_didFixIsOnBottom) _fixIsOnBottomInit = false;
 
-                    var timer = new DispatcherTimer
+                    if (_deselectTimer == null)
                     {
-                        Interval = TimeSpan.FromMilliseconds(1)
-                    };
-                    timer.Tick += (s, args) =>
-                    {
-                        if (!_dragdropIntoFolder)
+                        _deselectTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1) };
+                        _deselectTimer.Tick += (s, args) =>
                         {
-                            Dispatcher.InvokeAsync(() =>
+                            if (!_dragdropIntoFolder)
                             {
-                                FileListView.SelectedIndex = -1;
-                                foreach (var item in FileListView.Items)
+                                Dispatcher.InvokeAsync(() =>
                                 {
-                                    var container = FileListView.ItemContainerGenerator.ContainerFromItem(item) as ListViewItem;
-                                    if (container != null) container.IsSelected = false;
-                                }
-                            });
-                            timer.Stop();
-                        }
-                    };
-                    timer.Start();
+                                    FileListView.SelectedIndex = -1;
+                                    foreach (var item in FileListView.Items)
+                                    {
+                                        var container = FileListView.ItemContainerGenerator.ContainerFromItem(item) as ListViewItem;
+                                        if (container != null) container.IsSelected = false;
+                                    }
+                                });
+                                _deselectTimer!.Stop();
+                            }
+                        };
+                    }
+                    _deselectTimer.Start();
 
                     if ((Instance.AutoExpandonCursor) && !_isMinimized && _canAutoClose)
                     {
@@ -480,8 +501,7 @@ namespace Racks
                 {
                     timer.Stop();
                 }
-            };
-            timer.Start();
+            }
         }
         private void HandleRightClick(Window root, IntPtr lParam)
         {
@@ -719,10 +739,10 @@ namespace Racks
                         Point drawingPoint = new Point((int)wpfPoint.X, (int)wpfPoint.Y);
                         DirectoryInfo folder = new DirectoryInfo(_currentFolderPath);
                         _contextMenuIsOpen = true;
-                        scm.ContextMenuClosed += () =>
+                        SetShellMenuHandlers(() =>
                         {
                             _contextMenuIsOpen = false;
-                        };
+                        }, null);
                         if (_itemCurrentlyRenaming != null)
                         {
                             _itemCurrentlyRenaming.IsRenaming = false;
@@ -1743,6 +1763,8 @@ namespace Racks
             catch (Exception ex) { Debug.WriteLine($"Persist custom order failed: {ex.Message}"); }
         }
 
+        private readonly System.Runtime.CompilerServices.ConditionalWeakTable<ListViewItem, object> _wiredContainers = new();
+
         private void ItemContainerGenerator_StatusChanged(object sender, EventArgs e)
         {
             if (FileListView.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
@@ -1750,8 +1772,11 @@ namespace Racks
                 foreach (var item in FileListView.Items)
                 {
                     var container = FileListView.ItemContainerGenerator.ContainerFromItem(item) as ListViewItem;
+                    // StatusChanged fires repeatedly; wire each container only once.
+                    if (container != null && _wiredContainers.TryGetValue(container, out _)) continue;
                     if (container != null)
                     {
+                        _wiredContainers.Add(container, true);
                         container.MouseEnter += ListViewItem_MouseEnter;
                         container.MouseLeave += ListViewItem_MouseLeave;
                         container.Selected += ListViewItem_Selected;
@@ -2914,10 +2939,10 @@ namespace Racks
                 System.Windows.Point wpfPoint = new System.Windows.Point(cursorPosition.X, cursorPosition.Y);
                 Point drawingPoint = new Point((int)wpfPoint.X, (int)wpfPoint.Y);
                 _contextMenuIsOpen = true;
-                scm.ContextMenuClosed += () =>
+                SetShellMenuHandlers(() =>
                 {
                     _contextMenuIsOpen = false;
-                };
+                }, null);
                 scm.ShowContextMenu(windowHelper.Handle, files, drawingPoint, (clickedFileItem.FullPath! == _currentFolderPath), RackProtectsFromDelete);
             }
         }
@@ -3518,15 +3543,6 @@ namespace Racks
                 Point drawingPoint = new Point((int)wpfPoint.X, (int)wpfPoint.Y);
                 _contextMenuIsOpen = true;
                 Action renameHandler = null;
-                scm.ContextMenuClosed += () =>
-                {
-                    _selectedItems.Clear();
-                    foreach (var item in FileItems)
-                    {
-                        item.IsSelected = false;
-                    }
-                    _contextMenuIsOpen = false;
-                };
                 renameHandler = () =>
                 {
                     try
@@ -3558,7 +3574,15 @@ namespace Racks
                     }
                     catch { }
                 };
-                scm.ContextMenuRenameSelected += renameHandler;
+                SetShellMenuHandlers(() =>
+                {
+                    _selectedItems.Clear();
+                    foreach (var item in FileItems)
+                    {
+                        item.IsSelected = false;
+                    }
+                    _contextMenuIsOpen = false;
+                }, renameHandler);
                 if (clickedFileItem != null)
                 {
                     if (_selectedItems.Count > 0 && _selectedItems.Contains(clickedItem))
@@ -4023,42 +4047,6 @@ namespace Racks
                 Debug.WriteLine($"Failed to load SVG thumbnail: {ex.Message}");
                 return null;
             }
-        }
-        private string GetDefaultBrowserPath(string protocol)
-        {
-            try
-            {
-                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@$"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\{protocol}\UserChoice"))
-                {
-                    if (key != null)
-                    {
-                        object progId = key.GetValue("Progid");
-
-                        if (progId == null)
-                        {
-                            return "";
-                        }
-                        using (RegistryKey commandKey = Registry.ClassesRoot.OpenSubKey($@"{progId}\shell\open\command"))
-                        {
-                            if (commandKey != null)
-                            {
-                                object command = commandKey.GetValue("");
-
-                                if (command == null)
-                                {
-                                    return "";
-                                }
-                                return Regex.Match(command.ToString()!, "^\"([^\"]+)\"").Groups[1].Value;
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                return "";
-            }
-            return "";
         }
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
@@ -5549,6 +5537,9 @@ namespace Racks
             // after close, then drop the folder watcher.
             try { VirtualDesktop.CurrentChanged -= OnVirtualDesktopChanged; } catch { }
             try { _watcherDebounce?.Stop(); } catch { }
+            try { _deselectTimer?.Stop(); } catch { }
+            try { _mouseLeaveTimer?.Stop(); _mouseLeaveTimer?.Dispose(); _mouseLeaveTimer = null; } catch { }
+            try { _menuHandlers?.Clear(); } catch { }
             try { _fileWatcherService.Dispose(); } catch { }
             try { if (_physics != null) Util.RackPhysics.Unregister(_physics); } catch { }
             // "Disable Animations (Performance)" closes immediately with no shrink/fade.
