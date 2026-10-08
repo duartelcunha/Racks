@@ -22,7 +22,7 @@ namespace Racks
         // this in <1ms and exits silently — the existing tray icon is already there.
         // Beats the previous Process.GetProcessesByName check, which raced on startup
         // and popped a modal dialog when you double-clicked the exe.
-        #pragma warning disable CS0649
+#pragma warning disable CS0649
         private static Mutex? _singleInstanceMutex;
 #pragma warning restore CS0649
         public RegistryHelper reg = new RegistryHelper(InstanceController.appName);
@@ -171,10 +171,10 @@ namespace Racks
         {
             // Remove the C++ desktop hook
             try { Racks.Core.DesktopIconManager.StopHook(); } catch { }
-            
+
             _singleInstanceMutex?.ReleaseMutex();
             _singleInstanceMutex?.Dispose();
-            
+
             base.OnExit(e);
         }
         private void ToastActivatedHandler(ToastNotificationActivatedEventArgsCompat toastArgs)
@@ -184,7 +184,7 @@ namespace Racks
             {
                 if (args.Contains("action") && args["action"] == "install_update")
                 {
-                   await Updater.InstallUpdate();
+                    await Updater.InstallUpdate();
                 }
 
             });

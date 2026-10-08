@@ -138,18 +138,18 @@ namespace Racks.Util
             SHChangeNotify(0x08000000, 0x0000, IntPtr.Zero, IntPtr.Zero); // SHCNE_ALLEVENTS
         }
 
-        public const int  SHCNE_RENAMEITEM    = 0x00000001;
-        public const int  SHCNE_CREATE        = 0x00000002;
-        public const int  SHCNE_DELETE        = 0x00000004;
-        public const int  SHCNE_MKDIR         = 0x00000008;
-        public const int  SHCNE_RMDIR         = 0x00000010;
-        public const int  SHCNE_RENAMEFOLDER  = 0x00020000;
-        public const int  SHCNE_UPDATEDIR     = 0x00001000;
-        public const int  SHCNE_UPDATEITEM    = 0x00002000;
-        public const int  SHCNE_ASSOCCHANGED  = 0x08000000;
-        public const uint SHCNF_PATHW         = 0x0005;
-        public const uint SHCNF_FLUSH         = 0x1000;
-        public const uint SHCNF_FLUSHNOWAIT   = 0x3000;
+        public const int SHCNE_RENAMEITEM = 0x00000001;
+        public const int SHCNE_CREATE = 0x00000002;
+        public const int SHCNE_DELETE = 0x00000004;
+        public const int SHCNE_MKDIR = 0x00000008;
+        public const int SHCNE_RMDIR = 0x00000010;
+        public const int SHCNE_RENAMEFOLDER = 0x00020000;
+        public const int SHCNE_UPDATEDIR = 0x00001000;
+        public const int SHCNE_UPDATEITEM = 0x00002000;
+        public const int SHCNE_ASSOCCHANGED = 0x08000000;
+        public const uint SHCNF_PATHW = 0x0005;
+        public const uint SHCNF_FLUSH = 0x1000;
+        public const uint SHCNF_FLUSHNOWAIT = 0x3000;
 
         // High-level helper. Call ONCE per move and ONCE per source-parent at end of a
         // batch. NotifyShellMove fires the "this got renamed/moved" event for a single
@@ -375,7 +375,7 @@ namespace Racks.Util
             TypeName = 0x400
         }
 
- 
+
         [StructLayout(LayoutKind.Sequential)]
         public struct SHELLEXECUTEINFO
         {

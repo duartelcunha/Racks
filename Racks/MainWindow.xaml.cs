@@ -190,7 +190,7 @@ namespace Racks
             {
                 string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                 var clusters = Racks.Core.AutoOrganizer.AnalyzeDesktop(desktopPath);
-                
+
                 if (clusters.Count == 0)
                 {
                     Racks.Views.RacksMessageBox.Show("Your desktop is already empty or too clean to organize!", "Magic Organizer");
@@ -205,27 +205,27 @@ namespace Racks
                         var undo = Racks.Core.MagicOrganizeUndo.Begin(Racks.Core.MagicOrganizeUndo.Mode.Racks);
                         // User approved, create racks and move files!
                         var workingArea = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
-                        
+
                         int rackWidth = 300;
                         int rackHeight = 380;
                         int gap = 30;
-                        
+
                         int cols = (int)Math.Ceiling(Math.Sqrt(clusters.Count));
                         if (cols == 0) cols = 1;
                         int rows = (int)Math.Ceiling((double)clusters.Count / cols);
-                        
+
                         int totalWidth = cols * rackWidth + (cols - 1) * gap;
                         int totalHeight = rows * rackHeight + (rows - 1) * gap;
-                        
+
                         int startX = workingArea.Left + (workingArea.Width - totalWidth) / 2;
                         int startY = workingArea.Top + (workingArea.Height - totalHeight) / 2;
-                        
+
                         // Fallback if it exceeds screen
                         if (startX < workingArea.Left) startX = workingArea.Left + 50;
                         if (startY < workingArea.Top) startY = workingArea.Top + 50;
 
                         int movedFilesCount = 0;
-                        
+
                         for (int i = 0; i < clusters.Count; i++)
                         {
                             var cluster = clusters[i];
@@ -245,7 +245,7 @@ namespace Racks
                             inst.PosY = startY + row * (rackHeight + gap);
                             inst.Width = rackWidth;
                             inst.Height = rackHeight;
-                            
+
                             inst.AssignedFiles = new List<string>();
 
                             _controller.Instances.Add(inst);
@@ -258,7 +258,7 @@ namespace Racks
                             {
                                 string fileName = System.IO.Path.GetFileName(fp);
                                 string destPath = System.IO.Path.Combine(Racks.Core.DesktopIconManager.RacksWorkspacePath, fileName);
-                                
+
                                 var moveResult = Racks.Util.SafeMove.TryMove(fp, destPath, out string reason);
                                 if (moveResult == Racks.Util.SafeMove.Result.Moved)
                                 {
@@ -278,13 +278,13 @@ namespace Racks
                             {
                                 Racks.Views.RacksMessageBox.Show($"Failed to save Rack '{safeName}' to registry: {ex.Message}", "Error");
                             }
-                            
+
                             var subWindow = new RackWindow(inst);
                             subWindow.ChangeBackgroundOpacity(inst.Opacity);
                             _controller._subWindows.Add(subWindow);
-                            
+
                             await System.Threading.Tasks.Task.Delay(100); // Staggered entry animation
-                            
+
                             subWindow.Show();
                             subWindow.Topmost = true; // Ensure it is visible to the user immediately
                             _controller._subWindowsPtr.Add(new System.Windows.Interop.WindowInteropHelper(subWindow).Handle);

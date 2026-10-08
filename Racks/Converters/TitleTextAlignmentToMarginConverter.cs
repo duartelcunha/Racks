@@ -20,7 +20,7 @@ namespace Racks
                 switch (alignment)
                 {
                     case HorizontalAlignment.Left:
-                        return new Thickness(10,0,0,0);
+                        return new Thickness(10, 0, 0, 0);
                     case HorizontalAlignment.Right:
                         if (vis1 == Visibility.Visible) visibleCount++;
                         if (vis2 == Visibility.Visible) visibleCount++;
