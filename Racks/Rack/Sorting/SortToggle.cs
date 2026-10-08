@@ -1,4 +1,4 @@
-namespace Racks.Util;
+namespace Racks.Rack.Sorting;
 
 /// <summary>
 /// The rack's sort order is one number: 1 = name ascending, 2 = name descending, 3 = date modified

@@ -722,32 +722,32 @@ namespace Racks
 
             nameMenuItem.Click += async (s, args) =>
             {
-                Instance.SortBy = SortToggle.Next(Instance.SortBy, 1);
+                Instance.SortBy = Racks.Rack.Sorting.SortToggle.Next(Instance.SortBy, 1);
                 UpdateIcons();
                 SortItems();
             };
             dateModifiedMenuItem.Click += async (s, args) =>
             {
-                Instance.SortBy = SortToggle.Next(Instance.SortBy, 3);
+                Instance.SortBy = Racks.Rack.Sorting.SortToggle.Next(Instance.SortBy, 3);
                 UpdateIcons();
                 SortItems();
             };
 
             dateCreatedMenuItem.Click += async (s, args) =>
             {
-                Instance.SortBy = SortToggle.Next(Instance.SortBy, 5);
+                Instance.SortBy = Racks.Rack.Sorting.SortToggle.Next(Instance.SortBy, 5);
                 UpdateIcons();
                 SortItems();
             };
             fileTypeMenuItem.Click += async (s, args) =>
             {
-                Instance.SortBy = SortToggle.Next(Instance.SortBy, 7);
+                Instance.SortBy = Racks.Rack.Sorting.SortToggle.Next(Instance.SortBy, 7);
                 UpdateIcons();
                 SortItems();
             };
             fileSizeMenuItem.Click += (s, args) =>
             {
-                Instance.SortBy = SortToggle.Next(Instance.SortBy, 9);
+                Instance.SortBy = Racks.Rack.Sorting.SortToggle.Next(Instance.SortBy, 9);
                 UpdateIcons();
                 SortItems();
             };
