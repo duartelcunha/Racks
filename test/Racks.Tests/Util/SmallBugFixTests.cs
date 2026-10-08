@@ -1,5 +1,6 @@
 using Racks.Core;
 using Racks.Util;
+using Racks.Rack.Sorting;
 
 namespace Racks.Tests.Util;
 

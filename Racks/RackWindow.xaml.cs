@@ -147,20 +147,6 @@ namespace Racks
 
         private double _windowsScalingFactor;
 
-        public enum SortBy
-        {
-            NameAsc = 1,
-            NameDesc = 2,
-            DateModifiedAsc = 3,
-            DateModifiedDesc = 4,
-            DateCreatedAsc = 5,
-            DateCreatedDesc = 6,
-            FileTypeAsc = 7,
-            FileTypeDesc = 8,
-            ItemSizeAsc = 9,
-            ItemSizeDesc = 10,
-        }
-
         // One timer for the window's lifetime. MouseLeaveWindow used to create a new WinForms timer
         // (never disposed) on every mouse-leave, and each tick of it could create another
         // DispatcherTimer, so a rack that was entered and left often kept piling up 1 ms timers.
