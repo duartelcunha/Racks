@@ -50,27 +50,30 @@
     <Resource Include="Icon\ico.png" />
     <Resource Include="Shaders\GrayscaleEffect.ps" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Update="Properties\Lang.Designer.cs">
-      <DesignTime>True</DesignTime>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Lang.resx</DependentUpon>
-    </Compile>
-    <Compile Update="Util\RegistryHelper.cs">
-      <Generator>MSBuild:Compile</Generator>
-    </Compile>
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Update="Properties\Lang.cs-CZ.resx">
-      <Generator>PublicResXFileCodeGenerator</Generator>
-    </EmbeddedResource>
-    <EmbeddedResource Update="Properties\Lang.resx">
-      <Generator>PublicResXFileCodeGenerator</Generator>
-      <LastGenOutput>Lang.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
-  </ItemGroup>
-  <ItemGroup>
-  </ItemGroup>
+  <!-- Strongly typed Lang class.
+       Properties\Lang.Designer.cs is regenerated from Lang.resx on every `dotnet build` (no Visual
+       Studio needed): add a key to Lang.resx, build, and Lang.Key exists. It runs before the WPF
+       markup compiler because XAML uses {x:Static prop:Lang.Key}, and WPF's temporary markup
+       assembly is compiled before MSBuild's own resource step would generate the class.
+       The file stays in git so the class is readable on GitHub; commit it with the resx change. -->
+  <Target Name="GenerateLangClass"
+          BeforeTargets="MarkupCompilePass1;CoreCompile"
+          Inputs="Properties\Lang.resx"
+          Outputs="Properties\Lang.Designer.cs">
+    <MakeDir Directories="$(IntermediateOutputPath)LangGen" />
+    <GenerateResource Sources="Properties\Lang.resx"
+                      OutputResources="$(IntermediateOutputPath)LangGen\Lang.resources"
+                      StronglyTypedLanguage="CSharp"
+                      StronglyTypedNamespace="Racks.Properties"
+                      StronglyTypedClassName="Lang"
+                      StronglyTypedManifestPrefix="Racks.Properties"
+                      StronglyTypedFileName="Properties\Lang.Designer.cs"
+                      PublicClass="true"
+                      ExecuteAsTool="false" />
+    <ItemGroup>
+      <Compile Include="Properties\Lang.Designer.cs" Exclude="@(Compile)" />
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <InternalsVisibleTo Include="Racks.Tests" />
   </ItemGroup>
