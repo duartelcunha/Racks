@@ -100,7 +100,12 @@ Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExeName} /F"; Flags: runhid
 ; removed), from a temp copy of the exe, so it appears when uninstall FINISHES.
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{userappdata}\{#AppName}"
+; %AppData%\Racks\VirtualFrames holds files users moved into racks. Never delete it wholesale:
+; "Racks.exe --uninstall-cleanup" (see [Code]) returns those files to the Desktop first, and these
+; entries only remove what is left if it is empty. INV-UNINSTALL-1 in docs/SECURITY-INVARIANTS.md.
+Type: files; Name: "{userappdata}\{#AppName}\crash.log*"
+Type: dirifempty; Name: "{userappdata}\{#AppName}\VirtualFrames"
+Type: dirifempty; Name: "{userappdata}\{#AppName}"
 Type: filesandordirs; Name: "{localappdata}\{#AppName}"
 
 [Registry]
@@ -116,6 +121,37 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 // that copy. The copy self-deletes via a delayed cmd so nothing is left behind.
 var
   AnimDir: String;
+  CleanupReport: String;
+
+// Value of "key=..." in the cleanup report, or '' if missing.
+function ReportValue(const Lines: TArrayOfString; const Key: String): String;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := 0 to GetArrayLength(Lines) - 1 do
+    if Pos(Key + '=', Lines[I]) = 1 then
+    begin
+      Result := Copy(Lines[I], Length(Key) + 2, Length(Lines[I]));
+      Exit;
+    end;
+end;
+
+procedure ShowCleanupSummary;
+var
+  Lines: TArrayOfString;
+  Returned, Kept, Folder, Msg: String;
+begin
+  if not LoadStringsFromFile(CleanupReport, Lines) then Exit;
+  Returned := ReportValue(Lines, 'returned');
+  Kept := ReportValue(Lines, 'kept');
+  Folder := ReportValue(Lines, 'keptFolder');
+  if (Returned = '0') and (Kept = '0') then Exit;
+  Msg := 'Files from your racks were moved back to your Desktop (' + Returned + ').';
+  if (Kept <> '') and (Kept <> '0') then
+    Msg := Msg + #13#10#13#10 + Kept + ' item(s) could not be moved back safely and were kept in:' + #13#10 + Folder + #13#10#13#10 + 'Nothing was deleted.';
+  MsgBox(Msg, mbInformation, MB_OK);
+end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
@@ -124,6 +160,15 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
+    // Before Inno removes anything: stop Racks, then let it hand the user's rack files back to
+    // the Desktop and undo its shell changes. If this fails, [UninstallDelete] still only removes
+    // empty folders, so no user file is lost.
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#AppExeName} /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(500);
+    CleanupReport := ExpandConstant('{tmp}\racks-cleanup.txt');
+    Exec(ExpandConstant('{app}\{#AppExeName}'), '--uninstall-cleanup "' + CleanupReport + '"', '',
+      SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
     // Snapshot the app folder before it's deleted.
     AnimDir := ExpandConstant('{tmp}\RacksFarewell');
     Exec(ExpandConstant('{cmd}'), '/C xcopy "' + ExpandConstant('{app}') + '" "' + AnimDir + '" /E /I /Q /Y', '',
@@ -131,6 +176,7 @@ begin
   end
   else if CurUninstallStep = usPostUninstall then
   begin
+    if not UninstallSilent then ShowCleanupSummary;
     Exe := AnimDir + '\{#AppExeName}';
     if FileExists(Exe) then
     begin

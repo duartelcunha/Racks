@@ -4,6 +4,14 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-08
+
+### Fixed
+- **Uninstalling Racks could permanently delete files you had moved into racks.** Racks created with "New folder rack" by dropping a file (and the "New rack" of older versions) keep moved files under `%AppData%\Racks\VirtualFrames`, and the uninstaller deleted that folder without using the Recycle Bin. The uninstaller now moves every file from your racks back to the Desktop first and only removes folders that are empty.
+- The uninstaller no longer leaves the hidden `RacksWorkspace` folder, the `%UserProfile%\Racks` shortcuts folder, the Quick Access pin or the "Desktop (Workspace)" library behind, and it shows desktop icons again if Racks had hidden them.
+- The uninstaller no longer briefly starts a full copy of Racks in the background (which could recreate the shortcuts folder and write a crash log after uninstalling).
+- Name clashes on the Desktop are never overwritten (`name (from Racks).ext`). Anything that cannot be moved safely, such as an open file or a file on another drive, stays in a visible `RacksWorkspace` folder with a note, and the uninstaller tells you where.
+
 ## [1.2.0] - 2026-10-08
 
 ### Added

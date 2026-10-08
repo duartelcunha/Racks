@@ -59,8 +59,17 @@ namespace Racks
             e.SetObserved();
         }
 
+        // True while running as part of the uninstaller (--uninstall-cleanup / --uninstall-anim).
+        // Those runs must not recreate %AppData%\Racks after the uninstaller has removed it.
+        private static bool s_runningForUninstaller;
+
         private static void LogUnhandledException(Exception ex, string source)
         {
+            if (s_runningForUninstaller)
+            {
+                Debug.WriteLine($"{source}: {ex}");
+                return;
+            }
             try
             {
                 string dir = Path.Combine(
@@ -72,6 +81,42 @@ namespace Racks
             }
             catch { /* logging is best-effort; never let it mask the original exception */ }
             Debug.WriteLine($"{source}: {ex}");
+        }
+
+        private static void RunUninstallCleanup(string? reportPath)
+        {
+            Racks.Util.CleanupReport report;
+            try
+            {
+                report = Racks.Util.UninstallCleanup.Run(
+                    Racks.Util.CleanupPaths.ForCurrentUser(), ReadRackTitlesByFolder(), touchShell: true);
+            }
+            catch (Exception ex)
+            {
+                report = new Racks.Util.CleanupReport();
+                report.Errors.Add("cleanup failed: " + ex.Message);
+            }
+            if (string.IsNullOrEmpty(reportPath)) return;
+            try { report.WriteTo(reportPath); } catch { }
+        }
+
+        // Folder -> rack title for every saved rack, so leftover sandboxes get readable names.
+        private static Dictionary<string, string> ReadRackTitlesByFolder()
+        {
+            var titles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                using var instances = Registry.CurrentUser.OpenSubKey($@"Software\{InstanceController.appName}\Instances");
+                if (instances == null) return titles;
+                foreach (var name in instances.GetSubKeyNames())
+                {
+                    using var rack = instances.OpenSubKey(name);
+                    if (rack?.GetValue("Folder") is string folder && rack.GetValue("TitleText") is string title)
+                        titles[folder] = title;
+                }
+            }
+            catch { }
+            return titles;
         }
 
         protected override void OnStartup(StartupEventArgs e)
@@ -95,6 +140,20 @@ namespace Racks
             // never pin a thread. Explicit-timeout call sites (Util.SafeRegex) still win; this
             // only backstops anything that slips through. Must be set before any Regex runs.
             AppDomain.CurrentDomain.SetData("REGEX_DEFAULT_MATCH_TIMEOUT", Racks.Util.SafeRegex.MatchTimeout);
+            // Run by the uninstaller (installer/Racks.iss) before it removes the app: give the
+            // user's rack files back to the Desktop and remove what Racks added to the shell.
+            // Headless: no windows, no mutex, no registry migration.
+            if (e.Args.Length > 0 && e.Args[0] == "--uninstall-cleanup")
+            {
+                s_runningForUninstaller = true;
+                // Watchdog: the uninstaller waits for this process, so it must never hang
+                // (e.g. a shell COM call that never returns). Exit after 2 minutes regardless.
+                new Thread(() => { Thread.Sleep(TimeSpan.FromMinutes(2)); Environment.Exit(2); })
+                { IsBackground = true }.Start();
+                RunUninstallCleanup(e.Args.Length > 1 ? e.Args[1] : null);
+                Shutdown(0);
+                return;
+            }
             // One-time migration of HKCU\SOFTWARE\DeskFrame → HKCU\SOFTWARE\Racks so
             // users upgrading from the original DeskFrame build keep their frames.
             InstanceController.MigrateLegacyRegistry();
@@ -102,6 +161,7 @@ namespace Racks
             // menu). Has to run before any menu is shown.
             Racks.Util.DarkModeHelper.EnableForApp();
             bool isUninstallAnim = e.Args.Length > 0 && e.Args[0] == "--uninstall-anim";
+            if (isUninstallAnim) s_runningForUninstaller = true;
 #if !DEBUG
             if (!isUninstallAnim)
             {
@@ -126,6 +186,10 @@ namespace Racks
             }
 
             PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Critical;
+            // Set here rather than in App.xaml so the headless modes above (--uninstall-cleanup,
+            // --uninstall-anim, second instance) never load MainWindow. WPF reads StartupUri after
+            // OnStartup returns, and it cannot be cleared once set.
+            StartupUri = new Uri("MainWindow.xaml", UriKind.Relative);
             base.OnStartup(e);
 
             // Two distinct animations:

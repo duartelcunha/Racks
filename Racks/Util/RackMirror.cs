@@ -52,15 +52,7 @@ namespace Racks.Util
 
                 // 1. Remove existing reparse-point children (leave anything
                 //    the user manually dropped in there).
-                foreach (var existing in Directory.EnumerateFileSystemEntries(MirrorRoot))
-                {
-                    try
-                    {
-                        if (JunctionHelper.IsReparsePoint(existing))
-                            Directory.Delete(existing, recursive: false);
-                    }
-                    catch { /* best-effort */ }
-                }
+                RemoveJunctions(MirrorRoot);
 
                 // 2. Materialize a junction per rack with collision resolution.
                 var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -88,6 +80,58 @@ namespace Racks.Util
             catch
             {
                 // The mirror is a UX nicety; failure must NOT break the app.
+            }
+        }
+
+        // Remove only the reparse-point children of `root` (the junctions Racks created). Real files
+        // and folders the user put there by hand are left alone. Never descends into a junction.
+        public static int RemoveJunctions(string root)
+        {
+            int removed = 0;
+            if (!Directory.Exists(root)) return 0;
+            foreach (var existing in Directory.EnumerateFileSystemEntries(root))
+            {
+                try
+                {
+                    if (!JunctionHelper.IsReparsePoint(existing)) continue;
+                    if (Directory.Exists(existing)) Directory.Delete(existing, recursive: false);
+                    else File.Delete(existing);
+                    removed++;
+                }
+                catch { /* best-effort */ }
+            }
+            return removed;
+        }
+
+        // Undo PinToQuickAccess. Works on the Quick Access namespace itself (invoking the verb on
+        // the folder through its parent does nothing), so it also removes a stale pin whose folder
+        // is already gone. Best-effort, like pinning.
+        public static void UnpinFromQuickAccess()
+        {
+            try
+            {
+                Type? shellAppType = Type.GetTypeFromProgID("Shell.Application");
+                if (shellAppType == null) return;
+                dynamic? shell = Activator.CreateInstance(shellAppType);
+                if (shell == null) return;
+                dynamic? quickAccess = shell.NameSpace("shell:::{679f85cb-0220-4080-b29b-5540cc05aab6}");
+                if (quickAccess != null)
+                {
+                    foreach (dynamic item in quickAccess.Items())
+                    {
+                        string? path = item.Path;
+                        if (string.Equals(path, MirrorRoot, StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { item.InvokeVerb("unpinfromhome"); } catch { }
+                        }
+                    }
+                    Marshal.FinalReleaseComObject(quickAccess);
+                }
+                Marshal.FinalReleaseComObject(shell);
+            }
+            catch
+            {
+                // Best-effort.
             }
         }
 
