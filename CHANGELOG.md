@@ -4,6 +4,9 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 
 ## [Unreleased]
 
+### Changed
+- Repository maintenance: cleaned contributor metadata from the git history.
+
 ### Fixed
 - "Check for updates" now reports a failure the first time too. It used to say nothing when GitHub could not be reached on the first click.
 - Installing an update now closes Racks normally instead of killing it, so the single-instance lock is released and the new version starts cleanly.
