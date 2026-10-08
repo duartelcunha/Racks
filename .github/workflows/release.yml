@@ -1,0 +1,87 @@
+name: release
+
+# Push a tag like v1.2.0 to build the installer and publish a GitHub release.
+# The tag must match <Version> in Racks/Racks.csproj.
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build installer and publish release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Check tag matches csproj version
+        id: ver
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          [xml]$csproj = Get-Content Racks/Racks.csproj
+          $version = ($csproj.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1)
+          if ($tag -ne $version) { throw "Tag v$tag does not match <Version> $version in Racks.csproj" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build and test
+        run: |
+          dotnet restore Racks.sln
+          dotnet build Racks.sln -c Release --no-restore
+          dotnet test Racks.sln -c Release --no-build
+
+      - name: Ensure Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "${env:ProgramFiles}\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ }
+          if (-not $iscc) { choco install innosetup -y --no-progress }
+
+      - name: Build installer
+        shell: pwsh
+        run: ./build-installer.ps1
+
+      - name: Package portable zip and checksums
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item "installer/Output/Racks-Setup-$v.exe" release/
+          Compress-Archive -Path publish/* -DestinationPath "release/Racks-portable-$v.zip"
+          Push-Location release
+          Get-ChildItem -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } |
+            ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } |
+            Set-Content SHA256SUMS.txt
+          Pop-Location
+
+      - name: Extract release notes from CHANGELOG
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          $lines = Get-Content CHANGELOG.md
+          $start = ($lines | Select-String -Pattern "^## \[$([regex]::Escape($v))\]" | Select-Object -First 1).LineNumber
+          if ($start) {
+            $rest = $lines[$start..($lines.Length - 1)]
+            $end = ($rest | Select-String -Pattern '^## \[' | Select-Object -First 1).LineNumber
+            $body = if ($end) { $rest[0..($end - 2)] } else { $rest }
+            $body -join "`n" | Set-Content release-notes.md
+          } else {
+            "See CHANGELOG.md." | Set-Content release-notes.md
+          }
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          files: |
+            release/Racks-Setup-${{ steps.ver.outputs.version }}.exe
+            release/Racks-portable-${{ steps.ver.outputs.version }}.zip
+            release/SHA256SUMS.txt
