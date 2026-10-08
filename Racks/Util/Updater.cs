@@ -14,7 +14,6 @@ namespace Racks
         private static string _downloadUrl = "";
         private static long _expectedSize = -1;
         private static string tag_name = "";
-        private static int updateCount = 0;
 
         // The only host/path the update binary may come from. TLS proves it's really GitHub;
         // this proves it's OUR repo's release asset and not an arbitrary URL from the JSON.
@@ -79,11 +78,12 @@ namespace Racks
                         }
                     }
                 }
-                updateCount++;
             }
             catch (Exception e)
             {
-                if (updateCount != 0)
+                // A check the user asked for must never fail silently (being offline on the first
+                // click used to show nothing). The automatic startup check stays quiet.
+                if (showToastIfNoUpdate)
                 {
                     var toastBuilder = new ToastContentBuilder()
                                .AddText("Failed to update.", AdaptiveTextStyle.Header)
@@ -118,7 +118,7 @@ namespace Racks
 
         // Pick the release's installer asset by name (Racks-Setup-*.exe) and validate its URL.
         // Returns false if no asset matches or the URL isn't our trusted GitHub release path.
-        private static bool TrySelectTrustedAsset(JsonElement root, out string url, out long size)
+        internal static bool TrySelectTrustedAsset(JsonElement root, out string url, out long size)
         {
             url = ""; size = -1;
             if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array)
@@ -141,7 +141,7 @@ namespace Racks
         // such a URL; the 302 to objects.githubusercontent.com happens at download time and is
         // covered by TLS. Note: the app is not code-signed, so we can't verify Authenticode; this
         // shrinks the risk to a genuine compromise of the GitHub repo/release itself.
-        private static bool IsTrustedDownloadUrl(string url)
+        internal static bool IsTrustedDownloadUrl(string url)
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
             if (uri.Scheme != Uri.UriSchemeHttps) return false;
@@ -280,7 +280,10 @@ namespace Racks
                 toastBuilder.Show();
                 return;
             }
-            Environment.Exit(0);
+            // Orderly shutdown instead of Environment.Exit: Exit skipped OnExit, which releases the
+            // single-instance mutex (the relaunched Racks could be refused) and restores state. The
+            // installer force-closes anything still running, so a stuck window cannot block the update.
+            System.Windows.Application.Current.Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown());
         }
     }
 }

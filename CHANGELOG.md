@@ -5,6 +5,8 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 ## [Unreleased]
 
 ### Fixed
+- "Check for updates" now reports a failure the first time too. It used to say nothing when GitHub could not be reached on the first click.
+- Installing an update now closes Racks normally instead of killing it, so the single-instance lock is released and the new version starts cleanly.
 - Settings > "Auto update" now does what it says: with it on, Racks checks GitHub for a new release shortly after startup and shows a toast if there is one. It used to add or remove Racks from Windows startup (that is the tray's "Start on login") and never checked for updates. It is off by default.
 - The tray's "Lock all racks" switch now shows the real state: on when every rack is locked, refreshed each time the menu opens.
 - If another app already owns Ctrl+Shift+Space or Ctrl+Shift+N, Racks now says so in a notification instead of the shortcut silently doing nothing.
