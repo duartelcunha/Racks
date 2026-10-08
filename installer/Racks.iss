@@ -8,7 +8,7 @@
 ; is suppressed via Disable*Page directives.
 ;
 ; AppVersion is passed in by build-installer.ps1 via /DAppVersion=... so the
-; csproj's <AssemblyVersion> stays the single source of truth. Defaults to a
+; csproj's <Version> stays the single source of truth. Defaults to a
 ; placeholder so the script can also be compiled by hand from the Inno Setup
 ; IDE during development.
 

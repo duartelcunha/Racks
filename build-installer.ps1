@@ -44,7 +44,7 @@ this script. If you installed to a non-default location, pass -IsccPath:
 #     register stay in lockstep with the assembly version. ---
 $csprojPath = Join-Path $PSScriptRoot "Racks\Racks.csproj"
 [xml]$csproj = Get-Content $csprojPath
-$version = $csproj.Project.PropertyGroup.AssemblyVersion | Where-Object { $_ } | Select-Object -First 1
+$version = $csproj.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
 if (-not $version) { $version = "0.8.0" }
 Write-Host "Building installer for Racks $version"
 

@@ -79,7 +79,7 @@ namespace Racks.Core
                 if (!Directory.Exists(librariesPath)) return;
 
                 string libraryFile = Path.Combine(librariesPath, "DesktopWorkspace.library-ms");
-                
+
                 string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
                 string xml = $@"<?xml version=""1.0"" encoding=""UTF-8""?>

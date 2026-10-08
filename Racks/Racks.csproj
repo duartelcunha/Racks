@@ -11,9 +11,7 @@
     <Product>Racks</Product>
     <AssemblyTitle>Racks</AssemblyTitle>
     <Description>Racks — fast, lightweight desktop organization for Windows.</Description>
-    <AssemblyVersion>1.1.4</AssemblyVersion>
-    <FileVersion>1.1.4</FileVersion>
-    <Version>1.1.4</Version>
+    <Version>1.2.0</Version>
     <PackageIcon>ico.png</PackageIcon>
     <ApplicationIcon>Icon\ico.ico</ApplicationIcon>
     <Platforms>AnyCPU;x64</Platforms>
@@ -35,10 +33,8 @@
   <ItemGroup>
     <PackageReference Include="H.Hooks" Version="1.7.0" />
     <PackageReference Include="Microsoft-WindowsAPICodePack-Shell" Version="1.1.5" />
-    <PackageReference Include="Microsoft.CodeAnalysis" Version="5.3.0" />
     <PackageReference Include="Microsoft.ML" Version="5.0.0" />
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
-    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.2.0" />
     <PackageReference Include="Slions.VirtualDesktop" Version="6.9.2" />
     <PackageReference Include="Svg" Version="3.4.7" />
     <PackageReference Include="WPF-UI.Tray" Version="4.3.0" />
@@ -54,25 +50,31 @@
     <Resource Include="Icon\ico.png" />
     <Resource Include="Shaders\GrayscaleEffect.ps" />
   </ItemGroup>
+  <!-- Strongly typed Lang class.
+       Properties\Lang.Designer.cs is regenerated from Lang.resx on every `dotnet build` (no Visual
+       Studio needed): add a key to Lang.resx, build, and Lang.Key exists. It runs before the WPF
+       markup compiler because XAML uses {x:Static prop:Lang.Key}, and WPF's temporary markup
+       assembly is compiled before MSBuild's own resource step would generate the class.
+       The file stays in git so the class is readable on GitHub; commit it with the resx change. -->
+  <Target Name="GenerateLangClass"
+          BeforeTargets="MarkupCompilePass1;CoreCompile"
+          Inputs="Properties\Lang.resx"
+          Outputs="Properties\Lang.Designer.cs">
+    <MakeDir Directories="$(IntermediateOutputPath)LangGen" />
+    <GenerateResource Sources="Properties\Lang.resx"
+                      OutputResources="$(IntermediateOutputPath)LangGen\Lang.resources"
+                      StronglyTypedLanguage="CSharp"
+                      StronglyTypedNamespace="Racks.Properties"
+                      StronglyTypedClassName="Lang"
+                      StronglyTypedManifestPrefix="Racks.Properties"
+                      StronglyTypedFileName="Properties\Lang.Designer.cs"
+                      PublicClass="true"
+                      ExecuteAsTool="false" />
+    <ItemGroup>
+      <Compile Include="Properties\Lang.Designer.cs" Exclude="@(Compile)" />
+    </ItemGroup>
+  </Target>
   <ItemGroup>
-    <Compile Update="Properties\Lang.Designer.cs">
-      <DesignTime>True</DesignTime>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Lang.resx</DependentUpon>
-    </Compile>
-    <Compile Update="Util\RegistryHelper.cs">
-      <Generator>MSBuild:Compile</Generator>
-    </Compile>
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Update="Properties\Lang.cs-CZ.resx">
-      <Generator>PublicResXFileCodeGenerator</Generator>
-    </EmbeddedResource>
-    <EmbeddedResource Update="Properties\Lang.resx">
-      <Generator>PublicResXFileCodeGenerator</Generator>
-      <LastGenOutput>Lang.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
-  </ItemGroup>
-  <ItemGroup>
+    <InternalsVisibleTo Include="Racks.Tests" />
   </ItemGroup>
 </Project>

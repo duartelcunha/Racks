@@ -60,7 +60,9 @@ namespace Racks.Views
 
             var spinIn = new DoubleAnimation
             {
-                From = -140, To = 0, Duration = TimeSpan.FromMilliseconds(650),
+                From = -140,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(650),
                 EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.4 }
             };
             var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromMilliseconds(280), EasingFunction = ease(EasingMode.EaseOut) };

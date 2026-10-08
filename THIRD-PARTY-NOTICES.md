@@ -1,6 +1,6 @@
 # Third-party notices
 
-Racks is proprietary software (see [`LICENSE.txt`](LICENSE.txt)). It
+Racks is released under the MIT License (see [`LICENSE.txt`](LICENSE.txt)). It
 incorporates and links against the following third-party components. Each
 retains its own license, reproduced or referenced below as required.
 
@@ -12,7 +12,7 @@ Racks is derived from DeskFrame by PinchToDebug. The original MIT License
 and copyright notice are reproduced here in full as required by that
 license. This notice applies only to those portions of Racks that originate
 from DeskFrame; all modifications, additions, and original work in Racks
-remain the proprietary work of Duarte L. Cunha under the terms of
+remain the work of Duarte L. Cunha under the MIT License terms of
 [`LICENSE.txt`](LICENSE.txt).
 
 ```

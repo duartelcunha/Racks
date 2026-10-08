@@ -70,7 +70,7 @@ namespace Racks
 
         public RackViewModel ViewModel { get; }
         public System.Collections.ObjectModel.ObservableCollection<FileItem> FileItems => ViewModel.FileItems;
-        
+
 
         public bool VirtualDesktopSupported;
         IntPtr hwnd;
@@ -92,13 +92,13 @@ namespace Racks
         bool _dragMovingWinddow = false;
 
 
-        
-        #pragma warning disable CS0649
+
+#pragma warning disable CS0649
         private FileItem? _draggedItem;
 #pragma warning restore CS0649
-        
+
         private List<FileItem> _selectedItems = new List<FileItem>();
-        
+
         private FileItem _itemUnderCursor;
         private FileItem _itemCurrentlyRenaming;
         string _dropIntoFolderPath;
@@ -123,7 +123,7 @@ namespace Racks
         private int _currentVD;
         int _oriPosX, _oriPosY;
         private bool _isBlack = true;
-        
+
         private bool _canAutoClose = true;
         private bool _isLocked = false;
         private bool _isOnTop = false;
@@ -554,7 +554,7 @@ namespace Racks
         {
             if (!(HwndSource.FromHwnd(hWnd).RootVisual is Window rootVisual))
                 return IntPtr.Zero;
-          
+
             if (msg == 0x0005) // WM_SIZE
             {
                 if (_dragMovingWinddow)
@@ -972,88 +972,88 @@ namespace Racks
             _inSnapToGrid = true;
             try
             {
-            IntPtr hwnd = new WindowInteropHelper(this).Handle;
+                IntPtr hwnd = new WindowInteropHelper(this).Handle;
 
-            Interop.RECT windowRect;
-            Interop.GetWindowRect(hwnd, out windowRect);
+                Interop.RECT windowRect;
+                Interop.GetWindowRect(hwnd, out windowRect);
 
-            int windowLeft = windowRect.Left;
-            int windowTop = windowRect.Top;
-            int windowRight = windowRect.Right;
-            int windowBottom = windowRect.Bottom;
+                int windowLeft = windowRect.Left;
+                int windowTop = windowRect.Top;
+                int windowRight = windowRect.Right;
+                int windowBottom = windowRect.Bottom;
 
-            var mainWindow = Application.Current.MainWindow as MainWindow;
-            if (mainWindow == null) return;
+                var mainWindow = Application.Current.MainWindow as MainWindow;
+                if (mainWindow == null) return;
 
-            int newWindowLeft = windowLeft;
-            int newWindowTop = windowTop;
-            int newWindowBottom = windowBottom;
-            foreach (var otherWindow in MainWindow._controller._subWindows)
-            {
-                if (otherWindow == this) continue;
-
-                IntPtr otherHwnd = new WindowInteropHelper(otherWindow).Handle;
-                Interop.RECT otherWindowRect;
-                Interop.GetWindowRect(otherHwnd, out otherWindowRect);
-
-                int otherLeft = otherWindowRect.Left;
-                int otherTop = otherWindowRect.Top;
-                int otherRight = otherWindowRect.Right;
-                int otherBottom = otherWindowRect.Bottom;
-                bool didSnap = false;
-                if (Math.Abs(windowLeft - otherRight) <= _gridSnapDistance && Math.Abs(windowTop - otherTop) <= titleBar.Height)
+                int newWindowLeft = windowLeft;
+                int newWindowTop = windowTop;
+                int newWindowBottom = windowBottom;
+                foreach (var otherWindow in MainWindow._controller._subWindows)
                 {
-                    newWindowLeft = otherRight + _gridSnapDistance;
-                    newWindowTop = otherTop;
-                    if (_grabbedOnLeft) didSnap = true;
-                }
-                else if (Math.Abs(windowRight - otherLeft) <= _gridSnapDistance && Math.Abs(windowTop - otherTop) <= titleBar.Height)
-                {
-                    newWindowLeft = otherLeft - (windowRight - windowLeft) - _gridSnapDistance;
-                    newWindowTop = otherTop;
-                    if (_grabbedOnLeft) didSnap = true;
-                }
-                if (_grabbedOnLeft && !didSnap)
-                {
-                    if (Math.Abs(windowTop - otherBottom) <= _gridSnapDistance && Math.Abs(windowLeft - otherLeft) <= _snapDistance)
+                    if (otherWindow == this) continue;
+
+                    IntPtr otherHwnd = new WindowInteropHelper(otherWindow).Handle;
+                    Interop.RECT otherWindowRect;
+                    Interop.GetWindowRect(otherHwnd, out otherWindowRect);
+
+                    int otherLeft = otherWindowRect.Left;
+                    int otherTop = otherWindowRect.Top;
+                    int otherRight = otherWindowRect.Right;
+                    int otherBottom = otherWindowRect.Bottom;
+                    bool didSnap = false;
+                    if (Math.Abs(windowLeft - otherRight) <= _gridSnapDistance && Math.Abs(windowTop - otherTop) <= titleBar.Height)
+                    {
+                        newWindowLeft = otherRight + _gridSnapDistance;
+                        newWindowTop = otherTop;
+                        if (_grabbedOnLeft) didSnap = true;
+                    }
+                    else if (Math.Abs(windowRight - otherLeft) <= _gridSnapDistance && Math.Abs(windowTop - otherTop) <= titleBar.Height)
+                    {
+                        newWindowLeft = otherLeft - (windowRight - windowLeft) - _gridSnapDistance;
+                        newWindowTop = otherTop;
+                        if (_grabbedOnLeft) didSnap = true;
+                    }
+                    if (_grabbedOnLeft && !didSnap)
+                    {
+                        if (Math.Abs(windowTop - otherBottom) <= _gridSnapDistance && Math.Abs(windowLeft - otherLeft) <= _snapDistance)
+                        {
+                            newWindowTop = otherBottom + _gridSnapDistance;
+                            newWindowLeft = otherLeft;
+
+                        }
+                        else if (Math.Abs(windowBottom - otherTop) <= _gridSnapDistance && Math.Abs(windowLeft - otherLeft) <= _snapDistance)
+                        {
+                            newWindowTop = otherTop - (windowBottom - windowTop) - _gridSnapDistance;
+                            newWindowLeft = otherLeft;
+                        }
+                    }
+
+                    if (Math.Abs(windowRight - otherRight) <= _gridSnapDistance && Math.Abs(windowTop - otherBottom) <= _snapDistance)
                     {
                         newWindowTop = otherBottom + _gridSnapDistance;
-                        newWindowLeft = otherLeft;
-
+                        newWindowLeft = otherRight - (windowRight - windowLeft);
                     }
-                    else if (Math.Abs(windowBottom - otherTop) <= _gridSnapDistance && Math.Abs(windowLeft - otherLeft) <= _snapDistance)
+                    else if (Math.Abs(windowRight - otherRight) <= _gridSnapDistance && Math.Abs(windowBottom - otherTop) <= _snapDistance)
                     {
                         newWindowTop = otherTop - (windowBottom - windowTop) - _gridSnapDistance;
-                        newWindowLeft = otherLeft;
+                        newWindowLeft = otherRight - (windowRight - windowLeft);
                     }
                 }
 
-                if (Math.Abs(windowRight - otherRight) <= _gridSnapDistance && Math.Abs(windowTop - otherBottom) <= _snapDistance)
+                if (newWindowLeft != windowLeft || newWindowTop != windowTop || newWindowBottom != windowBottom)
                 {
-                    newWindowTop = otherBottom + _gridSnapDistance;
-                    newWindowLeft = otherRight - (windowRight - windowLeft);
+                    POINT pt = new POINT { X = newWindowLeft, Y = newWindowTop };
+                    ScreenToClient(GetParent(hwnd), ref pt);
+                    SetWindowPos(hwnd, IntPtr.Zero, pt.X, pt.Y, 0, 0,
+                                 SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+
+                    HandleWindowMove(false);
+                    _isIngrid = true;
                 }
-                else if (Math.Abs(windowRight - otherRight) <= _gridSnapDistance && Math.Abs(windowBottom - otherTop) <= _snapDistance)
+                else
                 {
-                    newWindowTop = otherTop - (windowBottom - windowTop) - _gridSnapDistance;
-                    newWindowLeft = otherRight - (windowRight - windowLeft);
+                    _isIngrid = false;
                 }
-            }
-
-            if (newWindowLeft != windowLeft || newWindowTop != windowTop || newWindowBottom != windowBottom)
-            {
-                POINT pt = new POINT { X = newWindowLeft, Y = newWindowTop };
-                ScreenToClient(GetParent(hwnd), ref pt);
-                SetWindowPos(hwnd, IntPtr.Zero, pt.X, pt.Y, 0, 0,
-                             SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
-
-                HandleWindowMove(false);
-                _isIngrid = true;
-            }
-            else
-            {
-                _isIngrid = false;
-            }
             }
             finally
             {
@@ -1073,149 +1073,149 @@ namespace Racks
             _inHandleWindowMove = true;
             try
             {
-            Interop.RECT windowRect;
-            IntPtr hwnd = new WindowInteropHelper(this).Handle;
-            Interop.GetWindowRect(hwnd, out windowRect);
+                Interop.RECT windowRect;
+                IntPtr hwnd = new WindowInteropHelper(this).Handle;
+                Interop.GetWindowRect(hwnd, out windowRect);
 
-            int windowLeft = windowRect.Left;
-            int windowTop = windowRect.Top;
-            int windowRight = windowRect.Right;
-            int windowBottom = windowRect.Bottom;
+                int windowLeft = windowRect.Left;
+                int windowTop = windowRect.Top;
+                int windowRight = windowRect.Right;
+                int windowBottom = windowRect.Bottom;
 
-            var mainWindow = Application.Current.MainWindow as MainWindow;
-            if (mainWindow == null) return;
+                var mainWindow = Application.Current.MainWindow as MainWindow;
+                if (mainWindow == null) return;
 
-            int newWindowLeft = windowLeft;
-            int newWindowTop = windowTop;
-            int newWindowBottom = windowBottom;
+                int newWindowLeft = windowLeft;
+                int newWindowTop = windowTop;
+                int newWindowBottom = windowBottom;
 
 
-            var workingArea = Screen.FromPoint(System.Windows.Forms.Control.MousePosition).WorkingArea;
+                var workingArea = Screen.FromPoint(System.Windows.Forms.Control.MousePosition).WorkingArea;
 
-            //if (Math.Abs(windowLeft - workingArea.Left) <= _snapDistance)
-            //{
-            //    newWindowLeft = (int)workingArea.Left;
-            //    _isOnEdge = true;
-            //}
-            //else if (Math.Abs(windowRight - workingArea.Right) <= _snapDistance)
-            //{
-            //    newWindowLeft = (int)(workingArea.Right - (windowRight - windowLeft));
-            //    _isOnEdge = true;
-            //}
-            //else
-            //{
-            //    _isOnEdge = false;
-            //}
-            // Debug.WriteLine(windowBottom + " " + (workingArea.Bottom <= windowBottom));
-            if (_isLeftButtonDown || initWindow)
-            {
-                POINT pt = new POINT { X = newWindowLeft, Y = newWindowTop };
-                ScreenToClient(GetParent(hwnd), ref pt);
-                windowTop = pt.Y;
-                windowBottom = pt.Y + (windowBottom - windowTop);
-                if (Math.Abs(windowTop - workingArea.Top) <= _snapDistance)
+                //if (Math.Abs(windowLeft - workingArea.Left) <= _snapDistance)
+                //{
+                //    newWindowLeft = (int)workingArea.Left;
+                //    _isOnEdge = true;
+                //}
+                //else if (Math.Abs(windowRight - workingArea.Right) <= _snapDistance)
+                //{
+                //    newWindowLeft = (int)(workingArea.Right - (windowRight - windowLeft));
+                //    _isOnEdge = true;
+                //}
+                //else
+                //{
+                //    _isOnEdge = false;
+                //}
+                // Debug.WriteLine(windowBottom + " " + (workingArea.Bottom <= windowBottom));
+                if (_isLeftButtonDown || initWindow)
                 {
-                    newWindowTop = (int)workingArea.Top;
-                    WindowBackground.CornerRadius = new CornerRadius(0, 0, 5, 5);
-                    _isOnBottom = false;
-                    _isOnTop = true;
+                    POINT pt = new POINT { X = newWindowLeft, Y = newWindowTop };
+                    ScreenToClient(GetParent(hwnd), ref pt);
+                    windowTop = pt.Y;
+                    windowBottom = pt.Y + (windowBottom - windowTop);
+                    if (Math.Abs(windowTop - workingArea.Top) <= _snapDistance)
+                    {
+                        newWindowTop = (int)workingArea.Top;
+                        WindowBackground.CornerRadius = new CornerRadius(0, 0, 5, 5);
+                        _isOnBottom = false;
+                        _isOnTop = true;
+                    }
+                    else if (Math.Abs(windowBottom - workingArea.Bottom) - 2 <= _snapDistance
+                       || (Math.Abs(windowBottom - workingArea.Bottom + Instance.Height - titleBar.Height) - 2 <= _snapDistance && initWindow)
+                       )
+                    {
+                        newWindowTop = (int)(workingArea.Bottom - (windowBottom - windowTop));
+                        newWindowBottom = (int)workingArea.Bottom;
+                        WindowBackground.CornerRadius = new CornerRadius(5, 5, 0, 0);
+                        _isOnTop = false;
+                        _isOnBottom = true;
+                    }
+                    else if (!_isOnBottom)
+                    {
+                        _isOnTop = false;
+                        WindowBackground.CornerRadius = new CornerRadius(5);
+                        titleBar.CornerRadius = new CornerRadius(5, 5, 0, 0);
+                    }
+                    if (workingArea.Bottom <= windowBottom)
+                    {
+                        newWindowBottom = (int)workingArea.Bottom;
+                        WindowBackground.CornerRadius = new CornerRadius(5, 5, 0, 0);
+                        _isOnTop = false;
+                        _isOnBottom = true;
+                    }
+                    else if (_isLeftButtonDown)
+                    {
+                        _isOnBottom = false;
+                    }
+                    if (Math.Abs(windowLeft - workingArea.Left) <= _snapDistance)
+                    {
+                        newWindowLeft = workingArea.Left;
+                    }
+                    else if (Math.Abs(workingArea.Right - windowRight) <= _snapDistance)
+                    {
+                        newWindowLeft = (int)(workingArea.Right - this.ActualWidth);
+                    }
                 }
-                else if (Math.Abs(windowBottom - workingArea.Bottom) - 2 <= _snapDistance
-                   || (Math.Abs(windowBottom - workingArea.Bottom + Instance.Height - titleBar.Height) - 2 <= _snapDistance && initWindow)
-                   )
+                // Rack-to-rack edge docking used to live here: it snapped the dragged rack's
+                // edges to nearby racks (WonRight/WonLeft) and merged their corner radii into
+                // a seamless panel. It fought the pushable-physics model (each dock moved a
+                // neighbor, which re-fired WM_MOVE and re-ran this whole pass on every rack,
+                // saturating the UI thread mid-drag so the app couldn't even be quit). Removed:
+                // racks now push each other apart (Window_LocationChanged) and never dock, so
+                // this only has to keep THIS rack's own corners correct against the screen edge.
+                if (!_isMinimized)
                 {
-                    newWindowTop = (int)(workingArea.Bottom - (windowBottom - windowTop));
-                    newWindowBottom = (int)workingArea.Bottom;
-                    WindowBackground.CornerRadius = new CornerRadius(5, 5, 0, 0);
-                    _isOnTop = false;
-                    _isOnBottom = true;
-                }
-                else if (!_isOnBottom)
-                {
-                    _isOnTop = false;
-                    WindowBackground.CornerRadius = new CornerRadius(5);
-                    titleBar.CornerRadius = new CornerRadius(5, 5, 0, 0);
-                }
-                if (workingArea.Bottom <= windowBottom)
-                {
-                    newWindowBottom = (int)workingArea.Bottom;
-                    WindowBackground.CornerRadius = new CornerRadius(5, 5, 0, 0);
-                    _isOnTop = false;
-                    _isOnBottom = true;
-                }
-                else if (_isLeftButtonDown)
-                {
-                    _isOnBottom = false;
-                }
-                if (Math.Abs(windowLeft - workingArea.Left) <= _snapDistance)
-                {
-                    newWindowLeft = workingArea.Left;
-                }
-                else if (Math.Abs(workingArea.Right - windowRight) <= _snapDistance)
-                {
-                    newWindowLeft = (int)(workingArea.Right - this.ActualWidth);
-                }
-            }
-            // Rack-to-rack edge docking used to live here: it snapped the dragged rack's
-            // edges to nearby racks (WonRight/WonLeft) and merged their corner radii into
-            // a seamless panel. It fought the pushable-physics model (each dock moved a
-            // neighbor, which re-fired WM_MOVE and re-ran this whole pass on every rack,
-            // saturating the UI thread mid-drag so the app couldn't even be quit). Removed:
-            // racks now push each other apart (Window_LocationChanged) and never dock, so
-            // this only has to keep THIS rack's own corners correct against the screen edge.
-            if (!_isMinimized)
-            {
-                if (_isOnBottom)
-                {
-                    WindowBorder.CornerRadius = new CornerRadius(5, 5, 0, 0);
-                    WindowBackground.CornerRadius = WindowBorder.CornerRadius;
-                    titleBar.CornerRadius = new CornerRadius(5, 5, 5, 5);
+                    if (_isOnBottom)
+                    {
+                        WindowBorder.CornerRadius = new CornerRadius(5, 5, 0, 0);
+                        WindowBackground.CornerRadius = WindowBorder.CornerRadius;
+                        titleBar.CornerRadius = new CornerRadius(5, 5, 5, 5);
+                    }
+                    else
+                    {
+                        WindowBorder.CornerRadius = new CornerRadius(
+                            topLeft: _isOnTop ? 0 : 5,
+                            topRight: _isOnTop ? 0 : 5,
+                            bottomRight: 5,
+                            bottomLeft: 5
+                        );
+                        WindowBackground.CornerRadius = WindowBorder.CornerRadius;
+                        titleBar.CornerRadius = new CornerRadius(
+                            topLeft: WindowBorder.CornerRadius.TopLeft,
+                            topRight: WindowBorder.CornerRadius.TopRight,
+                            bottomRight: 0,
+                            bottomLeft: 0
+                        );
+                    }
                 }
                 else
                 {
-                    WindowBorder.CornerRadius = new CornerRadius(
-                        topLeft: _isOnTop ? 0 : 5,
-                        topRight: _isOnTop ? 0 : 5,
-                        bottomRight: 5,
-                        bottomLeft: 5
-                    );
+                    if (_isOnBottom)
+                    {
+                        WindowBorder.CornerRadius = new CornerRadius(5, 5, 0, 0);
+                    }
+                    else
+                    {
+                        WindowBorder.CornerRadius = new CornerRadius(
+                            topLeft: _isOnTop ? 0 : 5,
+                            topRight: _isOnTop ? 0 : 5,
+                            bottomRight: 5,
+                            bottomLeft: 5
+                        );
+                    }
                     WindowBackground.CornerRadius = WindowBorder.CornerRadius;
-                    titleBar.CornerRadius = new CornerRadius(
-                        topLeft: WindowBorder.CornerRadius.TopLeft,
-                        topRight: WindowBorder.CornerRadius.TopRight,
-                        bottomRight: 0,
-                        bottomLeft: 0
-                    );
+                    titleBar.CornerRadius = WindowBorder.CornerRadius;
                 }
-            }
-            else
-            {
-                if (_isOnBottom)
-                {
-                    WindowBorder.CornerRadius = new CornerRadius(5, 5, 0, 0);
-                }
-                else
-                {
-                    WindowBorder.CornerRadius = new CornerRadius(
-                        topLeft: _isOnTop ? 0 : 5,
-                        topRight: _isOnTop ? 0 : 5,
-                        bottomRight: 5,
-                        bottomLeft: 5
-                    );
-                }
-                WindowBackground.CornerRadius = WindowBorder.CornerRadius;
-                titleBar.CornerRadius = WindowBorder.CornerRadius;
-            }
 
-            if ((initWindow && _isOnBottom) ||
-                (!_isIngrid && !_isOnBottom
-                    && (newWindowLeft != windowLeft || newWindowTop != windowTop || newWindowBottom != windowBottom && !_isLeftButtonDown)))
-            {
-                POINT pt = new POINT { X = newWindowLeft, Y = newWindowTop };
-                ScreenToClient(GetParent(hwnd), ref pt);
-                SetWindowPos(hwnd, IntPtr.Zero, pt.X, pt.Y, 0, 0,
-                             SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
-            }
+                if ((initWindow && _isOnBottom) ||
+                    (!_isIngrid && !_isOnBottom
+                        && (newWindowLeft != windowLeft || newWindowTop != windowTop || newWindowBottom != windowBottom && !_isLeftButtonDown)))
+                {
+                    POINT pt = new POINT { X = newWindowLeft, Y = newWindowTop };
+                    ScreenToClient(GetParent(hwnd), ref pt);
+                    SetWindowPos(hwnd, IntPtr.Zero, pt.X, pt.Y, 0, 0,
+                                 SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
 
             }
             finally
@@ -1518,7 +1518,7 @@ namespace Racks
         {
             base.OnSourceInitialized(e);
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
-            
+
             int exStyle = (int)Interop.GetWindowLong(hwnd, Interop.GWL_EXSTYLE);
             Interop.SetWindowLong(hwnd, Interop.GWL_EXSTYLE, exStyle | Interop.WS_EX_NOACTIVATE);
             WindowChrome.SetWindowChrome(this, Instance.IsLocked ?
@@ -1849,7 +1849,7 @@ namespace Racks
             titleStackPanel.MouseEnter += (s, e) => AnimateSymbolIcon(frameTypeSymbol, Instance.TitleFontSize, 1, 5);
             titleStackPanel.MouseLeave += (s, e) => AnimateSymbolIcon(frameTypeSymbol, 0, 0, 0);
 
-            
+
             // Restore persistent pin-to-top.
             if (Instance.PinToTop)
             {
@@ -2588,9 +2588,9 @@ namespace Racks
                         LoadingProgressRingFade(false);
                         return new List<FileSystemInfo>();
                     }
-                    
+
                     var filteredFiles = new List<FileSystemInfo>();
-                    
+
                     void ScanDir(string dirPath)
                     {
                         if (!Directory.Exists(dirPath)) return;
@@ -2607,9 +2607,9 @@ namespace Racks
                         catch (IOException ex) { Debug.WriteLine($"ScanDir failed for '{dirPath}': {ex.Message}"); }
                         catch (UnauthorizedAccessException ex) { Debug.WriteLine($"ScanDir failed for '{dirPath}': {ex.Message}"); }
                     }
-                    
+
                     ScanDir(path);
-                    
+
                     if (Instance.IsDesktopFilterRack)
                     {
                         ScanDir(DesktopIconManager.RacksWorkspacePath);
@@ -2623,12 +2623,12 @@ namespace Racks
 
                     _folderCount = filteredFiles.OfType<DirectoryInfo>().Count();
                     _fileCount = filteredFiles.OfType<FileInfo>().Count().ToString();
-                    _folderSize = !Instance.CheckFolderSize ? "" : Task.Run(() => BytesToStringAsync(filteredFiles.OfType<FileInfo>().Sum(file => file.Length))).Result; 
-                    
+                    _folderSize = !Instance.CheckFolderSize ? "" : Task.Run(() => BytesToStringAsync(filteredFiles.OfType<FileInfo>().Sum(file => file.Length))).Result;
+
                     filteredFiles = filteredFiles
                                 .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
                                 .ToList();
-                    
+
                     if (!Instance.ShowHiddenFiles)
                         filteredFiles = filteredFiles.Where(entry => !entry.Attributes.HasFlag(FileAttributes.Hidden)).ToList();
                     var fileFilterRegex = TryCompileRegex(Instance.FileFilterRegex);
@@ -2691,15 +2691,15 @@ namespace Racks
                             LoadingProgressRingFade(false);
                             return;
                         }
-                        
+
                         // Check if the exact FullPath still exists in the newly scanned entries
                         bool stillExists = fileEntries.Any(f => string.Equals(f.FullName, FileItems[i].FullPath, StringComparison.OrdinalIgnoreCase));
-                        
+
                         if (!stillExists)
                         {
                             string fileName = Path.GetFileName(FileItems[i].FullPath!);
                             FileItems.RemoveAt(i);
-                            
+
                             // Cleanup: if the file was physically moved/deleted, remove it from the Rack's claim
                             if (Instance.IsDesktopFilterRack && Instance.AssignedFiles != null && Instance.AssignedFiles.Contains(fileName))
                             {
@@ -2708,7 +2708,7 @@ namespace Racks
                             }
                         }
                     }
-                    
+
                     if (assignedFilesChanged)
                     {
                         MainWindow._controller.WriteInstanceToKey(Instance);
@@ -3086,7 +3086,7 @@ namespace Racks
             }
 
             MainWindow._controller.WriteInstanceToKey(Instance);
-            
+
             // Force refresh of all Desktop racks
             foreach (var window in MainWindow._controller._subWindows)
             {
@@ -3133,7 +3133,7 @@ namespace Racks
                 // SafeDelete is used so junctions inside the sandbox (created by
                 // an explicit LinkOnDrop toggle) are unlinked without descending
                 // into their Desktop targets.
-                bool ctrlDown  = Keyboard.IsKeyDown(Key.LeftCtrl)  || Keyboard.IsKeyDown(Key.RightCtrl);
+                bool ctrlDown = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
                 bool shiftDown = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
                 bool wantsLinkInsteadOfMove = (Instance.LinkOnDrop || ctrlDown) && !shiftDown;
 
@@ -3189,12 +3189,12 @@ namespace Racks
                         }
                     }
                     string destinationDir = _currentFolderPath;
-                    
+
                     if (Instance.IsDesktopFilterRack)
                     {
                         destinationDir = DesktopIconManager.RacksWorkspacePath;
                     }
-                    
+
                     string destinationPath = Path.Combine(destinationDir, Path.GetFileName(file));
                     if (!string.IsNullOrEmpty(_dropIntoFolderPath))
                         destinationPath = Path.Combine(_dropIntoFolderPath, Path.GetFileName(file));
@@ -3221,7 +3221,7 @@ namespace Racks
                         if (!string.IsNullOrEmpty(parent)) sourceParents.Add(parent);
 
                         bool srcIsDir = Directory.Exists(file);
-                        
+
                         // Handle name collisions in the destination by generating a unique name (like Windows Explorer)
                         if (File.Exists(destinationPath) || Directory.Exists(destinationPath))
                         {
@@ -3235,7 +3235,7 @@ namespace Racks
                                 counter++;
                             }
                         }
-                        
+
                         if (Instance.IsDesktopFilterRack)
                         {
                             // If it's a Desktop rack, we always move it physically to the RacksWorkspace
@@ -4283,7 +4283,7 @@ namespace Racks
             AnimateChevron(_isMinimized, true, 0.01); // When 0 docked window won't open
             KeepWindowBehind();
             RegistryHelper rgh = new RegistryHelper(InstanceController.appName);
-            
+
             //if (rgh.KeyExistsRoot("blurBackground"))
             //{
             //    toBlur = (bool)rgh.ReadKeyValueRoot("blurBackground");
@@ -4356,7 +4356,7 @@ namespace Racks
                         EndPoint = new System.Windows.Point(0, 1)
                     };
                     gradient.GradientStops.Add(new GradientStop(Color.FromArgb((byte)Instance.Opacity, c.R, c.G, c.B), 0.0));
-                    
+
                     var bottomColor = c;
                     bottomColor.R = (byte)Math.Max(0, c.R - 30);
                     bottomColor.G = (byte)Math.Max(0, c.G - 30);
@@ -4369,7 +4369,7 @@ namespace Racks
                 {
                     WindowBackground.Background = new SolidColorBrush(Color.FromArgb((byte)Instance.Opacity, c.R, c.G, c.B));
                 }
-                
+
                 BackgroundType(_isTopmost);
             }
             catch
@@ -4451,7 +4451,7 @@ namespace Racks
                         return; // setting Left/Top re-enters LocationChanged with the snapped values
                     }
                 }
-                
+
                 // Track drag velocity (exponential smoothing) for flick-to-throw on release.
                 long nowT = DateTime.UtcNow.Ticks;
                 double dtT = (nowT - _lastDragTicks) / (double)TimeSpan.TicksPerSecond;
@@ -4500,28 +4500,28 @@ namespace Racks
             }
             else
             {
-            // Pop-in: a gentle spring from a near-full scale reads as confident and
-            // premium rather than a cartoonish 0.5->1.0 bounce. Opacity eases in over a
-            // slightly shorter window so the rack "arrives" before it finishes settling.
-            RootScaleTransform.ScaleX = 0.88;
-            RootScaleTransform.ScaleY = 0.88;
-            this.Opacity = 0;
+                // Pop-in: a gentle spring from a near-full scale reads as confident and
+                // premium rather than a cartoonish 0.5->1.0 bounce. Opacity eases in over a
+                // slightly shorter window so the rack "arrives" before it finishes settling.
+                RootScaleTransform.ScaleX = 0.88;
+                RootScaleTransform.ScaleY = 0.88;
+                this.Opacity = 0;
 
-            var scaleAnim = new System.Windows.Media.Animation.DoubleAnimation
-            {
-                To = 1.0,
-                Duration = TimeSpan.FromSeconds(0.36),
-                EasingFunction = new System.Windows.Media.Animation.ElasticEase { Oscillations = 1, Springiness = 7, EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
-            };
-            var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation
-            {
-                To = idleOpacity,
-                Duration = TimeSpan.FromSeconds(0.22),
-                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
-            };
-            RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
-            RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
-            this.BeginAnimation(OpacityProperty, opacityAnim);
+                var scaleAnim = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    To = 1.0,
+                    Duration = TimeSpan.FromSeconds(0.36),
+                    EasingFunction = new System.Windows.Media.Animation.ElasticEase { Oscillations = 1, Springiness = 7, EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                };
+                var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    To = idleOpacity,
+                    Duration = TimeSpan.FromSeconds(0.22),
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                };
+                RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
+                RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
+                this.BeginAnimation(OpacityProperty, opacityAnim);
             }
             //WindowChrome.SetWindowChrome(this, Instance.IsLocked ?
             //new WindowChrome
@@ -4760,7 +4760,7 @@ namespace Racks
             _isRenaming = false;
         }
 
-private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             contextMenu = new ContextMenu();
             if (_itemCurrentlyRenaming != null)
@@ -5115,7 +5115,7 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
 
                 if (Instance.IsDesktopFilterRack)
                 {
-                    body = itemCount > 0 
+                    body = itemCount > 0
                         ? $"Remove this rack? {itemCount} item(s) will be returned to your Desktop."
                         : "Remove this empty rack?";
                 }
@@ -5127,7 +5127,7 @@ private void titleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e
                 }
                 else if (isOnDesktop)
                 {
-                    body = itemCount > 0 
+                    body = itemCount > 0
                         ? $"Remove this rack? {itemCount} item(s) will be returned to your Desktop, and the folder '{System.IO.Path.GetFileName(Instance.Folder)}' will be deleted."
                         : $"Remove this empty rack? The folder '{System.IO.Path.GetFileName(Instance.Folder)}' will be deleted.";
                 }
