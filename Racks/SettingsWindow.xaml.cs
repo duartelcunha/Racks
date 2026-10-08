@@ -108,8 +108,21 @@ namespace Racks
                 string originalBorderColor = frame.Instance.BorderColor;
                 bool originalBorderState = frame.Instance.BorderEnabled;
 
+                // The highlight is a preview: it must never be saved. SuspendPersistence keeps it
+                // out of the registry, so a crash or an abandoned hover cannot leave a green border.
+                void RestoreBorder()
+                {
+                    using (frame.Instance.SuspendPersistence())
+                    {
+                        frame.Instance.BorderEnabled = originalBorderState;
+                        frame.Instance.BorderColor = originalBorderColor;
+                    }
+                }
+
                 menuItem.Click += (_, _) =>
                 {
+                    // Open the dialog on the real style, not the green preview.
+                    RestoreBorder();
                     var dialog = new RackSettingsDialog(frame);
                     dialog.ShowDialog();
                     if (dialog.DialogResult == true)
@@ -121,14 +134,16 @@ namespace Racks
                 menuItem.MouseEnter += (_, _) =>
                 {
                     menuItem.Icon.Foreground = new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString("#7CFF00"));
-                    frame.Instance.BorderEnabled = true;
-                    frame.Instance.BorderColor = "#7CFF00";
+                    using (frame.Instance.SuspendPersistence())
+                    {
+                        frame.Instance.BorderEnabled = true;
+                        frame.Instance.BorderColor = "#7CFF00";
+                    }
                 };
                 menuItem.MouseLeave += (_, _) =>
                 {
                     menuItem.Icon.Foreground = Brushes.White;
-                    frame.Instance.BorderEnabled = originalBorderState;
-                    frame.Instance.BorderColor = originalBorderColor;
+                    RestoreBorder();
                 };
                 menuItems.Add(menuItem);
             }
@@ -166,23 +181,14 @@ namespace Racks
         }
         private void ResetDefaultFrameStyleButton_Click(object sender, RoutedEventArgs e)
         {
-            string[] keep = { "AutoUpdate", "blurBackground", "startOnLogin" };
+            if (!Racks.Views.RacksMessageBox.Confirm(
+                    "Reset the default rack style? New racks will use the built-in look again. " +
+                    "Your existing racks and your other settings are not changed.",
+                    "Reset default style", "Reset", "Cancel")) return;
+
             using RegistryKey? key = Registry.CurrentUser.OpenSubKey($"Software\\{InstanceController.appName}", writable: true);
             if (key == null) return;
-            foreach (var name in key.GetValueNames())
-            {
-                if (Array.IndexOf(keep, name) == -1)
-                {
-                    try
-                    {
-                        key.DeleteValue(name);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Error deleting registry key: {ex.Message}");
-                    }
-                }
-            }
+            Racks.Core.DefaultStyleReset.Run(key);
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)

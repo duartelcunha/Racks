@@ -1069,19 +1069,52 @@ public class Instance : INotifyPropertyChanged
             catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Instance global-defaults read failed: {ex.Message}"); }
         }
     }
+    // Properties that belong to one rack. Everything else a "default style" instance changes is
+    // written to the registry root as a global default (see OnPropertyChanged).
+    internal static readonly HashSet<string> NotGlobalProperties = new()
+    {
+        "PosX",
+        "PosY",
+        "Name",
+        "Folder",
+        "IsLocked",
+        "TitleText",
+        "ShowOnVirtualDesktops",
+        "SettingDefault"
+    };
+
+    private int _persistenceSuspended;
+
+    // While the returned scope is alive, property changes update the UI but are not saved. Use it
+    // for temporary previews (hover highlights) so a crash or an abandoned preview can never leave
+    // a preview value in the registry.
+    public IDisposable SuspendPersistence()
+    {
+        _persistenceSuspended++;
+        return new PersistenceScope(this);
+    }
+
+    private sealed class PersistenceScope : IDisposable
+    {
+        private Instance? _owner;
+        public PersistenceScope(Instance owner) => _owner = owner;
+        public void Dispose()
+        {
+            var owner = _owner;
+            _owner = null;
+            if (owner != null) owner._persistenceSuspended--;
+        }
+    }
+
     protected void OnPropertyChanged(string propertyName, string value)
     {
         if (isWindowClosing) return;
-        string[] notGlobalProperties = {
-            "PosX",
-            "PosY",
-            "Name",
-            "Folder",
-            "IsLocked",
-            "TitleText",
-            "ShowOnVirtualDesktops",
-            "SettingDefault"
-        };
+        if (_persistenceSuspended > 0)
+        {
+            // Preview mode: the UI still updates, nothing is written to the registry.
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            return;
+        }
 
         if (propertyName == "Name")
         {
@@ -1117,7 +1150,7 @@ public class Instance : INotifyPropertyChanged
                     MainWindow._controller.reg.WriteIntArrayToRegistry(propertyName, ShowOnVirtualDesktops, this);
                 }
             }
-            if (_settingDefault && !notGlobalProperties.Contains(propertyName))
+            if (_settingDefault && !NotGlobalProperties.Contains(propertyName))
             {
                 MainWindow._controller.reg.WriteToRegistryRoot(propertyName, value);
             }
