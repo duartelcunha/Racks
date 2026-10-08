@@ -1138,6 +1138,195 @@ namespace Racks.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Check GitHub for a newer version of Racks and install it..
+        /// </summary>
+        public static string Tray_CheckUpdates_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.CheckUpdates.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Export racks….
+        /// </summary>
+        public static string Tray_Export {
+            get {
+                return ResourceManager.GetString("Tray.Export", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Save the entire rack layout to a single JSON file (backup or transfer)..
+        /// </summary>
+        public static string Tray_Export_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.Export.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Open Racks on GitHub.
+        /// </summary>
+        public static string Tray_GitHub_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.GitHub.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Help / cheatsheet….
+        /// </summary>
+        public static string Tray_Help {
+            get {
+                return ResourceManager.GetString("Tray.Help", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Keybindings, gestures, and feature overview..
+        /// </summary>
+        public static string Tray_Help_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.Help.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Hide desktop icons.
+        /// </summary>
+        public static string Tray_HideDesktopIcons {
+            get {
+                return ResourceManager.GetString("Tray.HideDesktopIcons", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Hide racks on top-right corner.
+        /// </summary>
+        public static string Tray_HotCornerHide {
+            get {
+                return ResourceManager.GetString("Tray.HotCornerHide", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Move your cursor to the top-right of the primary monitor to peek the desktop. Move away to show racks again..
+        /// </summary>
+        public static string Tray_HotCornerHide_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.HotCornerHide.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Ice-rink physics.
+        /// </summary>
+        public static string Tray_IcePhysics {
+            get {
+                return ResourceManager.GetString("Tray.IcePhysics", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Racks glide, bounce off edges and push each other when dragged together. Turn off to keep racks perfectly still..
+        /// </summary>
+        public static string Tray_IcePhysics_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.IcePhysics.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Import racks….
+        /// </summary>
+        public static string Tray_Import {
+            get {
+                return ResourceManager.GetString("Tray.Import", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Load a rack layout from a JSON file. Replaces all current racks..
+        /// </summary>
+        public static string Tray_Import_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.Import.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Lock all racks.
+        /// </summary>
+        public static string Tray_LockAll {
+            get {
+                return ResourceManager.GetString("Tray.LockAll", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Prevents accidentally moving or resizing any rack. Per-rack lock is still available from the title-bar menu..
+        /// </summary>
+        public static string Tray_LockAll_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.LockAll.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to ✨ Magic Organize Desktop….
+        /// </summary>
+        public static string Tray_MagicOrganize {
+            get {
+                return ResourceManager.GetString("Tray.MagicOrganize", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Groups the files on your desktop into racks or folders. You see a preview and confirm before anything moves..
+        /// </summary>
+        public static string Tray_MagicOrganize_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.MagicOrganize.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to New folder rack.
+        /// </summary>
+        public static string Tray_NewFolderRack {
+            get {
+                return ResourceManager.GetString("Tray.NewFolderRack", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Rack bound to a folder you pick by dragging it in. Shows that folder&apos;s contents..
+        /// </summary>
+        public static string Tray_NewFolderRack_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.NewFolderRack.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to New rack.
+        /// </summary>
+        public static string Tray_NewRack {
+            get {
+                return ResourceManager.GetString("Tray.NewRack", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Empty rack. Files, folders and shortcuts you drop into it are moved into the rack. Hold Ctrl while dropping to create a shortcut instead..
+        /// </summary>
+        public static string Tray_NewRack_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.NewRack.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Add frame.
         /// </summary>
         public static string TrayContextMenu_AddFrame {
