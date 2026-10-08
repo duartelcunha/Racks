@@ -149,8 +149,7 @@ begin
   if (Returned = '0') and (Kept = '0') then Exit;
   Msg := 'Files from your racks were moved back to your Desktop (' + Returned + ').';
   if (Kept <> '') and (Kept <> '0') then
-    Msg := Msg + #13#10#13#10 + Kept + ' item(s) could not be moved back safely and were kept in:' +
-      #13#10 + Folder + #13#10#13#10 + 'Nothing was deleted.';
+    Msg := Msg + #13#10#13#10 + Kept + ' item(s) could not be moved back safely and were kept in:' + #13#10 + Folder + #13#10#13#10 + 'Nothing was deleted.';
   MsgBox(Msg, mbInformation, MB_OK);
 end;
 
@@ -164,9 +163,9 @@ begin
     // Before Inno removes anything: stop Racks, then let it hand the user's rack files back to
     // the Desktop and undo its shell changes. If this fails, [UninstallDelete] still only removes
     // empty folders, so no user file is lost.
-    Exec(ExpandConstant('{sys}	askkill.exe'), '/IM {#AppExeName} /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#AppExeName} /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Sleep(500);
-    CleanupReport := ExpandConstant('{tmp}acks-cleanup.txt');
+    CleanupReport := ExpandConstant('{tmp}\racks-cleanup.txt');
     Exec(ExpandConstant('{app}\{#AppExeName}'), '--uninstall-cleanup "' + CleanupReport + '"', '',
       SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
