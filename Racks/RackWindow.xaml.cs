@@ -94,7 +94,6 @@ namespace Racks
 
 
 #pragma warning disable CS0649
-        private FileItem? _draggedItem;
 #pragma warning restore CS0649
 
         private List<FileItem> _selectedItems = new List<FileItem>();
@@ -121,8 +120,6 @@ namespace Racks
         private int _snapDistance = 8;
         private int _gridSnapDistance = 10;
         private int _currentVD;
-        int _oriPosX, _oriPosY;
-        private bool _isBlack = true;
 
         private bool _canAutoClose = true;
         private bool _isLocked = false;
@@ -1092,21 +1089,6 @@ namespace Racks
 
                 var workingArea = Screen.FromPoint(System.Windows.Forms.Control.MousePosition).WorkingArea;
 
-                //if (Math.Abs(windowLeft - workingArea.Left) <= _snapDistance)
-                //{
-                //    newWindowLeft = (int)workingArea.Left;
-                //    _isOnEdge = true;
-                //}
-                //else if (Math.Abs(windowRight - workingArea.Right) <= _snapDistance)
-                //{
-                //    newWindowLeft = (int)(workingArea.Right - (windowRight - windowLeft));
-                //    _isOnEdge = true;
-                //}
-                //else
-                //{
-                //    _isOnEdge = false;
-                //}
-                // Debug.WriteLine(windowBottom + " " + (workingArea.Bottom <= windowBottom));
                 if (_isLeftButtonDown || initWindow)
                 {
                     POINT pt = new POINT { X = newWindowLeft, Y = newWindowTop };
@@ -1223,12 +1205,6 @@ namespace Racks
                 _inHandleWindowMove = false;
             }
         }
-
-        public void SetCornerRadius(Border border, double topLeft, double topRight, double bottomLeft, double bottomRight)
-        {
-            border.CornerRadius = new CornerRadius(topLeft, topRight, bottomLeft, bottomRight);
-        }
-
         private void SetAsDesktopChild()
         {
             // Explorer briefly has no SHELLDLL_DefView while it's restarting (a common
@@ -1823,8 +1799,6 @@ namespace Racks
             this.Opacity = Instance.IdleOpacity;
             _currentFolderPath = instance.Folder;
             _isLocked = instance.IsLocked;
-            _oriPosX = (int)instance.PosX;
-            _oriPosY = (int)instance.PosY;
             this.Top = instance.PosY;
             this.Left = instance.PosX;
 
@@ -2281,28 +2255,6 @@ namespace Racks
                 {
                     scrollViewer.ScrollToTop();
                 }
-                //WindowChrome.SetWindowChrome(this, Instance.IsLocked ?
-                //new WindowChrome
-                //{
-                //    ResizeBorderThickness = new Thickness(0),
-                //    CaptionHeight = 0
-                //}
-                //: _isOnBottom ?
-                //    new WindowChrome
-                //    {
-                //        GlassFrameThickness = new Thickness(5),
-                //        CaptionHeight = 0,
-                //        ResizeBorderThickness = new Thickness(0, Instance.Minimized ? 0 : 5, 5, 0),
-                //        CornerRadius = new CornerRadius(5)
-                //    } :
-                //    new WindowChrome
-                //    {
-                //        GlassFrameThickness = new Thickness(5),
-                //        CaptionHeight = 0,
-                //        ResizeBorderThickness = new Thickness(5, 0, 5, Instance.Minimized ? 0 : 5),
-                //        CornerRadius = new CornerRadius(5)
-                //    }
-                // );
             };
             _canAnimate = false;
             this.BeginAnimation(HeightProperty, animation);
@@ -2494,12 +2446,6 @@ namespace Racks
             Interop.SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, Interop.SWP_NOREDRAW | Interop.SWP_NOACTIVATE | Interop.SWP_NOMOVE | Interop.SWP_NOSIZE);
         }
         //public void KeepWindowBehind()
-        //{
-        //    bool keepOnBottom = this._keepOnBottom;
-        //    this._keepOnBottom = false;
-        //    Interop.SetWindowPos(new WindowInteropHelper(this).Handle, 1, 0, 0, 0, 0, 19U);
-        //    this._keepOnBottom = keepOnBottom;
-        //}
 
         private void ToggleHiddenFiles() => Instance.ShowHiddenFiles = !Instance.ShowHiddenFiles;
         // Apply the current Instance.IsLocked value to the running window (chrome + size
@@ -3031,41 +2977,6 @@ namespace Racks
         private bool RackProtectsFromDelete =>
             Instance.IsDesktopFilterRack
             || (Instance.IsShortcutsOnly && InstanceController.IsInsideVirtualFramesRoot(Instance.Folder));
-
-        private void MoveItemToPosition()
-        {
-            if (_itemUnderCursor == null || _draggedItem == null)
-            {
-                return;
-            }
-            _canChangeItemPosition = false;
-            if (_draggedItem != _itemUnderCursor)
-            {
-                try
-                {
-                    int fromIndex = FileItems.IndexOf(_draggedItem);
-                    int toIndex = FileItems.IndexOf(_itemUnderCursor);
-                    FileItems.Move(fromIndex, toIndex);
-                    _itemUnderCursor.IsMoveBarVisible = false;
-                    _draggedItem.IsSelected = false;
-                    _itemUnderCursor.Background = Brushes.Transparent;
-                    AddToCustomOrder(_draggedItem.FullPath!, toIndex);
-                }
-                catch
-                {
-                    Debug.WriteLine("Failed to swap items");
-                }
-            }
-        }
-        private void AddToCustomOrder(string path, int index)
-        {
-            var fileId = GetFileId(path).ToString();
-            var newList = new List<Tuple<string, string>>(Instance.CustomOrderFiles);
-            newList.RemoveAll(t => t.Item1 == fileId);
-            newList.Add(new Tuple<string, string>(fileId, index.ToString()));
-            Instance.CustomOrderFiles = newList;
-        }
-
         private void ReassignDesktopFileToThisRack(string fullPath)
         {
             if (Instance.AssignedFiles == null) Instance.AssignedFiles = new List<string>();
@@ -3096,8 +3007,6 @@ namespace Racks
                 }
             }
 
-            // Update C++ DLL hook via Shared Memory
-            MainWindow._mainWindow.RefreshGlobalHiddenFiles();
         }
 
         private void Window_Drop(object sender, DragEventArgs e)
@@ -3111,11 +3020,8 @@ namespace Racks
             });
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
-                if (_canChangeItemPosition)
-                {
-                    MoveItemToPosition();
-                    return;
-                }
+                // An in-rack reorder drag is in progress; its drop is not a file drop.
+                if (_canChangeItemPosition) return;
                 string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
 
                 // Drop semantics:
@@ -4124,121 +4030,6 @@ namespace Racks
                 return null;
             }
         }
-        public async Task<BitmapSource?> LoadUrlIconAsync(string path)
-        {
-            try
-            {
-                string iconFile = "";
-                int iconIndex = 0;
-                bool hasHttp = false;
-                bool hasHttps = false;
-                foreach (var line in File.ReadAllLines(path))
-                {
-                    // Debug.WriteLine(line);
-                    if (line.StartsWith("IconFile=", StringComparison.OrdinalIgnoreCase))
-                    {
-                        iconFile = line.Substring("IconFile=".Length).Trim();
-                    }
-                    else if (line.StartsWith("IconIndex=", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (int.TryParse(line.Substring("IconIndex=".Length).Trim(), out int i))
-                        {
-                            iconIndex = i;
-                        }
-                    }
-                    else if (iconFile == "")
-                    {
-                        if (line.StartsWith("URL=http://"))
-                        {
-                            hasHttp = true;
-                            break;
-                        }
-                        else if (line.StartsWith("URL=https://"))
-                        {
-                            hasHttps = true;
-                            break;
-                        }
-                    }
-                }
-                if (iconFile == "")
-                {
-                    if (hasHttp)
-                    {
-                        iconFile = GetDefaultBrowserPath("http");
-                    }
-                    else if (hasHttps)
-                    {
-                        iconFile = GetDefaultBrowserPath("https");
-                    }
-                }
-                if (!string.IsNullOrEmpty(iconFile) && File.Exists(iconFile))
-                {
-                    return await Task.Run(() =>
-                    {
-                        IntPtr[] icons = new IntPtr[1];
-                        int extracted = Interop.ExtractIconEx(iconFile, iconIndex, icons, null, 1);
-                        if (extracted > 0 && icons[0] != IntPtr.Zero)
-                        {
-                            var source = Imaging.CreateBitmapSourceFromHIcon(
-                                icons[0],
-                                Int32Rect.Empty,
-                                BitmapSizeOptions.FromEmptyOptions());
-                            Interop.DestroyIcon(icons[0]);
-                            if (Instance.ShowShortcutArrow)
-                            {
-                                IntPtr[] overlayIcons = new IntPtr[1];
-                                int overlayExtracted = Interop.ExtractIconEx(
-                                    Environment.SystemDirectory + "\\shell32.dll",
-                                    29,
-                                    overlayIcons,
-                                    null,
-                                    1);
-
-                                if (overlayExtracted > 0 && overlayIcons[0] != IntPtr.Zero)
-                                {
-                                    var overlay = Imaging.CreateBitmapSourceFromHIcon(
-                                        overlayIcons[0],
-                                        Int32Rect.Empty,
-                                        BitmapSizeOptions.FromEmptyOptions());
-                                    Interop.DestroyIcon(overlayIcons[0]);
-
-                                    var visual = new DrawingVisual();
-                                    using (var dc = visual.RenderOpen())
-                                    {
-                                        dc.DrawImage(source, new Rect(0, 0, source.PixelWidth, source.PixelHeight));
-                                        dc.DrawImage(overlay, new Rect(
-                                            source.PixelWidth - overlay.PixelWidth,
-                                            source.PixelHeight - overlay.PixelHeight,
-                                            overlay.PixelWidth,
-                                            overlay.PixelHeight));
-                                    }
-
-                                    var rtb = new RenderTargetBitmap(
-                                        source.PixelWidth,
-                                        source.PixelHeight,
-                                        source.DpiX,
-                                        source.DpiY,
-                                        PixelFormats.Pbgra32);
-                                    rtb.Render(visual);
-                                    rtb.Freeze();
-
-                                    return rtb;
-                                }
-                            }
-                            source.Freeze();
-                            return source;
-                        }
-                        return null;
-                    });
-                }
-                return null;
-            }
-            catch (Exception e)
-            {
-                Debug.WriteLine("Error loading URL icon: " + e.Message);
-                return await GetThumbnailAsync(path);
-            }
-        }
         private string GetDefaultBrowserPath(string protocol)
         {
             try
@@ -4284,11 +4075,6 @@ namespace Racks
             KeepWindowBehind();
             RegistryHelper rgh = new RegistryHelper(InstanceController.appName);
 
-            //if (rgh.KeyExistsRoot("blurBackground"))
-            //{
-            //    toBlur = (bool)rgh.ReadKeyValueRoot("blurBackground");
-            //}
-            // BackgroundType(toBlur);
         }
 
         public void ChangeBackgroundOpacity(int num)
@@ -4376,10 +4162,6 @@ namespace Racks
             {
 
             }
-        }
-        public void ChangeIsBlack(bool value)
-        {
-            _isBlack = value;
         }
         public void BackgroundType(bool toBlur)
         {
@@ -4523,28 +4305,6 @@ namespace Racks
                 RootScaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleAnim);
                 this.BeginAnimation(OpacityProperty, opacityAnim);
             }
-            //WindowChrome.SetWindowChrome(this, Instance.IsLocked ?
-            //new WindowChrome
-            //{
-            //    ResizeBorderThickness = new Thickness(0),
-            //    CaptionHeight = 0
-            //}
-            //: _isOnBottom ?
-            //    new WindowChrome
-            //    {
-            //        GlassFrameThickness = new Thickness(5),
-            //        CaptionHeight = 0,
-            //        ResizeBorderThickness = new Thickness(0, Instance.Minimized ? 0 : 5, 5, 0),
-            //        CornerRadius = new CornerRadius(5)
-            //    } :
-            //    new WindowChrome
-            //    {
-            //        GlassFrameThickness = new Thickness(5),
-            //        CaptionHeight = 0,
-            //        ResizeBorderThickness = new Thickness(5, 0, 5, Instance.Minimized ? 0 : 5),
-            //        CornerRadius = new CornerRadius(5)
-            //    }
-            //);
             HandleWindowMove(true);
             try
             {
@@ -5050,28 +4810,6 @@ namespace Racks
             {
                 _isLocked = !_isLocked;
                 ToggleIsLocked();
-                //WindowChrome.SetWindowChrome(this, Instance.IsLocked ?
-                //new WindowChrome
-                //{
-                //    ResizeBorderThickness = new Thickness(0),
-                //    CaptionHeight = 0
-                //}
-                //: _isOnBottom ?
-                //    new WindowChrome
-                //    {
-                //        GlassFrameThickness = new Thickness(5),
-                //        CaptionHeight = 0,
-                //        ResizeBorderThickness = new Thickness(5, Instance.Minimized ? 0 : 5, 5, 0),
-                //        CornerRadius = new CornerRadius(5)
-                //    } :
-                //    new WindowChrome
-                //    {
-                //        GlassFrameThickness = new Thickness(5),
-                //        CaptionHeight = 0,
-                //        ResizeBorderThickness = new Thickness(5, 0, 5, Instance.Minimized ? 0 : 5),
-                //        CornerRadius = new CornerRadius(5)
-                //    }
-                //);
 
             };
 

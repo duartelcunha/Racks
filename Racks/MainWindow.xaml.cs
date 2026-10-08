@@ -83,7 +83,6 @@ namespace Racks
             catch { versionHeader.ToolTip = "Racks"; }
             _controller = new InstanceController();
             _controller.InitInstances();
-            RefreshGlobalHiddenFiles();
 
             // Auto-routing: any file landing on the user's Desktop that matches a
             // rack's AutoRouteRegex is moved into that rack.
@@ -170,13 +169,6 @@ namespace Racks
             }
             return false;
         }
-
-
-        public void RefreshGlobalHiddenFiles()
-        {
-            // Now handled entirely by RackWindow reporting to DesktopIconManager.
-        }
-
         private void addDesktopFrame_Click(object sender, RoutedEventArgs e)
         {
             // New default: virtual rack. User can drop a shortcut/file/folder in and
