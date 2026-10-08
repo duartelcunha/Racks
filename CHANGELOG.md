@@ -4,33 +4,43 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-08
+
+A stabilisation release: it fixes the bugs found in a full audit of the code.
+
+### Fixed: Settings and your data
+- Racks lost their "transparent background" setting on restart. It is now saved and loaded.
+- Renaming a rack (or choosing a new folder for a missing-folder rack) could drop settings (drop shadow, gradient, disabled animations, and the files a desktop rack owns), and picking a folder with the same name deleted the rack's saved settings entirely, so it vanished on restart. Both save paths now share one list of settings.
+- "Reset default style" no longer wipes unrelated settings. It used to delete every saved global value, which turned physics, hide-icons and start-on-login back to defaults and replayed the first-run welcome and one-time migrations. It now removes only the default rack style, and asks for confirmation first.
+- Hovering a rack in Settings > Manage racks no longer saves its green highlight. A crash while hovering could leave the rack's border green for good.
+- New racks move dropped files by default (Ctrl while dropping still makes a shortcut), matching the README and Help. The default used to say "link" while the tray menu created racks that moved.
+- The tray's "Lock all racks" switch now shows the real state: on when every rack is locked, refreshed each time the menu opens.
+- Settings > "Auto update" now does what it says: with it on, Racks checks GitHub for a new release shortly after startup and shows a toast if there is one. It used to add or remove Racks from Windows startup (that is the tray's "Start on login") and never checked for updates. It is off by default.
+
+### Fixed: Desktop and Explorer
+- **"Hide desktop icons" also hid every rack.** Racks live inside the desktop window, and the option hid that whole window. It now hides only the icon list, so racks stay visible.
+- Desktop icons hidden by Racks are shown again when Racks exits normally (tray Exit, an update, Windows shutdown), when you uninstall, and a desktop left blank by an older version is repaired at startup. Icons you hid yourself with Windows' own option are never touched.
+- Magic Organize placed racks using screen pixels as if they were WPF units, so on a scaled display (125%, 150%...) the grid was off-centre. It now converts first.
+- Quick Access pinning no longer depends on English and Portuguese menu captions. It pins once with the language-independent command and checks first whether the folder is already pinned.
+- Sorting: clicking Name, Date modified, Date created or Type in a rack's sort menu never flipped between ascending and descending, and Size flipped from the wrong starting points. Clicking the active key now flips its direction; another key starts ascending.
+
+### Fixed: Stability and speed
+- When Explorer restarts, racks no longer freeze Racks (and the tray icon) for up to 10 seconds waiting for the desktop window. They check once, keep checking in the background for up to 30 seconds, and attach as soon as it appears.
+- A rack no longer piles up timers and event handlers over a long session: the mouse-leave timer is created once instead of on every mouse-leave, the shell right-click menu keeps at most one "closed" and one "rename" handler (a rename handler from a menu where Rename was never chosen used to fire on a later menu), and list items are wired once instead of every time the list refreshes.
+- A rack showing a folder no longer reloads over and over while a file in it is being downloaded or copied. Content changes are now reported once the file has been quiet for a moment; new, deleted and renamed files still show up immediately.
+- If the folder watcher loses events (a burst of changes overflowed its buffer), the rack now rebuilds the watcher and rescans instead of silently going stale.
+- `crash.log` no longer grows forever: at 1 MB it moves to `crash.log.1` (replacing an older one), so at most about 2 MB is kept. The uninstaller removes both.
+- When Racks swallows an unexpected error to keep running, it now says so once per session in a notification and points to `crash.log`. Before, you never knew anything had gone wrong.
+
+### Fixed: Updates and shortcuts
+- "Check for updates" now reports a failure the first time too. It used to say nothing when GitHub could not be reached on the first click.
+- Installing an update now closes Racks normally instead of killing it, so the single-instance lock is released and the new version starts cleanly.
+- If another app already owns Ctrl+Shift+Space or Ctrl+Shift+N, Racks now says so in a notification instead of the shortcut silently doing nothing.
+
 ### Changed
 - Removed about 1,150 lines of dead code (an unused second file loader and thumbnail service, unused menu and drag helpers, leftover commented-out blocks). No behaviour change; `RackWindow.xaml.cs` went from 5,870 to 5,603 lines.
 - Repository maintenance: cleaned contributor metadata from the git history.
-
-### Fixed
-- When Explorer restarts, racks no longer freeze Racks (and the tray icon) for up to 10 seconds waiting for the desktop window. They check once, keep checking in the background for up to 30 seconds, and attach as soon as it appears.
-- A rack no longer piles up timers and event handlers over a long session: the mouse-leave timer is created once instead of on every mouse-leave, the shell right-click menu keeps at most one "closed" and one "rename" handler (a rename handler from a menu where Rename was never chosen used to fire on a later menu), and list items are wired once instead of every time the list refreshes.
-- **"Hide desktop icons" also hid every rack.** Racks live inside the desktop window, and the option hid that whole window. It now hides only the icon list, so racks stay visible.
-- Desktop icons hidden by Racks are shown again when Racks exits normally (tray Exit, an update, Windows shutdown), when you uninstall, and a desktop left blank by an older version is repaired at startup. Icons you hid yourself with Windows' own option are never touched.
-- Sorting: clicking Name, Date modified, Date created or Type in a rack's sort menu never flipped between ascending and descending, and Size flipped from the wrong starting points. Clicking the active key now flips its direction; another key starts ascending.
-- Magic Organize placed racks using screen pixels as if they were WPF units, so on a scaled display (125%, 150%...) the grid was off-centre. It now converts first.
-- New racks move dropped files by default (Ctrl while dropping still makes a shortcut), matching the README and Help. The default used to say "link" while the tray menu created racks that moved.
-- Quick Access pinning no longer depends on English and Portuguese menu captions. It pins once with the language-independent command and checks first whether the folder is already pinned.
 - Comments and the Magic Organize group-name code no longer claim auto-route makes shortcuts; it moves files.
-- `crash.log` no longer grows forever: at 1 MB it moves to `crash.log.1` (replacing an older one), so at most about 2 MB is kept. The uninstaller removes both.
-- When Racks swallows an unexpected error to keep running, it now says so once per session in a notification and points to `crash.log`. Before, you never knew anything had gone wrong.
-- A rack showing a folder no longer reloads over and over while a file in it is being downloaded or copied. Content changes are now reported once the file has been quiet for a moment; new, deleted and renamed files still show up immediately.
-- If the folder watcher loses events (a burst of changes overflowed its buffer), the rack now rebuilds the watcher and rescans instead of silently going stale.
-- "Check for updates" now reports a failure the first time too. It used to say nothing when GitHub could not be reached on the first click.
-- Installing an update now closes Racks normally instead of killing it, so the single-instance lock is released and the new version starts cleanly.
-- Settings > "Auto update" now does what it says: with it on, Racks checks GitHub for a new release shortly after startup and shows a toast if there is one. It used to add or remove Racks from Windows startup (that is the tray's "Start on login") and never checked for updates. It is off by default.
-- The tray's "Lock all racks" switch now shows the real state: on when every rack is locked, refreshed each time the menu opens.
-- If another app already owns Ctrl+Shift+Space or Ctrl+Shift+N, Racks now says so in a notification instead of the shortcut silently doing nothing.
-- "Reset default style" no longer wipes unrelated settings. It used to delete every saved global value, which turned physics, hide-icons and start-on-login back to defaults and replayed the first-run welcome and one-time migrations. It now removes only the default rack style, and asks for confirmation first.
-- Hovering a rack in Settings > Manage racks no longer saves its green highlight. A crash while hovering could leave the rack's border green for good.
-- Racks lost their "transparent background" setting on restart. It is now saved and loaded.
-- Renaming a rack (or choosing a new folder for a missing-folder rack) could drop settings (drop shadow, gradient, disabled animations, and the files a desktop rack owns), and picking a folder with the same name deleted the rack's saved settings entirely, so it vanished on restart. Both save paths now share one list of settings.
 
 ## [1.2.1] - 2026-10-08
 

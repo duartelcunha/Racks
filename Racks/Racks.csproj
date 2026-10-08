@@ -11,7 +11,7 @@
     <Product>Racks</Product>
     <AssemblyTitle>Racks</AssemblyTitle>
     <Description>Racks — fast, lightweight desktop organization for Windows.</Description>
-    <Version>1.2.1</Version>
+    <Version>1.3.0</Version>
     <PackageIcon>ico.png</PackageIcon>
     <ApplicationIcon>Icon\ico.ico</ApplicationIcon>
     <Platforms>AnyCPU;x64</Platforms>
