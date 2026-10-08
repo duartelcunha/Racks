@@ -36,6 +36,9 @@ Strings live in `Racks/Properties/Lang.resx` (English) and one `Lang.<culture>.r
 translate the values, keep the `name` attributes unchanged, and build. `dotnet test` checks that every
 key in a translation exists in `Lang.resx`, and lists the keys each language is still missing.
 
+**Preview a language** without changing Windows: set `RACKS_LANG` before starting Racks, for example
+`$env:RACKS_LANG = "zh-CN"; dotnet run --project Racks/Racks.csproj`.
+
 Some interface text is still hardcoded in English. Moving it into `Lang.resx` is tracked in issue #3,
 and PRs that do it are welcome.
 

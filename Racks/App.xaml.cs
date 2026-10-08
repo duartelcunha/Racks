@@ -76,6 +76,20 @@ namespace Racks
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            // Translators: set RACKS_LANG=zh-CN (any culture name) to preview a language without
+            // changing the Windows display language. Unknown names are ignored.
+            var previewLang = Environment.GetEnvironmentVariable("RACKS_LANG");
+            if (!string.IsNullOrWhiteSpace(previewLang))
+            {
+                try
+                {
+                    var culture = System.Globalization.CultureInfo.GetCultureInfo(previewLang.Trim());
+                    System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = culture;
+                    System.Globalization.CultureInfo.CurrentUICulture = culture;
+                    Racks.Properties.Lang.Culture = culture;
+                }
+                catch (System.Globalization.CultureNotFoundException) { }
+            }
             // Belt for ReDoS: cap the runtime of ANY regex without an explicit timeout, so a
             // catastrophic-backtracking pattern (from the registry or an imported layout) can
             // never pin a thread. Explicit-timeout call sites (Util.SafeRegex) still win; this
