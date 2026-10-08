@@ -46,6 +46,13 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   `Global\\`)* ✅ Aplicado (Lote A #12).
 - **INV-PROC-1** Nunca passar strings externas por `cmd.exe /c` concatenado; usar `ArgumentList`
   ou a API nativa. *(mecânica: grep "cmd.exe" + interpolação)*
+- **INV-UNINSTALL-1** O uninstall nunca apaga dados de utilizador. `Racks.exe --uninstall-cleanup`
+  (chamado pelo `[Code]` do `installer/Racks.iss` em `usUninstall`, antes de o Inno apagar ficheiros)
+  devolve ao Desktop tudo o que está em `RacksWorkspace` e `%AppData%\Racks\VirtualFrames`: só
+  renames no mesmo volume, nunca sobrescreve (sufixo "(from Racks)"), junções/symlinks e nomes
+  extra de hardlinks são desligados (os dados ficam no alvo), e o que não puder ser movido fica numa
+  `RacksWorkspace` visível com nota. `[UninstallDelete]` só remove essas pastas com `dirifempty`.
+  *(teste: `UninstallCleanupTests`; revisão: nenhum `filesandordirs` sobre pastas com dados)*
 - **INV-IDS-1** Identificadores persistidos são leaf names por contrato: no load, descartar entradas
   onde `Path.GetFileName(name) != name`; após cada `Path.Combine` com dados guardados, afirmar que o
   path resolvido fica sob a raiz esperada. *(teste)*
