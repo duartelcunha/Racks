@@ -126,8 +126,10 @@ namespace Racks
             {
                 bool hide = _controller.reg.ReadKeyValueRoot("HideDesktopIcons") as bool? ?? false;
                 HideDesktopIconsToggle.IsChecked = hide;
-                if (hide) ApplyDesktopIconsHidden(true);
+                if (hide) DesktopIcons.SetHidden(true);
             }
+            // A previous version (or one that was killed) may have left the whole desktop hidden.
+            DesktopIcons.EnsureDefViewVisible();
             if (_controller.reg.KeyExistsRoot("HotCornerHide")
                 && _controller.reg.ReadKeyValueRoot("HotCornerHide") as bool? == true)
             {
@@ -149,7 +151,7 @@ namespace Racks
 
             POINT pt = new POINT { X = e.Position.X, Y = e.Position.Y };
             IntPtr hwndUnderCursor = WindowFromPoint(pt);
-            IntPtr desktopListView = GetDesktopListViewHandle();
+            IntPtr desktopListView = DesktopIcons.FindIconList();
 
             if (hwndUnderCursor == desktopListView && !IsDesktopIconHit(pt))
             {
@@ -474,23 +476,6 @@ namespace Racks
             }
             catch (Exception ex) { Debug.WriteLine($"TrayIcon register failed: {ex.Message}"); }
         }
-        private static IntPtr GetDesktopListViewHandle()
-        {
-            IntPtr progman = FindWindow("Progman", null!);
-            IntPtr defView = FindWindowEx(progman, IntPtr.Zero, "SHELLDLL_DefView", null!);
-
-            if (defView == IntPtr.Zero)
-            {
-                IntPtr workerw = IntPtr.Zero;
-                do
-                {
-                    workerw = FindWindowEx(IntPtr.Zero, workerw, "WorkerW", null!);
-                    defView = FindWindowEx(workerw, IntPtr.Zero, "SHELLDLL_DefView", null!);
-                }
-                while (workerw != IntPtr.Zero && defView == IntPtr.Zero);
-            }
-            return FindWindowEx(defView, IntPtr.Zero, "SysListView32", "FolderView");
-        }
         private void CloseHide()
         {
             Task.Run(() =>
@@ -640,35 +625,8 @@ namespace Racks
         {
             bool hide = HideDesktopIconsToggle.IsChecked == true;
             _controller.reg.WriteToRegistryRoot("HideDesktopIcons", hide);
-            ApplyDesktopIconsHidden(hide);
+            DesktopIcons.SetHidden(hide);
         }
-
-        private static void ApplyDesktopIconsHidden(bool hide)
-        {
-            try
-            {
-                IntPtr defView = GetDesktopShellView();
-                if (defView != IntPtr.Zero) ShowWindow(defView, hide ? SW_HIDE : SW_SHOW);
-            }
-            catch (Exception ex) { Debug.WriteLine($"ApplyDesktopIconsHidden failed: {ex.Message}"); }
-        }
-
-        // Find the SHELLDLL_DefView (the actual desktop-icon host), regardless of
-        // whether wallpaper slideshow is on (Progman) or off (WorkerW).
-        private static IntPtr GetDesktopShellView()
-        {
-            IntPtr progman = FindWindow("Progman", null!);
-            IntPtr defView = FindWindowEx(progman, IntPtr.Zero, "SHELLDLL_DefView", null!);
-            if (defView != IntPtr.Zero) return defView;
-            IntPtr workerw = IntPtr.Zero;
-            do
-            {
-                workerw = FindWindowEx(IntPtr.Zero, workerw, "WorkerW", null!);
-                defView = FindWindowEx(workerw, IntPtr.Zero, "SHELLDLL_DefView", null!);
-            } while (workerw != IntPtr.Zero && defView == IntPtr.Zero);
-            return defView;
-        }
-
         private void AutorunToggle_CheckChanged(object sender, RoutedEventArgs e)
         {
             if ((bool)AutorunToggle.IsChecked!)

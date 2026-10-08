@@ -11,32 +11,6 @@ namespace Racks.Util
 {
     public static class Interop
     {
-        public static void SetDesktopIconsVisibility(bool visible)
-        {
-            IntPtr hwnd = FindWindow("Progman", "Program Manager");
-            IntPtr defView = FindWindowEx(hwnd, IntPtr.Zero, "SHELLDLL_DefView", null!);
-
-            if (defView == IntPtr.Zero)
-            {
-                IntPtr workerW = IntPtr.Zero;
-                do
-                {
-                    workerW = FindWindowEx(IntPtr.Zero, workerW, "WorkerW", null!);
-                    if (workerW != IntPtr.Zero)
-                    {
-                        defView = FindWindowEx(workerW, IntPtr.Zero, "SHELLDLL_DefView", null!);
-                        if (defView != IntPtr.Zero)
-                            break;
-                    }
-                } while (workerW != IntPtr.Zero);
-            }
-
-            if (defView != IntPtr.Zero)
-            {
-                ShowWindow(defView, visible ? 5 : 0); // SW_SHOW = 5, SW_HIDE = 0
-            }
-        }
-
         [DllImport("user32.dll")]
         public static extern uint GetDpiForWindow(IntPtr hwnd);
         [DllImport("user32.dll")]
@@ -51,6 +25,10 @@ namespace Racks.Util
         public static extern bool SetFocus(IntPtr hWnd);
         [DllImport("user32.dll")]
         public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool IsWindowVisible(IntPtr hWnd);
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetForegroundWindow(IntPtr hWnd);

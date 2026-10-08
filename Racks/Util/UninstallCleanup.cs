@@ -116,7 +116,7 @@ public static class UninstallCleanup
         // 6. A force-killed Racks can leave the desktop icons hidden.
         if (touchShell)
         {
-            try { Interop.SetDesktopIconsVisibility(true); }
+            try { DesktopIcons.ForceShow(); }
             catch (Exception ex) { report.Errors.Add($"desktop icons: {ex.Message}"); }
         }
 

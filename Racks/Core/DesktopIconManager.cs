@@ -116,21 +116,5 @@ namespace Racks.Core
                 System.Diagnostics.Debug.WriteLine($"Failed to create library: {ex.Message}");
             }
         }
-
-        public static void StartHook()
-        {
-            // No-op. Hook is removed.
-        }
-
-        public static void StopHook()
-        {
-            // No-op. Hook is removed.
-        }
-
-        public static void SetHiddenFilesForInstance(object instance, System.Collections.Generic.IEnumerable<string> items)
-        {
-            // Desktop Filter logic has been replaced by physical file moving to RacksWorkspace.
-            // This function is kept to avoid compilation errors during transition, but it does nothing.
-        }
     }
 }
