@@ -10,7 +10,7 @@ namespace Racks.Tests.Guards;
 /// </summary>
 public class ArchitectureRatchetTests
 {
-    private static readonly string Root = FindRepoRoot();
+    private static readonly string Root = RepoPaths.Root;
     private static readonly Dictionary<string, int> Baseline = LoadBaseline();
 
     [Fact]
@@ -43,13 +43,6 @@ public class ArchitectureRatchetTests
         Directory.EnumerateFiles(Path.Combine(Root, "Racks"), pattern, SearchOption.AllDirectories)
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
                      && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"));
-
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "Racks.sln"))) dir = dir.Parent;
-        return dir?.FullName ?? throw new InvalidOperationException("Racks.sln not found above " + AppContext.BaseDirectory);
-    }
 
     private static Dictionary<string, int> LoadBaseline() =>
         JsonSerializer.Deserialize<Dictionary<string, int>>(

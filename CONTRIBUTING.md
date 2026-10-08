@@ -21,13 +21,23 @@ dotnet run --project Racks/Racks.csproj
 ## Translations
 
 Strings live in `Racks/Properties/Lang.resx` (English) and one `Lang.<culture>.resx` per language
-(it-IT, cs-CZ, pl-PL, ko-KR, es-ES, zh-CN). To improve a language, edit its `.resx` file and open a PR.
-A missing key falls back to English.
+(it-IT, cs-CZ, pl-PL, ko-KR, es-ES, zh-CN). A key missing from a language falls back to English.
 
-Some interface text is still hardcoded in English (for example parts of the tray menu). A cleanup of
-this is planned; see issue #3. If you want to help before that lands, a PR that moves strings into
-`Lang.resx` is welcome. Until the resource class is generated at build time, new keys must also be
-added by hand to `Racks/Properties/Lang.Designer.cs`.
+**Improve a language:** edit its `Lang.<culture>.resx` and open a PR. No C# needed.
+
+**Add a new string:**
+1. Add a `<data name="Area.Thing">` entry to `Lang.resx` (English).
+2. Run `dotnet build`. `Racks/Properties/Lang.Designer.cs` is regenerated and `Lang.Area_Thing` now exists
+   (dots become underscores).
+3. Use it from XAML as `{x:Static prop:Lang.Area_Thing}` or from C# as `Lang.Area_Thing`.
+4. Commit `Lang.resx` and `Lang.Designer.cs` together. CI fails if the Designer file is out of date.
+
+**Add a new language:** copy `Lang.resx` to `Lang.<culture>.resx` (for example `Lang.ja-JP.resx`),
+translate the values, keep the `name` attributes unchanged, and build. `dotnet test` checks that every
+key in a translation exists in `Lang.resx`, and lists the keys each language is still missing.
+
+Some interface text is still hardcoded in English. Moving it into `Lang.resx` is tracked in issue #3,
+and PRs that do it are welcome.
 
 ## Security
 

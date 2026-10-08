@@ -34,6 +34,12 @@ jobs:
       - name: Build (Release)
         run: dotnet build Racks.sln -c Release --no-restore
 
+      - name: Check Lang.Designer.cs is up to date
+        shell: pwsh
+        run: |
+          git diff --exit-code -- Racks/Properties/Lang.Designer.cs
+          if ($LASTEXITCODE -ne 0) { throw "Lang.Designer.cs changed during the build. Build locally and commit it with your Lang.resx change." }
+
       - name: Test
         run: dotnet test Racks.sln -c Release --no-build --logger "trx;LogFileName=test-results.trx" --results-directory TestResults
 

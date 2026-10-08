@@ -10,6 +10,8 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 
 - CI: format check, tests, test-result and portable-build artifacts. New `release.yml` builds the installer, portable zip and `SHA256SUMS.txt` when a `v*` tag is pushed.
 
+- `dotnet build` regenerates `Lang.Designer.cs` from `Lang.resx`, so new strings no longer need Visual Studio. Localization tests check translation keys and satellite loading.
+
 ### Changed
 - Removed unused `Microsoft.CodeAnalysis` and `Microsoft.Windows.CsWinRT`; a single `<Version>` in the csproj.
 - Repository hygiene: `.editorconfig`, `Directory.Build.props`, `global.json`, Dependabot, PR template.
