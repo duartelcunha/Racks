@@ -4,6 +4,9 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 
 ## [Unreleased]
 
+### Changed
+- Every window now uses one shared font list with Chinese, Japanese and Korean fallbacks, and the app tells WPF the interface language (not the regional format), so translated text picks the right glyph forms. `RACKS_LANG` previews a language, including its fonts.
+
 ## [1.3.0] - 2026-10-08
 
 A stabilisation release: it fixes the bugs found in a full audit of the code.

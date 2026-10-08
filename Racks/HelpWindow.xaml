@@ -8,7 +8,7 @@
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="False"
         Foreground="White"
-        FontFamily="Segoe UI Variable Display, Segoe UI"
+        FontFamily="{StaticResource AppFont}"
         Title="Racks — cheatsheet"
         Width="620"
         Height="660">

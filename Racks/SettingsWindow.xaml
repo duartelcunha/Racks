@@ -10,7 +10,7 @@
         mc:Ignorable="d"
         Background="Transparent"
         AllowsTransparency="True"
-        FontFamily="Segoe UI Variable Display, Segoe UI"
+        FontFamily="{StaticResource AppFont}"
         WindowStyle="None"
         ResizeMode="NoResize"
         Height="650"

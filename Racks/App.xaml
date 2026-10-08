@@ -6,6 +6,9 @@
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
     <Application.Resources>
         <ResourceDictionary>
+            <!-- One UI font for every window. The Chinese, Japanese and Korean fonts are fallbacks so
+                 translated text never renders as empty boxes. -->
+            <FontFamily x:Key="AppFont">Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI, Yu Gothic UI, Malgun Gothic, Segoe UI Emoji</FontFamily>
             <ResourceDictionary.MergedDictionaries>
                 <ui:ThemesDictionary Theme="Dark" />
                 <ui:ControlsDictionary />
