@@ -20,6 +20,9 @@ namespace Racks
         // this proves it's OUR repo's release asset and not an arbitrary URL from the JSON.
         private const string TrustedAssetHost = "github.com";
         private const string TrustedAssetPathPrefix = "/duartelcunha/Racks/releases/download/";
+        // Releases are read from this repository only.
+        public const string LatestReleaseApi = "https://api.github.com/repos/duartelcunha/Racks/releases/latest";
+
         public static async Task CheckUpdateAsync(string url, bool showToastIfNoUpdate)
         {
             _url = url;

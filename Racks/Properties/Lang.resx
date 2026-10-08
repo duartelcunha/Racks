@@ -599,4 +599,13 @@
   <data name="Tray.Help.ToolTip" xml:space="preserve">
     <value>Keybindings, gestures, and feature overview.</value>
   </data>
+  <data name="Hotkey.Conflict.Title" xml:space="preserve">
+    <value>Some Racks shortcuts are unavailable</value>
+  </data>
+  <data name="Hotkey.Conflict.QuickFinder" xml:space="preserve">
+    <value>Ctrl+Shift+Space (Quick Finder) is already used by another app.</value>
+  </data>
+  <data name="Hotkey.Conflict.NewRack" xml:space="preserve">
+    <value>Ctrl+Shift+N (new rack) is already used by another app.</value>
+  </data>
 </root>

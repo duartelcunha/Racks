@@ -526,6 +526,33 @@ namespace Racks.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Ctrl+Shift+N (new rack) is already used by another app..
+        /// </summary>
+        public static string Hotkey_Conflict_NewRack {
+            get {
+                return ResourceManager.GetString("Hotkey.Conflict.NewRack", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Ctrl+Shift+Space (Quick Finder) is already used by another app..
+        /// </summary>
+        public static string Hotkey_Conflict_QuickFinder {
+            get {
+                return ResourceManager.GetString("Hotkey.Conflict.QuickFinder", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Some Racks shortcuts are unavailable.
+        /// </summary>
+        public static string Hotkey_Conflict_Title {
+            get {
+                return ResourceManager.GetString("Hotkey.Conflict.Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Racks is already running.
         /// </summary>
         public static string Racks_AlreadyRunning {

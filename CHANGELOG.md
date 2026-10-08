@@ -5,6 +5,9 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 ## [Unreleased]
 
 ### Fixed
+- Settings > "Auto update" now does what it says: with it on, Racks checks GitHub for a new release shortly after startup and shows a toast if there is one. It used to add or remove Racks from Windows startup (that is the tray's "Start on login") and never checked for updates. It is off by default.
+- The tray's "Lock all racks" switch now shows the real state: on when every rack is locked, refreshed each time the menu opens.
+- If another app already owns Ctrl+Shift+Space or Ctrl+Shift+N, Racks now says so in a notification instead of the shortcut silently doing nothing.
 - "Reset default style" no longer wipes unrelated settings. It used to delete every saved global value, which turned physics, hide-icons and start-on-login back to defaults and replayed the first-run welcome and one-time migrations. It now removes only the default rack style, and asks for confirmation first.
 - Hovering a rack in Settings > Manage racks no longer saves its green highlight. A crash while hovering could leave the rack's border green for good.
 - Racks lost their "transparent background" setting on restart. It is now saved and loaded.
