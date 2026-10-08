@@ -9,6 +9,8 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 - Repository maintenance: cleaned contributor metadata from the git history.
 
 ### Fixed
+- **"Hide desktop icons" also hid every rack.** Racks live inside the desktop window, and the option hid that whole window. It now hides only the icon list, so racks stay visible.
+- Desktop icons hidden by Racks are shown again when Racks exits normally (tray Exit, an update, Windows shutdown), when you uninstall, and a desktop left blank by an older version is repaired at startup. Icons you hid yourself with Windows' own option are never touched.
 - Sorting: clicking Name, Date modified, Date created or Type in a rack's sort menu never flipped between ascending and descending, and Size flipped from the wrong starting points. Clicking the active key now flips its direction; another key starts ascending.
 - Magic Organize placed racks using screen pixels as if they were WPF units, so on a scaled display (125%, 150%...) the grid was off-centre. It now converts first.
 - New racks move dropped files by default (Ctrl while dropping still makes a shortcut), matching the README and Help. The default used to say "link" while the tray menu created racks that moved.

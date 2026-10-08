@@ -2835,12 +2835,6 @@ namespace Racks
             {
                 FileItems.Add(fileItem);
             }
-
-            if (Instance.IsDesktopFilterRack)
-            {
-                var names = FileItems.Select(f => f.Name).ToList();
-                Racks.Core.DesktopIconManager.SetHiddenFilesForInstance(Instance, names);
-            }
         }
         private void FileListView_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
