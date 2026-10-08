@@ -7,8 +7,8 @@ using System.Windows.Threading;
 namespace Racks.Util
 {
     // Watches the user's Desktop for newly-created files. Any file whose name matches
-    // the first rack's AutoRouteRegex gets a .lnk created in that rack's folder; the
-    // original on the Desktop is left alone (consistent with the safe-drop philosophy).
+    // the first rack's AutoRouteRegex is moved into that rack's folder (the same as dropping it
+    // there by hand).
     // First-match-wins keeps behavior deterministic when rules overlap.
     public sealed class DesktopRouter : IDisposable
     {

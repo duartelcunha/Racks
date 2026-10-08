@@ -167,11 +167,7 @@ namespace Racks.Core
             return word == null ? null : char.ToUpper(word[0]) + word.Substring(1);
         }
 
-        private static string SingleName(FileData f)
-        {
-            var cat = GetCategoryNameForExtension(f.Extension);
-            return cat == "Misc" ? "Misc" : cat;
-        }
+        private static string SingleName(FileData f) => GetCategoryNameForExtension(f.Extension);
 
         private static void AddGroup(List<ClusterGroup> result, string name, List<FileData> items)
         {
@@ -252,7 +248,7 @@ namespace Racks.Core
             }
         }
 
-        private static string GetCategoryNameForExtension(string ext)
+        internal static string GetCategoryNameForExtension(string ext)
         {
             switch (ext)
             {

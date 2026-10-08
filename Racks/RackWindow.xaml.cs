@@ -5225,37 +5225,32 @@ namespace Racks
 
             nameMenuItem.Click += async (s, args) =>
             {
-                if (Instance.SortBy % 2 != 0 || Instance.SortBy != 1) Instance.SortBy = 1;
-                else Instance.SortBy = 2;
+                Instance.SortBy = SortToggle.Next(Instance.SortBy, 1);
                 UpdateIcons();
                 SortItems();
             };
             dateModifiedMenuItem.Click += async (s, args) =>
             {
-                if (Instance.SortBy % 2 != 0 || Instance.SortBy != 3) Instance.SortBy = 3;
-                else Instance.SortBy = 4;
+                Instance.SortBy = SortToggle.Next(Instance.SortBy, 3);
                 UpdateIcons();
                 SortItems();
             };
 
             dateCreatedMenuItem.Click += async (s, args) =>
             {
-                if (Instance.SortBy % 2 != 0 || Instance.SortBy != 5) Instance.SortBy = 5;
-                else Instance.SortBy = 6;
+                Instance.SortBy = SortToggle.Next(Instance.SortBy, 5);
                 UpdateIcons();
                 SortItems();
             };
             fileTypeMenuItem.Click += async (s, args) =>
             {
-                if (Instance.SortBy % 2 != 0 || Instance.SortBy != 7) Instance.SortBy = 7;
-                else Instance.SortBy = 8;
+                Instance.SortBy = SortToggle.Next(Instance.SortBy, 7);
                 UpdateIcons();
                 SortItems();
             };
             fileSizeMenuItem.Click += (s, args) =>
             {
-                if (Instance.SortBy % 2 != 0 && Instance.SortBy != 9) Instance.SortBy = 9;
-                else Instance.SortBy = 10;
+                Instance.SortBy = SortToggle.Next(Instance.SortBy, 9);
                 UpdateIcons();
                 SortItems();
             };
