@@ -7,22 +7,54 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    name: Build (Release)
+    name: Build, format, test
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up .NET 10
+      - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
 
       - name: Restore
-        run: dotnet restore Racks/Racks.csproj
+        run: dotnet restore Racks.sln
 
-      - name: Build
-        run: dotnet build Racks/Racks.csproj -c Release --no-restore
+      - name: Check formatting
+        run: dotnet format whitespace Racks.sln --verify-no-changes --no-restore
+
+      - name: Build (Release)
+        run: dotnet build Racks.sln -c Release --no-restore
+
+      - name: Check Lang.Designer.cs is up to date
+        shell: pwsh
+        run: |
+          git diff --exit-code -- Racks/Properties/Lang.Designer.cs
+          if ($LASTEXITCODE -ne 0) { throw "Lang.Designer.cs changed during the build. Build locally and commit it with your Lang.resx change." }
+
+      - name: Test
+        run: dotnet test Racks.sln -c Release --no-build --logger "trx;LogFileName=test-results.trx" --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/*.trx
+
+      - name: Publish (framework-dependent, win-x64)
+        run: dotnet publish Racks/Racks.csproj -c Release -r win-x64 --self-contained false -o publish --no-restore
+
+      - name: Upload portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Racks-portable
+          path: publish/

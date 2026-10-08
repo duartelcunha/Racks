@@ -155,7 +155,7 @@ namespace Racks.Util
                 {
                     _knownChildren.Add(child);
                     var scale = (ScaleTransform)((TransformGroup)child.RenderTransform).Children[ScaleIndex];
-                    
+
                     // Initial state for pop-in animation
                     scale.ScaleX = 0;
                     scale.ScaleY = 0;

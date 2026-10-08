@@ -25,9 +25,9 @@ namespace Racks.Views
             InitializeComponent();
             Racks.Util.WindowFade.Attach(this);
             _clusters = clusters;
-            
+
             // Format FilePaths to just show filenames for a cleaner UI
-            var displayClusters = clusters.Select(c => new 
+            var displayClusters = clusters.Select(c => new
             {
                 Name = c.Name,
                 FilePaths = c.FilePaths.Select(f => Path.GetFileName(f)).ToList()

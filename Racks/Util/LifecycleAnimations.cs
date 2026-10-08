@@ -56,7 +56,7 @@ namespace Racks.Util
         private static (Window win, Image image, ScaleTransform scale, RotateTransform rotate, TranslateTransform translate, Canvas canvas) CreateAnimationWindow()
         {
             var screen = SystemParameters.WorkArea;
-            
+
             var src = new BitmapImage();
             src.BeginInit();
             src.UriSource = new Uri("pack://application:,,,/ico.png", UriKind.Absolute);

@@ -185,25 +185,65 @@ namespace Racks.Core
         {
             switch (ext)
             {
-                case "png": case "jpg": case "jpeg": case "gif": case "bmp": case "svg": case "webp":
+                case "png":
+                case "jpg":
+                case "jpeg":
+                case "gif":
+                case "bmp":
+                case "svg":
+                case "webp":
                     return "image photo picture graphic media visual art design";
-                case "mp4": case "mkv": case "avi": case "mov": case "webm":
+                case "mp4":
+                case "mkv":
+                case "avi":
+                case "mov":
+                case "webm":
                     return "video movie clip media motion film animation capcut";
-                case "mp3": case "wav": case "flac": case "ogg":
+                case "mp3":
+                case "wav":
+                case "flac":
+                case "ogg":
                     return "audio sound music track voice media";
-                case "pdf": case "docx": case "doc": case "txt": case "rtf": case "odt":
+                case "pdf":
+                case "docx":
+                case "doc":
+                case "txt":
+                case "rtf":
+                case "odt":
                     return "document text book article letter report read writing paper";
-                case "xlsx": case "xls": case "csv":
+                case "xlsx":
+                case "xls":
+                case "csv":
                     return "spreadsheet data table excel finance money accounting numbers invoice receipt contas taxes bill";
-                case "pptx": case "ppt":
+                case "pptx":
+                case "ppt":
                     return "presentation slides pitch deck";
-                case "zip": case "rar": case "7z": case "tar": case "gz":
+                case "zip":
+                case "rar":
+                case "7z":
+                case "tar":
+                case "gz":
                     return "archive compressed zip bundle files package";
-                case "exe": case "msi": case "bat": case "cmd": case "ps1":
+                case "exe":
+                case "msi":
+                case "bat":
+                case "cmd":
+                case "ps1":
                     return "executable program app installer script software run software";
-                case "cs": case "js": case "py": case "html": case "css": case "cpp": case "h": case "json": case "xml": case "sln": case "csproj":
+                case "cs":
+                case "js":
+                case "py":
+                case "html":
+                case "css":
+                case "cpp":
+                case "h":
+                case "json":
+                case "xml":
+                case "sln":
+                case "csproj":
                     return "code programming script developer engineering source git project";
-                case "lnk": case "url":
+                case "lnk":
+                case "url":
                     return "shortcut link web application app start game launcher";
                 case "folder":
                     return "folder directory project files group collection";

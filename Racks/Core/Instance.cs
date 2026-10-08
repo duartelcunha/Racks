@@ -76,7 +76,7 @@ public class Instance : INotifyPropertyChanged
     private bool _snapToGrid = false;
     private int _gridSize = 16;
     private string _autoRouteRegex = "";
-    
+
     // Premium UI & Optimization Options
     private bool _dropShadowEnabled = true;
     private bool _gradientBackgroundEnabled = true;
@@ -968,103 +968,103 @@ public class Instance : INotifyPropertyChanged
             // instead of vanishing; the app-level handler is the backstop if this throws.
             try
             {
-            RegistryHelper helper = new RegistryHelper(InstanceController.appName);
+                RegistryHelper helper = new RegistryHelper(InstanceController.appName);
 
-            var v = helper.ReadKeyValueRoot("IdleOpacity");
-            if (v != null) _idleOpacity = double.Parse(v.ToString());
+                var v = helper.ReadKeyValueRoot("IdleOpacity");
+                if (v != null) _idleOpacity = double.Parse(v.ToString());
 
-            v = helper.ReadKeyValueRoot("AnimationSpeed");
-            if (v != null) _animationSpeed = double.Parse(v.ToString());
+                v = helper.ReadKeyValueRoot("AnimationSpeed");
+                if (v != null) _animationSpeed = double.Parse(v.ToString());
 
-            v = helper.ReadKeyValueRoot("MaxGrayScaleStrength");
-            if (v != null) _maxGrayscaleStrength = double.Parse(v.ToString());
+                v = helper.ReadKeyValueRoot("MaxGrayScaleStrength");
+                if (v != null) _maxGrayscaleStrength = double.Parse(v.ToString());
 
-            v = helper.ReadKeyValueRoot("GrayScaleEnabled");
-            if (v != null) _grayScaleEnabled = (bool)v;
+                v = helper.ReadKeyValueRoot("GrayScaleEnabled");
+                if (v != null) _grayScaleEnabled = (bool)v;
 
-            v = helper.ReadKeyValueRoot("GrayScaleEnabled_InactiveOnly");
-            if (v != null) _grayScaleEnabled_InactiveOnly = (bool)v;
+                v = helper.ReadKeyValueRoot("GrayScaleEnabled_InactiveOnly");
+                if (v != null) _grayScaleEnabled_InactiveOnly = (bool)v;
 
-            v = helper.ReadKeyValueRoot("TitleFontFamily");
-            if (v != null) _titleFontFamily = v.ToString();
+                v = helper.ReadKeyValueRoot("TitleFontFamily");
+                if (v != null) _titleFontFamily = v.ToString();
 
-            v = helper.ReadKeyValueRoot("ItemFontFamily");
-            if (v != null) _itemFontFamily = v.ToString();
+                v = helper.ReadKeyValueRoot("ItemFontFamily");
+                if (v != null) _itemFontFamily = v.ToString();
 
-            v = helper.ReadKeyValueRoot("ShowHiddenFiles");
-            if (v != null) _showHiddenFiles = (bool)v;
+                v = helper.ReadKeyValueRoot("ShowHiddenFiles");
+                if (v != null) _showHiddenFiles = (bool)v;
 
-            v = helper.ReadKeyValueRoot("ShowFileExtension");
-            if (v != null) _showFileExtension = (bool)v;
+                v = helper.ReadKeyValueRoot("ShowFileExtension");
+                if (v != null) _showFileExtension = (bool)v;
 
-            v = helper.ReadKeyValueRoot("ShowFileExtensionIcon");
-            if (v != null) _showFileExtensionIcon = (bool)v;
+                v = helper.ReadKeyValueRoot("ShowFileExtensionIcon");
+                if (v != null) _showFileExtensionIcon = (bool)v;
 
-            v = helper.ReadKeyValueRoot("ShowHiddenFilesIcon");
-            if (v != null) _showHiddenFilesIcon = (bool)v;
+                v = helper.ReadKeyValueRoot("ShowHiddenFilesIcon");
+                if (v != null) _showHiddenFilesIcon = (bool)v;
 
-            v = helper.ReadKeyValueRoot("ShowDisplayName");
-            if (v != null) _showDisplayName = (bool)v;
+                v = helper.ReadKeyValueRoot("ShowDisplayName");
+                if (v != null) _showDisplayName = (bool)v;
 
-            v = helper.ReadKeyValueRoot("BorderEnabled");
-            if (v != null) _borderEnabled = (bool)v;
+                v = helper.ReadKeyValueRoot("BorderEnabled");
+                if (v != null) _borderEnabled = (bool)v;
 
-            v = helper.ReadKeyValueRoot("ActiveBorderEnabled");
-            if (v != null) _activeBorderEnabled = (bool)v;
+                v = helper.ReadKeyValueRoot("ActiveBorderEnabled");
+                if (v != null) _activeBorderEnabled = (bool)v;
 
-            v = helper.ReadKeyValueRoot("ActiveBackgroundEnabled");
-            if (v != null) _activeBackgroundEnabled = (bool)v;
+                v = helper.ReadKeyValueRoot("ActiveBackgroundEnabled");
+                if (v != null) _activeBackgroundEnabled = (bool)v;
 
-            v = helper.ReadKeyValueRoot("ActiveTitleTextEnabled");
-            if (v != null) _activeTitleTextEnabled = (bool)v;
+                v = helper.ReadKeyValueRoot("ActiveTitleTextEnabled");
+                if (v != null) _activeTitleTextEnabled = (bool)v;
 
-            v = helper.ReadKeyValueRoot("TitleTextAlignment");
-            if (v != null) _titleTextAlignment = (Forms.HorizontalAlignment)Enum.Parse(typeof(Forms.HorizontalAlignment), v.ToString());
+                v = helper.ReadKeyValueRoot("TitleTextAlignment");
+                if (v != null) _titleTextAlignment = (Forms.HorizontalAlignment)Enum.Parse(typeof(Forms.HorizontalAlignment), v.ToString());
 
-            v = helper.ReadKeyValueRoot("FileFilterRegex");
-            if (v != null) _fileFilterRegex = v.ToString();
+                v = helper.ReadKeyValueRoot("FileFilterRegex");
+                if (v != null) _fileFilterRegex = v.ToString();
 
-            v = helper.ReadKeyValueRoot("FileFilterHideRegex");
-            if (v != null) _fileFilterHideRegex = v.ToString();
+                v = helper.ReadKeyValueRoot("FileFilterHideRegex");
+                if (v != null) _fileFilterHideRegex = v.ToString();
 
-            v = helper.ReadKeyValueRoot("TitleBarColor");
-            if (v != null) _titleBarColor = v.ToString();
+                v = helper.ReadKeyValueRoot("TitleBarColor");
+                if (v != null) _titleBarColor = v.ToString();
 
-            v = helper.ReadKeyValueRoot("TitleTextColor");
-            if (v != null) _titleTextColor = v.ToString();
+                v = helper.ReadKeyValueRoot("TitleTextColor");
+                if (v != null) _titleTextColor = v.ToString();
 
-            v = helper.ReadKeyValueRoot("ListViewBackgroundColor");
-            if (v != null) _listViewBackgroundColor = v.ToString();
+                v = helper.ReadKeyValueRoot("ListViewBackgroundColor");
+                if (v != null) _listViewBackgroundColor = v.ToString();
 
-            v = helper.ReadKeyValueRoot("ActiveBackgroundColor");
-            if (v != null) _activeBackgroundColor = v.ToString();
+                v = helper.ReadKeyValueRoot("ActiveBackgroundColor");
+                if (v != null) _activeBackgroundColor = v.ToString();
 
-            v = helper.ReadKeyValueRoot("ActiveTitleTextColor");
-            if (v != null) _activeTitleTextColor = v.ToString();
+                v = helper.ReadKeyValueRoot("ActiveTitleTextColor");
+                if (v != null) _activeTitleTextColor = v.ToString();
 
-            v = helper.ReadKeyValueRoot("ActiveBorderColor");
-            if (v != null) _activeBorderColor = v.ToString();
+                v = helper.ReadKeyValueRoot("ActiveBorderColor");
+                if (v != null) _activeBorderColor = v.ToString();
 
-            v = helper.ReadKeyValueRoot("ListViewFontColor");
-            if (v != null) _listViewFontColor = v.ToString();
+                v = helper.ReadKeyValueRoot("ListViewFontColor");
+                if (v != null) _listViewFontColor = v.ToString();
 
-            v = helper.ReadKeyValueRoot("ListViewFontShadowColor");
-            if (v != null) _listViewFontShadowColor = v.ToString();
+                v = helper.ReadKeyValueRoot("ListViewFontShadowColor");
+                if (v != null) _listViewFontShadowColor = v.ToString();
 
-            v = helper.ReadKeyValueRoot("Opacity");
-            if (v != null) _opacity = int.Parse(v.ToString());
+                v = helper.ReadKeyValueRoot("Opacity");
+                if (v != null) _opacity = int.Parse(v.ToString());
 
-            v = helper.ReadKeyValueRoot("SortBy");
-            if (v != null) _sortBy = int.Parse(v.ToString());
+                v = helper.ReadKeyValueRoot("SortBy");
+                if (v != null) _sortBy = int.Parse(v.ToString());
 
-            v = helper.ReadKeyValueRoot("FolderOrder");
-            if (v != null) _folderOrder = int.Parse(v.ToString());
+                v = helper.ReadKeyValueRoot("FolderOrder");
+                if (v != null) _folderOrder = int.Parse(v.ToString());
 
-            v = helper.ReadKeyValueRoot("TitleFontSize");
-            if (v != null) _titleFontSize = double.Parse(v.ToString());
+                v = helper.ReadKeyValueRoot("TitleFontSize");
+                if (v != null) _titleFontSize = double.Parse(v.ToString());
 
-            v = helper.ReadKeyValueRoot("IconSize");
-            if (v != null) _iconSize = int.Parse(v.ToString());
+                v = helper.ReadKeyValueRoot("IconSize");
+                if (v != null) _iconSize = int.Parse(v.ToString());
             }
             catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Instance global-defaults read failed: {ex.Message}"); }
         }

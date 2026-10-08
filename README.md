@@ -127,7 +127,7 @@ Grab `Racks-Setup-<version>.exe` from the latest release and double-click it. Th
 | `Ctrl` + scroll | Resize icons |
 | `F2` | Rename the selected item |
 | Scroll on title bar | Bring a rack forward / send it behind |
-| Double-click wallpaper | Hide / show all racks |
+| Double-click wallpaper | Hide / show all racks (off by default; turn on in Settings) |
 
 <br />
 

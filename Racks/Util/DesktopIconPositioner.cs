@@ -73,7 +73,7 @@ namespace Racks.Util
             void SelectItem(int iItem, uint dwFlags);
             void SelectAndPositionItems(uint cidl, IntPtr[] apidl, ref Interop.POINT apt, uint dwFlags);
         }
-        
+
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
         private static extern IntPtr ILCreateFromPath([MarshalAs(UnmanagedType.LPWStr)] string pszPath);
 

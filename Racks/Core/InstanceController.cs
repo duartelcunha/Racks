@@ -345,10 +345,10 @@ public class InstanceController
         int maxAttempts = 50;
         for (int i = 0; i < maxAttempts; i++)
         {
-            bool overlaps = Instances.Any(r => 
-                newPosX < r.PosX + (r.Width < 50 ? 300 : r.Width) && 
-                newPosX + sWidth > r.PosX && 
-                newPosY < r.PosY + (r.Height < 50 ? 400 : r.Height) && 
+            bool overlaps = Instances.Any(r =>
+                newPosX < r.PosX + (r.Width < 50 ? 300 : r.Width) &&
+                newPosX + sWidth > r.PosX &&
+                newPosY < r.PosY + (r.Height < 50 ? 400 : r.Height) &&
                 newPosY + sHeight > r.PosY);
             if (!overlaps) break;
             newPosX += sWidth + 20;

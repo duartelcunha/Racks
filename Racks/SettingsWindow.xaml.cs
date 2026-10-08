@@ -207,15 +207,15 @@ namespace Racks
 
         private void KofiButtonImage_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-                    try
-                    {
-                        ProcessStartInfo sInfo = new ProcessStartInfo($"https://ko-fi.com/J3J61PAH6H") { UseShellExecute = true };
-                        _ = Process.Start(sInfo);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Kofi open failed: {ex.Message}");
-                    }
+            try
+            {
+                ProcessStartInfo sInfo = new ProcessStartInfo($"https://ko-fi.com/J3J61PAH6H") { UseShellExecute = true };
+                _ = Process.Start(sInfo);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Kofi open failed: {ex.Message}");
+            }
         }
 
         private void ReloadAllFramesButton_Click(object sender, RoutedEventArgs e)
