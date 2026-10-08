@@ -4,6 +4,10 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 
 ## [Unreleased]
 
+### Fixed
+- Racks lost their "transparent background" setting on restart. It is now saved and loaded.
+- Renaming a rack (or choosing a new folder for a missing-folder rack) could drop settings (drop shadow, gradient, disabled animations, and the files a desktop rack owns), and picking a folder with the same name deleted the rack's saved settings entirely, so it vanished on restart. Both save paths now share one list of settings.
+
 ## [1.2.1] - 2026-10-08
 
 ### Fixed
