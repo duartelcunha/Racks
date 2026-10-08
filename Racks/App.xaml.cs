@@ -74,6 +74,42 @@ namespace Racks
             Debug.WriteLine($"{source}: {ex}");
         }
 
+        private static void RunUninstallCleanup(string? reportPath)
+        {
+            Racks.Util.CleanupReport report;
+            try
+            {
+                report = Racks.Util.UninstallCleanup.Run(
+                    Racks.Util.CleanupPaths.ForCurrentUser(), ReadRackTitlesByFolder(), touchShell: true);
+            }
+            catch (Exception ex)
+            {
+                report = new Racks.Util.CleanupReport();
+                report.Errors.Add("cleanup failed: " + ex.Message);
+            }
+            if (string.IsNullOrEmpty(reportPath)) return;
+            try { report.WriteTo(reportPath); } catch { }
+        }
+
+        // Folder -> rack title for every saved rack, so leftover sandboxes get readable names.
+        private static Dictionary<string, string> ReadRackTitlesByFolder()
+        {
+            var titles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                using var instances = Registry.CurrentUser.OpenSubKey($@"Software\{InstanceController.appName}\Instances");
+                if (instances == null) return titles;
+                foreach (var name in instances.GetSubKeyNames())
+                {
+                    using var rack = instances.OpenSubKey(name);
+                    if (rack?.GetValue("Folder") is string folder && rack.GetValue("TitleText") is string title)
+                        titles[folder] = title;
+                }
+            }
+            catch { }
+            return titles;
+        }
+
         protected override void OnStartup(StartupEventArgs e)
         {
             // Translators: set RACKS_LANG=zh-CN (any culture name) to preview a language without
@@ -95,6 +131,15 @@ namespace Racks
             // never pin a thread. Explicit-timeout call sites (Util.SafeRegex) still win; this
             // only backstops anything that slips through. Must be set before any Regex runs.
             AppDomain.CurrentDomain.SetData("REGEX_DEFAULT_MATCH_TIMEOUT", Racks.Util.SafeRegex.MatchTimeout);
+            // Run by the uninstaller (installer/Racks.iss) before it removes the app: give the
+            // user's rack files back to the Desktop and remove what Racks added to the shell.
+            // Headless: no windows, no mutex, no registry migration.
+            if (e.Args.Length > 0 && e.Args[0] == "--uninstall-cleanup")
+            {
+                RunUninstallCleanup(e.Args.Length > 1 ? e.Args[1] : null);
+                Shutdown(0);
+                return;
+            }
             // One-time migration of HKCU\SOFTWARE\DeskFrame → HKCU\SOFTWARE\Racks so
             // users upgrading from the original DeskFrame build keep their frames.
             InstanceController.MigrateLegacyRegistry();

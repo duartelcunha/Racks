@@ -22,6 +22,41 @@ namespace Racks.Util
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool CreateHardLinkW(string lpFileName, string lpExistingFileName, IntPtr lpSecurityAttributes);
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct BY_HANDLE_FILE_INFORMATION
+        {
+            public uint FileAttributes;
+            public System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+            public System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+            public System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
+            public uint VolumeSerialNumber;
+            public uint FileSizeHigh;
+            public uint FileSizeLow;
+            public uint NumberOfLinks;
+            public uint FileIndexHigh;
+            public uint FileIndexLow;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetFileInformationByHandle(Microsoft.Win32.SafeHandles.SafeFileHandle hFile, out BY_HANDLE_FILE_INFORMATION lpFileInformation);
+
+        // Number of directory entries (hard links) that point at this file's data. 1 for a normal
+        // file. Returns 0 if it can't be determined, so callers must treat 0 as "unknown, assume 1".
+        public static int GetLinkCount(string path)
+        {
+            try
+            {
+                using var handle = System.IO.File.OpenHandle(path, System.IO.FileMode.Open, System.IO.FileAccess.Read,
+                    System.IO.FileShare.ReadWrite | System.IO.FileShare.Delete);
+                return GetFileInformationByHandle(handle, out var info) ? (int)info.NumberOfLinks : 0;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
         public static bool TryCreate(string existingFile, string newLinkPath)
         {
             try
