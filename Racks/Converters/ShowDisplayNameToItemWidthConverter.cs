@@ -9,7 +9,7 @@ namespace Racks
         {
             bool showDisplayName = values[0] is bool b && b;
             double.TryParse(values[1]?.ToString(), out double iconSize);
-            if (iconSize <=  64 && showDisplayName)
+            if (iconSize <= 64 && showDisplayName)
             {
                 return showDisplayName ? 85 : iconSize + 10;
             }

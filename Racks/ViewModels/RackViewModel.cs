@@ -20,7 +20,7 @@ namespace Racks.ViewModels
         private readonly Instance _instance;
         public Instance Instance => _instance;
         private readonly InstanceController _controller;
-        
+
         private CancellationTokenSource _loadFilesCancellationToken = new CancellationTokenSource();
 
         private ObservableCollection<FileItem> _fileItems = new ObservableCollection<FileItem>();
@@ -106,9 +106,9 @@ namespace Racks.ViewModels
                     {
                         return new List<FileSystemInfo>();
                     }
-                    
+
                     var filteredFiles = new List<FileSystemInfo>();
-                    
+
                     void ScanDir(string dirPath)
                     {
                         if (!Directory.Exists(dirPath)) return;
@@ -125,9 +125,9 @@ namespace Racks.ViewModels
                         catch (IOException) { }
                         catch (UnauthorizedAccessException) { }
                     }
-                    
+
                     ScanDir(path);
-                    
+
                     if (_instance.IsDesktopFilterRack)
                     {
                         ScanDir(DesktopIconManager.RacksWorkspacePath);
@@ -139,7 +139,7 @@ namespace Racks.ViewModels
                         .Select(g => g.First())
                         .ToList();
 
-                    System.Windows.Application.Current.Dispatcher.Invoke(() => 
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
                         FolderCount = filteredFiles.OfType<DirectoryInfo>().Count().ToString();
                         FileCount = filteredFiles.OfType<FileInfo>().Count().ToString();
@@ -155,11 +155,11 @@ namespace Racks.ViewModels
                     {
                         System.Windows.Application.Current.Dispatcher.Invoke(() => { FolderSize = ""; });
                     }
-                    
+
                     filteredFiles = filteredFiles
                                 .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
                                 .ToList();
-                    
+
                     if (!_instance.ShowHiddenFiles)
                         filteredFiles = filteredFiles.Where(entry => !entry.Attributes.HasFlag(FileAttributes.Hidden)).ToList();
                     var fileFilterRegex = TryCompileRegex(_instance.FileFilterRegex);
@@ -214,15 +214,15 @@ namespace Racks.ViewModels
                             IsLoading = false;
                             return;
                         }
-                        
+
                         // Check if the exact FullPath still exists in the newly scanned entries
                         bool stillExists = fileEntries.Any(f => string.Equals(f.FullName, FileItems[i].FullPath, StringComparison.OrdinalIgnoreCase));
-                        
+
                         if (!stillExists)
                         {
                             string fileName = Path.GetFileName(FileItems[i].FullPath!);
                             FileItems.RemoveAt(i);
-                            
+
                             // Cleanup: if the file was physically moved/deleted, remove it from the Rack's claim
                             if (_instance.IsDesktopFilterRack && _instance.AssignedFiles != null && _instance.AssignedFiles.Contains(fileName))
                             {
@@ -231,7 +231,7 @@ namespace Racks.ViewModels
                             }
                         }
                     }
-                    
+
                     if (assignedFilesChanged)
                     {
                         _controller.WriteInstanceToKey(_instance);
@@ -455,7 +455,7 @@ namespace Racks.ViewModels
             items.AddRange(topFiles);
             items.AddRange(remainingFiles);
         }
-        
+
         private void FirstRowByLastAccessedOc(ObservableCollection<FileItem> items, List<string> lastAccessedFileIds, int topN)
         {
             if (items == null || items.Count == 0 || lastAccessedFileIds == null || lastAccessedFileIds.Count == 0 || topN <= 0)
@@ -481,8 +481,8 @@ namespace Racks.ViewModels
 
             var remainingFiles = items.Except(topFiles).ToList();
             items.Clear();
-            foreach(var f in topFiles) items.Add(f);
-            foreach(var f in remainingFiles) items.Add(f);
+            foreach (var f in topFiles) items.Add(f);
+            foreach (var f in remainingFiles) items.Add(f);
         }
 
         private async Task<long> GetItemSizeAsync(FileSystemInfo entry, CancellationToken token = default)
