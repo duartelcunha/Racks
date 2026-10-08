@@ -25,6 +25,7 @@ public sealed class CleanupReport
     public int Unlinked { get; internal set; }
     public int Kept { get; internal set; }
     public List<string> KeptFolders { get; } = new();
+    public List<string> ReturnedPaths { get; } = new();
     public List<string> Errors { get; } = new();
 
     public IEnumerable<string> Lines()
@@ -123,6 +124,20 @@ public static class UninstallCleanup
         return report;
     }
 
+    /// <summary>
+    /// Gives everything inside one rack folder back to the Desktop with the same rules as uninstall
+    /// (never overwrite, unlink links, keep what cannot be moved) and removes the folder only if it
+    /// ends up empty. Used when a sandboxed rack is removed.
+    /// </summary>
+    public static CleanupReport ReturnFolderToDesktop(string folder, string desktop)
+    {
+        var report = new CleanupReport();
+        foreach (var entry in Entries(folder))
+            ReturnToDesktop(entry, desktop, report);
+        if (!TryDeleteEmptyDirectory(folder)) report.KeptFolders.Add(folder);
+        return report;
+    }
+
     private static void ReturnToDesktop(string entry, string desktop, CleanupReport report)
     {
         string name = Path.GetFileName(entry);
@@ -163,6 +178,7 @@ public static class UninstallCleanup
                     if (isDirectory) Directory.Move(entry, dest);
                     else File.Move(entry, dest, overwrite: false);
                     report.Returned++;
+                    report.ReturnedPaths.Add(dest);
                     return;
                 }
                 catch (IOException) when (File.Exists(dest) || Directory.Exists(dest))

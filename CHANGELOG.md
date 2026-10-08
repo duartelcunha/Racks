@@ -4,6 +4,11 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-08
+
+### Fixed
+- **Removing a rack could permanently delete the files inside it.** A rack created with "New folder rack" by dropping a file keeps the dropped files in its own folder under `%AppData%\Racks\VirtualFrames` (dropping moves them there). "Remove" deleted that folder without using the Recycle Bin, and the dialog wrongly said it only held shortcuts. Removing such a rack now moves its files back to the Desktop (never overwriting; name clashes get "(from Racks)") and only then deletes the empty folder. If something cannot be moved, for example an open file, the rack is kept and nothing is deleted.
+
 ### Changed
 - Rack sorting (natural name order, dates, type, size, folders first or last, custom drag order, recently used first) lives in `Rack/Sorting/FileSorter.cs`, a plain class with tests, instead of inside the window.
 - `RackWindow.xaml.cs` (5,600 lines) is split into focused partial files: sorting, Win32/desktop hosting, moving, hover, search, drag and drop, files and thumbnails, item interactions, the rack menu, and visuals. No behaviour change; the main file is now about 640 lines. Ratchet tests stop any part, and the parts together, from growing.

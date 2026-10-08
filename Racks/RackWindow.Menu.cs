@@ -618,8 +618,9 @@ namespace Racks
                 }
                 else if (isSandboxed)
                 {
+                    // A sandboxed rack holds the real files that were dropped into it (dropping moves).
                     body = itemCount > 0
-                        ? $"Remove this rack? {itemCount} shortcut(s) will be deleted from the sandbox. Original files are not touched."
+                        ? $"Remove this rack? {itemCount} item(s) will be moved back to your Desktop."
                         : "Remove this empty rack?";
                 }
                 else if (isOnDesktop)
@@ -665,6 +666,24 @@ namespace Racks
                             }
                         }
                     }
+                    else if (isSandboxed && System.IO.Directory.Exists(Instance.Folder))
+                    {
+                        // This used to delete the sandbox with everything in it, permanently. It holds
+                        // the user's moved files, so give them back; keep the rack if anything is left.
+                        var report = Util.UninstallCleanup.ReturnFolderToDesktop(Instance.Folder, deskPath);
+                        returnedToDesktop.AddRange(report.ReturnedPaths);
+                        if (report.Kept > 0 || report.KeptFolders.Count > 0)
+                        {
+                            if (returnedToDesktop.Count > 0)
+                                Util.DesktopIconPositioner.ArrangeInGrid(returnedToDesktop);
+                            Racks.Views.RacksMessageBox.Show(
+                                $"{report.Kept} item(s) could not be moved back to your Desktop (for example a file is open). " +
+                                "The rack was kept so nothing is lost. Close the file and remove the rack again.",
+                                Lang.TitleBarContextMenu_RemoveMessageBox_Title);
+                            LoadFiles(_currentFolderPath);
+                            return;
+                        }
+                    }
                     else if (isOnDesktop && System.IO.Directory.Exists(Instance.Folder))
                     {
                         foreach (string file in System.IO.Directory.GetFileSystemEntries(Instance.Folder))
@@ -684,21 +703,8 @@ namespace Racks
                         Registry.CurrentUser.DeleteSubKeyTree(Instance.GetKeyLocation());
                     }
                     MainWindow._controller.RemoveInstance(Instance, this);
-                    // Only nuke the backing folder if it's actually under our
-                    // VirtualFrames sandbox in AppData. Otherwise we'd delete
-                    // whatever real folder the rack happens to be pointing at —
-                    // that's how users were losing data on the old build.
-                    // SafeDelete walks reparse points (junctions to Desktop
-                    // folders) WITHOUT descending — a plain Directory.Delete
-                    // recursive would obliterate the junction targets.
-                    if (Instance.IsShortcutsOnly
-                        && !string.IsNullOrEmpty(Instance.Folder)
-                        && InstanceController.IsInsideVirtualFramesRoot(Instance.Folder)
-                        && Directory.Exists(Instance.Folder))
-                    {
-                        try { Util.SafeDelete.DeleteDirectoryRecursive(Instance.Folder); }
-                        catch (Exception ex) { Debug.WriteLine($"Sandbox delete failed: {ex.Message}"); }
-                    }
+                    // The sandbox folder was emptied and removed above (ReturnFolderToDesktop). Nothing
+                    // is ever deleted recursively here any more: see INV-REMOVE-1.
                     this.Close();
 
                 }
@@ -765,38 +771,6 @@ namespace Racks
                 UpdateIcons();
                 SortItems();
             };
-
-            MenuItem FrameInfoItem = new MenuItem
-            {
-                StaysOpenOnClick = true,
-                IsEnabled = false,
-            };
-            TextBlock InfoText = new TextBlock
-            {
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Top,
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap,
-            };
-
-            InfoText.Inlines.Add(new Run(Lang.TitleBarContextMenu_Info_Files) { Foreground = Brushes.White });
-            InfoText.Inlines.Add(new Run($"{ViewModel.FileCount}") { Foreground = Brushes.CornflowerBlue });
-            InfoText.Inlines.Add(new Run("\n"));
-
-            InfoText.Inlines.Add(new Run(Lang.TitleBarContextMenu_Info_Folders) { Foreground = Brushes.White });
-            InfoText.Inlines.Add(new Run($"{ViewModel.FolderCount}") { Foreground = Brushes.CornflowerBlue });
-            InfoText.Inlines.Add(new Run("\n"));
-            if (Instance.CheckFolderSize)
-            {
-                InfoText.Inlines.Add(new Run(Lang.TitleBarContextMenu_Info_FolderSize) { Foreground = Brushes.White });
-                InfoText.Inlines.Add(new Run($"{ViewModel.FolderSize}") { Foreground = Brushes.CornflowerBlue });
-                InfoText.Inlines.Add(new Run("\n"));
-            }
-
-            InfoText.Inlines.Add(new Run(Lang.TitleBarContextMenu_Info_LastUpdated) { Foreground = Brushes.White });
-            InfoText.Inlines.Add(new Run($"{_lastUpdated.ToString("hh:mm tt")}") { Foreground = Brushes.CornflowerBlue });
-
-            FrameInfoItem.Header = InfoText;
 
             CustomItemOrderMenuItem = new MenuItem
             {

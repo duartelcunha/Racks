@@ -53,6 +53,11 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   extra de hardlinks são desligados (os dados ficam no alvo), e o que não puder ser movido fica numa
   `RacksWorkspace` visível com nota. `[UninstallDelete]` só remove essas pastas com `dirifempty`.
   *(teste: `UninstallCleanupTests`; revisão: nenhum `filesandordirs` sobre pastas com dados)*
+- **INV-REMOVE-1** Remover uma rack nunca apaga ficheiros de utilizador. A pasta de uma rack em
+  `VirtualFrames` contém os ficheiros movidos pelo drop; ao remover, `UninstallCleanup.ReturnFolderToDesktop`
+  devolve-os ao Desktop e a pasta só é apagada se ficar vazia; se algo não puder ser movido a rack é mantida.
+  Apagamentos recursivos só existem no `SafeMove`. *(teste: `UninstallCleanupTests`, guard
+  `Nothing_outside_SafeMove_deletes_folders_recursively`)*
 - **INV-IDS-1** Identificadores persistidos são leaf names por contrato: no load, descartar entradas
   onde `Path.GetFileName(name) != name`; após cada `Path.Combine` com dados guardados, afirmar que o
   path resolvido fica sob a raiz esperada. *(teste)*
