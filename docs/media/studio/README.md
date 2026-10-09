@@ -33,7 +33,7 @@ Put the five recordings in `docs/media/raw/` (gitignored) with these exact names
 | `drag-in.mp4` | `DragIn` | Drag in. Done. |
 | `physics.mp4` | `Physics` | Physics that feel real |
 | `styling.mp4` | `Styling` | A rack for every mood |
-| `finder.mp4` | `Finder` | Find anything instantly |
+| `finder.mp4` | `Finder` | Find a file across your racks |
 
 File names are matched case-insensitively (`Hero.mp4` counts as `hero.mp4`). Record with Cap's
 auto-zoom **off**: the zooms come from `config.ts`, and two cameras would fight.

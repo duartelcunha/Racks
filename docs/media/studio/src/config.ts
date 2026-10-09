@@ -83,7 +83,7 @@ export const clips: Record<ClipId, ClipConfig> = {
 		],
 	},
 	finder: {
-		caption: 'Find anything instantly',
+		caption: 'Find a file across your racks',
 		placeholder: 'demo-2',
 		trimStartSeconds: 2.2,
 		trimEndSeconds: 2.6,
