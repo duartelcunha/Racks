@@ -404,3 +404,8 @@ test/last-test-result.json
 # Stray native-build artifacts / scratch test exes (dead feature; must not be tracked)
 Racks/RacksHook.*
 Racks/Test*.exe
+
+# README media (raw captures and renders)
+docs/media/raw/
+docs/media/studio/out/
+docs/media/studio/node_modules/
