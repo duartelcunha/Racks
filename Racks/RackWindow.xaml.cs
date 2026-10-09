@@ -113,8 +113,8 @@ namespace Racks
         private CancellationTokenSource _adjustPositionCts;
         private Util.PhysicsBody _physics;
         // Drag velocity tracking for flick-to-throw (updated in Window_LocationChanged).
-        private double _dragVelX, _dragVelY, _lastDragLeft, _lastDragTop;
-        private long _lastDragTicks;
+        private readonly Util.FlickTracker _flick = new(); // release speed for flick-to-throw
+
         private bool _isResizing;  // true while the user is resizing via the border (suppresses physics)
 
         // Placement mode (follow-the-cursor-then-click-to-drop) was removed. It wrote
@@ -217,8 +217,8 @@ namespace Racks
             _physics = new Util.PhysicsBody
             {
                 Window = this,
-                IsAnchored = () => _isLocked || _isTopmost || Instance.isWindowClosing,
-                OnSettled = () => { Instance.PosX = this.Left; Instance.PosY = this.Top; }
+                IsAnchored = () => _isLocked || _isTopmost || _dragMovingWinddow || Instance.isWindowClosing,
+                OnSettled = () => { Instance.PosX = this.Left; Instance.PosY = this.Top; HandleWindowMove(false); }
             };
             Util.RackPhysics.Register(_physics);
 

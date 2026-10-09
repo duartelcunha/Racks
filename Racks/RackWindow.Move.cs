@@ -164,7 +164,7 @@ namespace Racks
             // synchronously re-fire WM_MOVE and re-enter this method; the guard bottoms
             // that out. (Rack-to-rack docking that used to also live here was removed;
             // racks now push each other apart via Window_LocationChanged instead.)
-            if (_isTopmost || _inHandleWindowMove)
+            if (_isTopmost || _inHandleWindowMove || _physics?.Gliding == true) // physics owns the window mid-glide
             {
                 return;
             }
@@ -329,10 +329,10 @@ namespace Racks
                 if (!_isLocked)
                 {
                     _dragMovingWinddow = true;
-                    _dragVelX = _dragVelY = 0;
-                    _lastDragLeft = this.Left; _lastDragTop = this.Top;
-                    _lastDragTicks = DateTime.UtcNow.Ticks;
+                    _flick.Reset(this.Left, this.Top);
                     this.DragMove(); // blocks until the button is released
+                    Instance.PosX = this.Left; Instance.PosY = this.Top; // saved once per drag, not on every move
+
 
                     // Flick-to-throw: if the rack was still moving when released, hand its
                     // velocity to the physics loop so it glides on with the same ice-rink
@@ -340,15 +340,9 @@ namespace Racks
                     _dragMovingWinddow = false;
                     if (_physics != null && !_isLocked && !_isTopmost)
                     {
-                        // Only throw if the rack was ACTUALLY moving at the moment of release.
-                        // _dragVelX/Y is only refreshed in Window_LocationChanged, which stops
-                        // firing when the mouse holds still - so it keeps the last non-zero speed
-                        // from before the pause and would fling a rack the user just parked. If
-                        // there's been no movement for a beat, the rack is at rest: zero it out.
-                        double sinceMove = (DateTime.UtcNow.Ticks - _lastDragTicks) / (double)TimeSpan.TicksPerSecond;
-                        if (sinceMove > 0.07) { _dragVelX = _dragVelY = 0; }
-                        _physics.Vx = _dragVelX;
-                        _physics.Vy = _dragVelY;
+                        // Average speed over the last ~80 ms of the drag (0 if the rack was held still
+                        // before release), so a parked rack isn't flung and one fast step can't spike it.
+                        (_physics.Vx, _physics.Vy) = _flick.Release();
                         if (_physics.Moving) Util.RackPhysics.Kick();
                     }
                 }
@@ -404,17 +398,7 @@ namespace Racks
                     }
                 }
 
-                // Track drag velocity (exponential smoothing) for flick-to-throw on release.
-                long nowT = DateTime.UtcNow.Ticks;
-                double dtT = (nowT - _lastDragTicks) / (double)TimeSpan.TicksPerSecond;
-                if (_lastDragTicks != 0 && dtT > 0.0001 && dtT < 0.2)
-                {
-                    double vx = (this.Left - _lastDragLeft) / dtT;
-                    double vy = (this.Top - _lastDragTop) / dtT;
-                    _dragVelX = _dragVelX * 0.4 + vx * 0.6;
-                    _dragVelY = _dragVelY * 0.4 + vy * 0.6;
-                }
-                _lastDragLeft = this.Left; _lastDragTop = this.Top; _lastDragTicks = nowT;
+                _flick.Add(this.Left, this.Top); // samples for flick-to-throw on release
 
                 // --- Ice-rink physics ---
                 // While dragging, hand VELOCITY to any rack we overlap (not an instant nudge):
@@ -428,11 +412,9 @@ namespace Racks
                         || other._isTopmost || other._isLocked || other._physics == null) continue;
                     var otherRect = new Rect(other.Left, other.Top, other.Width, other.Height);
                     if (myRect.IntersectsWith(otherRect))
-                        Util.RackPhysics.Impart(other._physics, otherRect, myRect);
+                        Util.RackPhysics.Impart(other._physics, otherRect, myRect, _flick.Current());
                 }
 
-                Instance.PosX = this.Left;
-                Instance.PosY = this.Top;
             }
         }
     }

@@ -18,23 +18,31 @@ namespace Racks.Util
     {
         public Window Window = null!;
         public double Vx, Vy;                 // velocity in DIP/second
-        public Func<bool> IsAnchored = () => false; // locked or topmost: never moved by physics
+        public Func<bool> IsAnchored = () => false; // locked, topmost or being dragged: never moved by physics
         public Action OnSettled = () => { };  // called once when this body comes to rest (persist pos)
         public bool Moving => Math.Abs(Vx) > StopSpeed || Math.Abs(Vy) > StopSpeed;
-        internal const double StopSpeed = 6.0; // DIP/s below which we consider it stopped
+        internal const double StopSpeed = PhysicsStep.StopSpeed;
+
+        // True while the physics loop owns this window's position; RackWindow skips its own
+        // per-move work (edge snapping, corner radii) until the glide ends.
+        public bool Gliding { get; internal set; }
+
+        internal readonly SimBody Sim = new();
+        internal double WrittenX = double.NaN, WrittenY = double.NaN; // last position the loop put the window at
     }
 
     public static class RackPhysics
     {
-        // Tuning for a "medium" ice feel.
-        private const double Friction = 6.5;      // higher = stops sooner
-        private const double Restitution = 0.55;  // energy kept after an edge bounce
+        public const double MaxSpeed = PhysicsStep.MaxSpeed;
         private const double PushSpeedPerPx = 26; // overlap px -> velocity handed to a pushed rack
-        private const double MaxSpeed = 2600;     // clamp so a fast shove can't teleport
+        private const double PushLead = 1.15;     // a pushed rack moves a bit faster than the rack pushing it
+        // Rendering can fire far above the display rate while windows move; stepping and moving racks on
+        // every one of those starved the drag of the rack doing the pushing (it froze mid-push).
+        private static readonly TimeSpan MinFrame = TimeSpan.FromMilliseconds(12);
 
         private static readonly List<PhysicsBody> _bodies = new();
         private static bool _running;
-        private static long _lastTicks;
+        private static TimeSpan _lastFrame = TimeSpan.MinValue;
 
         // Global on/off for the ice-rink feel. When false, dragging a rack into another does
         // nothing (no push, no glide, no flick-to-throw): racks just overlap freely. Set from
@@ -53,10 +61,11 @@ namespace Racks.Util
             _bodies.Remove(body);
         }
 
-        // Give `target` velocity away from `fromCenter`, proportional to how deep the overlap
-        // is, along the shallower overlap axis. Called by the dragged rack each frame it
-        // overlaps a neighbour. Kicks the shared loop into life.
-        public static void Impart(PhysicsBody target, Rect targetRect, Rect pusherRect)
+        // Give `target` velocity away from the pusher, proportional to how deep the overlap is,
+        // along the shallower overlap axis. Called by the dragged rack while it overlaps a
+        // neighbour. Only velocity is handed over: the loop separates the two, so the pushed
+        // window is moved by one owner (the loop), not also by the drag events.
+        public static void Impart(PhysicsBody target, Rect targetRect, Rect pusherRect, (double vx, double vy) pusherVelocity = default)
         {
             if (!Enabled) return;
             if (target.IsAnchored()) return;
@@ -69,18 +78,15 @@ namespace Racks.Util
             if (intersect.Width < intersect.Height)
             {
                 double dir = dx != 0 ? Math.Sign(dx) : 1;
-                double add = dir * intersect.Width * PushSpeedPerPx;
-                // Push apart immediately by the overlap so they never visually intersect,
-                // then hand over speed so it keeps gliding.
-                target.Window.Left += dir * intersect.Width;
-                target.Vx = Clamp(target.Vx + add, -MaxSpeed, MaxSpeed);
+                // At least as fast as the pusher is moving (plus a little), so the dragged rack doesn't keep catching up.
+                double v = dir * Math.Max(intersect.Width * PushSpeedPerPx, Math.Abs(pusherVelocity.vx) * PushLead);
+                if (Math.Sign(v) != Math.Sign(target.Vx) || Math.Abs(v) > Math.Abs(target.Vx)) target.Vx = PhysicsStep.Clamp(v);
             }
             else
             {
                 double dir = dy != 0 ? Math.Sign(dy) : 1;
-                double add = dir * intersect.Height * PushSpeedPerPx;
-                target.Window.Top += dir * intersect.Height;
-                target.Vy = Clamp(target.Vy + add, -MaxSpeed, MaxSpeed);
+                double v = dir * Math.Max(intersect.Height * PushSpeedPerPx, Math.Abs(pusherVelocity.vy) * PushLead);
+                if (Math.Sign(v) != Math.Sign(target.Vy) || Math.Abs(v) > Math.Abs(target.Vy)) target.Vy = PhysicsStep.Clamp(v);
             }
             EnsureRunning();
         }
@@ -92,7 +98,7 @@ namespace Racks.Util
         {
             if (_running) return;
             _running = true;
-            _lastTicks = 0;
+            _lastFrame = TimeSpan.MinValue;
             CompositionTarget.Rendering += Tick;
         }
 
@@ -105,85 +111,91 @@ namespace Racks.Util
 
         private static void Tick(object? sender, EventArgs e)
         {
-            // Real elapsed time so motion is frame-rate independent.
-            long now = DateTime.UtcNow.Ticks;
-            if (_lastTicks == 0) { _lastTicks = now; return; }
-            double dt = (now - _lastTicks) / (double)TimeSpan.TicksPerSecond;
-            _lastTicks = now;
+            // The frame's own timestamp: steps match what is shown, and a second callback for
+            // the same frame (WPF can raise Rendering more than once) is skipped.
+            TimeSpan frame = e is RenderingEventArgs r ? r.RenderingTime : TimeSpan.FromTicks(DateTime.UtcNow.Ticks);
+            if (_lastFrame == TimeSpan.MinValue) { _lastFrame = frame; return; }
+            if (frame - _lastFrame < MinFrame) return;
+            double dt = (frame - _lastFrame).TotalSeconds;
+            _lastFrame = frame;
             if (dt <= 0) return;
-            if (dt > 0.05) dt = 0.05; // clamp a stall so nothing leaps across the screen
 
-            bool anyMoving = false;
-
+            var live = new List<PhysicsBody>(_bodies.Count);
             foreach (var b in _bodies)
             {
-                if (b.Window == null || b.IsAnchored()) { b.Vx = b.Vy = 0; continue; }
-                if (!b.Moving) { if (b.Vx != 0 || b.Vy != 0) { b.Vx = b.Vy = 0; b.OnSettled(); } continue; }
+                if (b.Window == null) continue;
+                Sync(b);
+                live.Add(b);
+            }
+            var areas = new Dictionary<SimBody, Rect>();
+            foreach (var b in live) areas[b.Sim] = ScreenBounds(b.Window);
+            PhysicsStep.Advance(live.ConvertAll(b => b.Sim), dt, s => areas[s]);
 
-                // Integrate position.
-                double nx = b.Window.Left + b.Vx * dt;
-                double ny = b.Window.Top + b.Vy * dt;
-
-                // Exponential friction: v *= e^(-friction*dt). Smooth, frame-independent.
-                double decay = Math.Exp(-Friction * dt);
-                b.Vx *= decay;
-                b.Vy *= decay;
-
-                // Bounce off the working area of the monitor the rack is on.
-                var wa = ScreenBounds(b.Window);
-                double w = b.Window.Width, h = b.Window.Height;
-                if (nx < wa.Left) { nx = wa.Left; b.Vx = -b.Vx * Restitution; }
-                else if (nx + w > wa.Right) { nx = wa.Right - w; b.Vx = -b.Vx * Restitution; }
-                if (ny < wa.Top) { ny = wa.Top; b.Vy = -b.Vy * Restitution; }
-                else if (ny + h > wa.Bottom) { ny = wa.Bottom - h; b.Vy = -b.Vy * Restitution; }
-
-                b.Window.Left = nx;
-                b.Window.Top = ny;
-
-                // Rack-vs-rack collision. A gliding rack hitting another rack (locked or not)
-                // is stopped/bounced at its edge - so a LOCKED rack is a solid hitbox nothing
-                // passes through, and a moving rack transfers a shove to a free one.
-                ResolveRackCollisions(b);
-
-                if (b.Moving) anyMoving = true;
-                else { b.Vx = b.Vy = 0; b.OnSettled(); }
+            bool anyMoving = false;
+            foreach (var b in live)
+            {
+                b.Vx = b.Sim.Vx;
+                b.Vy = b.Sim.Vy;
+                bool shifted = Math.Abs(b.Sim.X - b.WrittenX) > 0.01 || Math.Abs(b.Sim.Y - b.WrittenY) > 0.01;
+                if (!b.Sim.Anchored && shifted)
+                {
+                    b.Gliding = true;
+                    MoveWindow(b, b.Sim.X, b.Sim.Y);
+                }
+                if (b.Moving) { anyMoving = true; continue; }
+                b.Vx = b.Vy = 0;
+                if (b.Gliding) { b.Gliding = false; b.OnSettled(); }
             }
 
             if (!anyMoving) Stop();
         }
 
-        // Separate a moving body from any rack it overlaps: eject it along the shallower
-        // overlap axis and bounce its velocity on that axis. If the other rack is free (not
-        // anchored), hand it some of the incoming speed so the collision passes energy on.
-        private static void ResolveRackCollisions(PhysicsBody b)
+        // Copy the window's state into its simulation body. A body the loop is not moving (or
+        // that something else moved, e.g. a drag) starts from where its window really is;
+        // a gliding body keeps its own sub-pixel position.
+        private static void Sync(PhysicsBody b)
         {
-            var rect = new Rect(b.Window.Left, b.Window.Top, b.Window.Width, b.Window.Height);
-            foreach (var o in _bodies)
+            var s = b.Sim;
+            s.Anchored = b.IsAnchored();
+            s.W = b.Window.Width;
+            s.H = b.Window.Height;
+            s.Vx = b.Vx;
+            s.Vy = b.Vy;
+            bool movedElsewhere = double.IsNaN(b.WrittenX)
+                || Math.Abs(b.Window.Left - b.WrittenX) > 1.5 || Math.Abs(b.Window.Top - b.WrittenY) > 1.5;
+            if (!b.Gliding || movedElsewhere)
             {
-                if (o == b || o.Window == null) continue;
-                var orect = new Rect(o.Window.Left, o.Window.Top, o.Window.Width, o.Window.Height);
-                if (!rect.IntersectsWith(orect)) continue;
-                var isect = Rect.Intersect(rect, orect);
-                if (isect.IsEmpty || isect.Width <= 0 || isect.Height <= 0) continue;
+                s.X = b.Window.Left;
+                s.Y = b.Window.Top;
+                b.WrittenX = s.X;
+                b.WrittenY = s.Y;
+            }
+        }
 
-                double cdx = (rect.Left + rect.Width / 2) - (orect.Left + orect.Width / 2);
-                double cdy = (rect.Top + rect.Height / 2) - (orect.Top + orect.Height / 2);
-
-                if (isect.Width < isect.Height)
-                {
-                    double dir = cdx != 0 ? Math.Sign(cdx) : 1; // push b away from o horizontally
-                    b.Window.Left += dir * isect.Width;
-                    if (!o.IsAnchored()) { o.Vx = Clamp(o.Vx - b.Vx * (1 - Restitution), -MaxSpeed, MaxSpeed); }
-                    b.Vx = -b.Vx * Restitution;
-                }
-                else
-                {
-                    double dir = cdy != 0 ? Math.Sign(cdy) : 1;
-                    b.Window.Top += dir * isect.Height;
-                    if (!o.IsAnchored()) { o.Vy = Clamp(o.Vy - b.Vy * (1 - Restitution), -MaxSpeed, MaxSpeed); }
-                    b.Vy = -b.Vy * Restitution;
-                }
-                rect = new Rect(b.Window.Left, b.Window.Top, b.Window.Width, b.Window.Height);
+        // One SetWindowPos per frame (WPF's Left and Top setters move the window twice, which
+        // shows as a staircase on diagonal glides). Racks are children of the desktop view, so
+        // the screen position is converted to the parent's client coordinates.
+        private static void MoveWindow(PhysicsBody b, double x, double y)
+        {
+            b.WrittenX = x;
+            b.WrittenY = y;
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(b.Window).Handle;
+                if (hwnd == IntPtr.Zero) { b.Window.Left = x; b.Window.Top = y; return; }
+                double scale = 1.0;
+                var src = PresentationSource.FromVisual(b.Window);
+                if (src?.CompositionTarget != null) scale = src.CompositionTarget.TransformToDevice.M11;
+                var pt = new Interop.POINT { X = (int)Math.Round(x * scale), Y = (int)Math.Round(y * scale) };
+                var parent = Interop.GetParent(hwnd);
+                if (parent != IntPtr.Zero) Interop.ScreenToClient(parent, ref pt);
+                Interop.SetWindowPos(hwnd, IntPtr.Zero, pt.X, pt.Y, 0, 0,
+                    Interop.SWP_NOZORDER | Interop.SWP_NOSIZE | Interop.SWP_NOACTIVATE | Interop.SWP_NOOWNERZORDER);
+            }
+            catch
+            {
+                b.Window.Left = x;
+                b.Window.Top = y;
             }
         }
 
@@ -205,6 +217,5 @@ namespace Racks.Util
             }
         }
 
-        private static double Clamp(double v, double lo, double hi) => v < lo ? lo : (v > hi ? hi : v);
     }
 }

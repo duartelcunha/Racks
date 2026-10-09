@@ -355,6 +355,9 @@ namespace Racks
             }
         }
 
+        // A collapsed rack shows its title bar. With the drop shadow on, the background sits inside a margin, so the window needs that too or the bar (and its name) is clipped.
+        private double CollapsedHeight => titleBar.Height + WindowBackground.Margin.Top + WindowBackground.Margin.Bottom;
+
         private void AnimateWindowHeight(double targetHeight, double animationSpeed)
         {
             if (Instance.DisableAnimations) animationSpeed = 0;
@@ -379,7 +382,7 @@ namespace Racks
             animation.Completed += (s, e) =>
             {
                 _canAnimate = true;
-                if (targetHeight == titleBar.Height)
+                if (targetHeight == CollapsedHeight)
                 {
                     scrollViewer.ScrollToTop();
                 }
