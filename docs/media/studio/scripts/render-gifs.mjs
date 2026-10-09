@@ -6,7 +6,8 @@ import {renderFrames} from '@remotion/renderer';
 import {pickGifEncoder} from './lib/gif-encoder.mjs';
 import {describe, MB, outDir, progress, select, withBundle} from './lib/shared.mjs';
 
-// GIF frame delays come in 1/100 s steps: 25 fps is an even 40 ms, 30 fps would alternate 30/40 ms and judder.
+// GIF frame delays come in 1/100 s steps: 25 fps is an even 40 ms and 33.3 fps an even 30 ms; 30 fps would
+// alternate 30/40 ms and judder. Fast motion (physics) gets 33.3 fps, the rest 25.
 const GIF_FPS = 25;
 const GIF_QUALITY = 80;
 
@@ -15,17 +16,19 @@ const GIF_QUALITY = 80;
 const JOBS = [
 	{id: 'HeroLoop', name: 'hero', width: 1280, warnBytes: 5 * MB},
 	{id: 'DragIn', name: 'drag-in', width: 960, warnBytes: 3 * MB},
-	{id: 'Physics', name: 'physics', width: 960, warnBytes: 3 * MB},
+	{id: 'Physics', name: 'physics', width: 960, warnBytes: 3.5 * MB, fps: 100 / 3},
 	{id: 'Styling', name: 'styling', width: 960, warnBytes: 3 * MB},
 	{id: 'Finder', name: 'finder', width: 960, warnBytes: 3 * MB},
 ];
 
 const encoder = pickGifEncoder();
 console.log(`GIF encoder: ${encoder.name}`);
-const inputProps = {fps: GIF_FPS};
+// `npm run render:gifs -- physics finder` renders only those; no names renders all.
+const only = process.argv.slice(2);
 
 await withBundle(async (serveUrl) => {
-	for (const {id, name, width, warnBytes} of JOBS) {
+	for (const {id, name, width, warnBytes, fps = GIF_FPS} of JOBS.filter((job) => only.length === 0 || only.includes(job.name))) {
+		const inputProps = {fps};
 		const composition = await select(serveUrl, id, inputProps);
 		const framesDir = path.join(outDir, 'frames', name);
 		fs.rmSync(framesDir, {recursive: true, force: true});

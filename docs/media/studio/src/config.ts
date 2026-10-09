@@ -65,9 +65,16 @@ export const clips: Record<ClipId, ClipConfig> = {
 	physics: {
 		caption: 'Physics that feel real',
 		placeholder: 'demo-2',
-		trimStartSeconds: 2.2,
-		trimEndSeconds: 3.0,
-		zoom: [],
+		trimStartSeconds: 0.7,
+		trimEndSeconds: 4.2,
+		// Push in on the row of racks as the push starts, hold through the chain into the locked
+		// rack, then ease back out for the throw that slides back to the left.
+		zoom: [
+			{frame: 6, scale: 1, x: 0.5, y: 0.55},
+			{frame: 46, scale: 1.25, x: 0.9, y: 0.56},
+			{frame: 125, scale: 1.25, x: 0.9, y: 0.56},
+			{frame: 160, scale: 1, x: 0.5, y: 0.55},
+		],
 	},
 	styling: {
 		caption: 'A rack for every mood',
