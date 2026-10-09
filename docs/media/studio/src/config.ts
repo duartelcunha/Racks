@@ -89,8 +89,8 @@ export const clips: Record<ClipId, ClipConfig> = {
 		trimEndSeconds: 1.2,
 		zoom: [
 			{frame: 40, scale: 1, x: 0.5, y: 0.5},
-			{frame: 80, scale: 1.22, x: 0.5, y: 0.5},
-			{frame: 235, scale: 1.22, x: 0.5, y: 0.5},
+			{frame: 80, scale: 1.1, x: 0.5, y: 0.5},
+			{frame: 235, scale: 1.1, x: 0.5, y: 0.5},
 			{frame: 275, scale: 1, x: 0.5, y: 0.5},
 		],
 		// The path line of each result row (C:/Users/<name>/RacksWorkspace/...), which shows the Windows user name.

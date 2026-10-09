@@ -50,7 +50,7 @@ Your desktop is a good place to keep things in reach and a bad place to keep the
 ## Drag in. Done.
 
 <div align="center">
-  <img src="docs/screenshots/drag-in.gif" alt="Three files dropped into racks, one after the other" width="100%" />
+  <img src="docs/screenshots/drag-in.gif" alt="A file dropped into a rack, another Ctrl+dropped as a link while the original stays in the folder, and one dragged back out" width="100%" />
 </div>
 
 Drop a file, folder or shortcut onto a rack. By default it is **moved** into the rack's private workspace, so it disappears from wherever it was.
