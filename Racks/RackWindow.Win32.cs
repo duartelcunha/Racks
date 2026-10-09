@@ -339,7 +339,7 @@ namespace Racks
                     handled = true;
                     return (IntPtr)4;
                 }
-                else if (!_isMinimized && this.ActualHeight != titleBar.Height && _canAnimate)
+                else if (!_isMinimized && this.ActualHeight != CollapsedHeight && _canAnimate)
                 {
                     Instance.Height = this.ActualHeight;
                 }
@@ -584,7 +584,7 @@ namespace Racks
             SetAsDesktopChild();
             if (Instance.Minimized)
             {
-                this.Height = titleBar.Height;
+                this.Height = CollapsedHeight;
             }
             RescueIfOffscreen();
             var interopHelper = new WindowInteropHelper(this);

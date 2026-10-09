@@ -73,7 +73,7 @@ namespace Racks
                 _isMinimized = true;
                 Instance.Minimized = true;
                 // Debug.WriteLine("minimize: " + Instance.Height);
-                AnimateWindowHeight(titleBar.Height, Instance.AnimationSpeed);
+                AnimateWindowHeight(CollapsedHeight, Instance.AnimationSpeed);
             }
             else
             {

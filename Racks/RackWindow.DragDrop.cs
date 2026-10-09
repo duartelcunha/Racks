@@ -607,7 +607,7 @@ namespace Racks
         {
             if (_isMinimized)
             {
-                AnimateWindowHeight(titleBar.Height, Instance.AnimationSpeed);
+                AnimateWindowHeight(CollapsedHeight, Instance.AnimationSpeed);
             }
             if (!IsCursorWithinWindowBounds() && !_isDragging)
             {
