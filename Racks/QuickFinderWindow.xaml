@@ -16,6 +16,12 @@
         Height="440"
         Deactivated="Window_Deactivated"
         KeyDown="Window_KeyDown">
+    <Window.Resources>
+        <!-- Wpf.Ui paints a selected ListBoxItem with the Windows accent and black text, which reads badly on a
+             dark accent. A white-alpha bar with white text works with any accent colour. -->
+        <SolidColorBrush x:Key="ListBoxItemSelectedBackgroundThemeBrush" Color="#33FFFFFF"/>
+        <SolidColorBrush x:Key="ListBoxItemSelectedForegroundThemeBrush" Color="White"/>
+    </Window.Resources>
     <Border CornerRadius="14" BorderThickness="1" Margin="16"
             Background="{StaticResource RacksCardBackground}"
             BorderBrush="{StaticResource RacksCardBorder}">
@@ -59,7 +65,7 @@
                         <Image Width="20" Height="20" Source="{Binding Item.Thumbnail}" Margin="0,0,8,0"/>
                         <StackPanel>
                             <TextBlock Text="{Binding Item.DisplayName}" FontSize="13"/>
-                            <TextBlock Text="{Binding Subtitle}" FontSize="10" Foreground="#888"/>
+                            <TextBlock Text="{Binding Subtitle}" FontSize="10" Foreground="#B3FFFFFF"/>
                         </StackPanel>
                     </StackPanel>
                 </DataTemplate>
