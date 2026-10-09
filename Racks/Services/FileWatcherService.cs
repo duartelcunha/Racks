@@ -24,8 +24,10 @@ namespace Racks.Services
 
         private FileSystemWatcher? _parentWatcher;
         private FileSystemWatcher? _fileWatcher;
+        private FileSystemWatcher? _extraWatcher;
         private string _instanceFolder = "";
         private string _currentFolderPath = "";
+        private string? _alsoWatchFolder;
 
         public FileWatcherService() : this(new TimerDelayScheduler()) { }
 
@@ -36,10 +38,13 @@ namespace Racks.Services
         public event EventHandler<FileSystemEventArgs>? FileChanged;
         public event EventHandler<RenamedEventArgs>? FileRenamed;
 
-        public void Initialize(string instanceFolder, string currentFolderPath)
+        // `alsoWatchFolder` is a second folder whose changes refresh the owner too. A desktop rack lists the
+        // Desktop but keeps its files in the workspace, so it needs both.
+        public void Initialize(string instanceFolder, string currentFolderPath, string? alsoWatchFolder = null)
         {
             _instanceFolder = instanceFolder;
             _currentFolderPath = currentFolderPath;
+            _alsoWatchFolder = alsoWatchFolder;
 
             if (!string.IsNullOrEmpty(instanceFolder) && instanceFolder != "empty")
             {
@@ -64,22 +69,29 @@ namespace Racks.Services
             {
                 DisposeFileWatcher();
 
-                if (Directory.Exists(currentFolderPath))
-                {
-                    _fileWatcher = new FileSystemWatcher(currentFolderPath)
-                    {
-                        NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
-                        IncludeSubdirectories = false,
-                        InternalBufferSize = WatcherBufferBytes,
-                        EnableRaisingEvents = true
-                    };
-                    _fileWatcher.Created += OnFileStructureChanged;
-                    _fileWatcher.Deleted += OnFileStructureChanged;
-                    _fileWatcher.Renamed += OnFileRenamed;
-                    _fileWatcher.Changed += OnFileContentChanged;
-                    _fileWatcher.Error += OnFileWatcherError;
-                }
+                if (Directory.Exists(currentFolderPath)) _fileWatcher = NewFileWatcher(currentFolderPath);
+                if (!string.IsNullOrEmpty(alsoWatchFolder)
+                    && !string.Equals(alsoWatchFolder, currentFolderPath, StringComparison.OrdinalIgnoreCase)
+                    && Directory.Exists(alsoWatchFolder))
+                    _extraWatcher = NewFileWatcher(alsoWatchFolder);
             }
+        }
+
+        private FileSystemWatcher NewFileWatcher(string folder)
+        {
+            var watcher = new FileSystemWatcher(folder)
+            {
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
+                IncludeSubdirectories = false,
+                InternalBufferSize = WatcherBufferBytes,
+                EnableRaisingEvents = true
+            };
+            watcher.Created += OnFileStructureChanged;
+            watcher.Deleted += OnFileStructureChanged;
+            watcher.Renamed += OnFileRenamed;
+            watcher.Changed += OnFileContentChanged;
+            watcher.Error += OnFileWatcherError;
+            return watcher;
         }
 
         private void OnParentChanged(object sender, FileSystemEventArgs e) => ParentChanged?.Invoke(this, e);
@@ -125,14 +137,16 @@ namespace Racks.Services
                 _pendingRestart = _scheduler.Schedule(RestartDelay, () =>
                 {
                     string folder, current;
+                    string? also;
                     lock (_gate)
                     {
                         if (_disposed) return;
                         _pendingRestart = null;
                         folder = _instanceFolder;
                         current = _currentFolderPath;
+                        also = _alsoWatchFolder;
                     }
-                    try { Initialize(folder, current); }
+                    try { Initialize(folder, current, also); }
                     catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"FileWatcher restart failed: {ex.Message}"); }
                     // A rescan request, not a real file event: the owner reloads the folder.
                     FileChanged?.Invoke(this, new FileSystemEventArgs(WatcherChangeTypes.Changed, current, name: null));
@@ -152,14 +166,20 @@ namespace Racks.Services
 
         private void DisposeFileWatcher()
         {
-            if (_fileWatcher == null) return;
-            _fileWatcher.Created -= OnFileStructureChanged;
-            _fileWatcher.Deleted -= OnFileStructureChanged;
-            _fileWatcher.Renamed -= OnFileRenamed;
-            _fileWatcher.Changed -= OnFileContentChanged;
-            _fileWatcher.Error -= OnFileWatcherError;
-            _fileWatcher.Dispose();
-            _fileWatcher = null;
+            DisposeWatcher(ref _fileWatcher);
+            DisposeWatcher(ref _extraWatcher);
+        }
+
+        private void DisposeWatcher(ref FileSystemWatcher? watcher)
+        {
+            if (watcher == null) return;
+            watcher.Created -= OnFileStructureChanged;
+            watcher.Deleted -= OnFileStructureChanged;
+            watcher.Renamed -= OnFileRenamed;
+            watcher.Changed -= OnFileContentChanged;
+            watcher.Error -= OnFileWatcherError;
+            watcher.Dispose();
+            watcher = null;
         }
 
         public void Dispose()

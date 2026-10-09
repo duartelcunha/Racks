@@ -364,55 +364,9 @@ namespace Racks
             Instance.IsDesktopFilterRack
             || (Instance.IsShortcutsOnly && InstanceController.IsInsideVirtualFramesRoot(Instance.Folder));
 
-        // Create a "reference" to filePath inside shortcutFolder that the user
-        // perceives as the file/folder itself, not a shortcut. Strategies, in
-        // order:
-        //   1. .url      → copy as-is (already a reference file).
-        //   2. File + same NTFS volume   → NTFS hardlink. Same inode, no .lnk,
-        //      no shortcut-arrow overlay, no .lnk extension. Visible to file
-        //      pickers under both names.
-        //   3. Folder + same NTFS volume → directory junction. Looks like a
-        //      real folder, no .lnk extension; file pickers can traverse it.
-        //   4. Cross-volume / special filesystem → .lnk shortcut fallback.
-        // In all cases the SOURCE on Desktop is left in place, so the user can
-        // still find the file via any "browse to Desktop" file picker.
-        void CreateShortcut(string filePath, string shortcutFolder = null)
-        {
-            string folder = !string.IsNullOrEmpty(shortcutFolder) ? shortcutFolder : Path.GetDirectoryName(filePath);
-
-            if (Path.GetExtension(filePath).Equals(".url", StringComparison.OrdinalIgnoreCase))
-            {
-                File.Copy(filePath, Path.Combine(folder, Path.GetFileName(filePath)));
-                return;
-            }
-
-            string sameNameDest = Path.Combine(folder, Path.GetFileName(filePath));
-            bool destExists = File.Exists(sameNameDest) || Directory.Exists(sameNameDest);
-
-            if (File.Exists(filePath))
-            {
-                if (!destExists && HardlinkHelper.TryCreate(filePath, sameNameDest))
-                    return;
-                // Hardlink failed (cross-volume, special filesystem, race) — fall
-                // through to .lnk so the gesture still produces something useful.
-            }
-            else if (Directory.Exists(filePath))
-            {
-                if (!destExists && JunctionHelper.TryCreate(filePath, sameNameDest))
-                    return;
-                // Junction failed (cross-volume, ACL, race) — fall through to
-                // a folder .lnk. Note a .lnk to a directory is openable but
-                // not traversable by Win32 file pickers, so this is a worse
-                // experience; hopefully rare in practice.
-            }
-
-            string shortcutPath = Path.Combine(folder, Path.GetFileNameWithoutExtension(filePath) + ".lnk");
-            ShellLinkHelper.Create(
-                shortcutPath: shortcutPath,
-                targetPath: filePath,
-                workingDirectory: Path.GetDirectoryName(filePath),
-                description: Path.GetFileName(filePath));
-        }
+        // Creates the Ctrl+drop "reference" (hardlink, junction or .lnk) and returns the path it made.
+        string CreateShortcut(string filePath, string shortcutFolder = null, string destFileName = null) =>
+            ShortcutFactory.Create(filePath, !string.IsNullOrEmpty(shortcutFolder) ? shortcutFolder : Path.GetDirectoryName(filePath), destFileName);
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {

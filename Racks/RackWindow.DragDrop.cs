@@ -141,7 +141,8 @@ namespace Racks
             {
                 string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                 string desktopTarget = Path.Combine(desktopPath, fileName);
-                bool newOnDesktop = !desktopHadFileBefore && DesktopHasFile(fileName);
+                bool movedAway = Rack.DesktopRackClaims.IsGone(workspaceFullPath); // Explorer MOVED it: only our claim is left
+                bool newOnDesktop = !movedAway && !desktopHadFileBefore && DesktopHasFile(fileName);
 
                 if (newOnDesktop)
                 {
@@ -161,7 +162,7 @@ namespace Racks
                     if (!Util.SafeDelete.ToRecycleBin(workspaceFullPath))
                         Debug.WriteLine("Drag-out: could not recycle sandbox original; leaving it in place.");
                 }
-                else
+                else if (!movedAway)
                 {
                     // Nothing new landed on the desktop. If the drop was ON the desktop area
                     // (not into another app), physically move the file out of the sandbox to
@@ -447,8 +448,8 @@ namespace Racks
                             // and claim it in AssignedFiles. (Unless they hold Ctrl for a link).
                             if (wantsLinkInsteadOfMove)
                             {
-                                CreateShortcut(file, destinationDir);
-                                ReassignDesktopFileToThisRack(destinationPath + ".lnk"); // Shortcuts get .lnk appended
+                                // Claim whatever name CreateShortcut actually made (a hardlink keeps the file name, a .lnk gains an extension).
+                                ReassignDesktopFileToThisRack(CreateShortcut(file, destinationDir, Path.GetFileName(destinationPath)));
                             }
                             else
                             {
