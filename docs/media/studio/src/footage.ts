@@ -47,7 +47,9 @@ export const resolveFootage = (id: ClipId, fps: number): Footage => {
 	}
 	const placeholder = manifest.placeholders[config.placeholder];
 	if (!placeholder) {
-		throw new Error(`Placeholder ${config.placeholder} is missing; run npm run prepare-clips`);
+		throw new Error(
+			`No footage for "${id}": add docs/media/raw/${id}.mp4 (see docs/media/SHOTLIST.md for what to record), then run npm run prepare-clips.`,
+		);
 	}
 	return {
 		kind: 'placeholder',

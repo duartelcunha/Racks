@@ -128,7 +128,7 @@ const mirrorClips = async () => {
 		} catch (error) {
 			console.warn(
 				`  ! ${raw.get(id)} in docs/media/raw could not be read (${error.message}). Re-export it or remove it; ` +
-					'using placeholder footage until then.',
+					'treating it as missing until then.',
 			);
 			clips[id] = {present: false};
 			continue;
@@ -154,14 +154,14 @@ const changed = writeIfChanged(manifestPath, `${JSON.stringify({clips, placehold
 
 const real = Object.values(clips).filter((clip) => clip.present).length;
 if (!changed) {
-	console.log(`prepare-clips: up to date (${real} recorded, ${Object.keys(clips).length - real} placeholder)`);
+	console.log(`prepare-clips: up to date (${real} recorded, ${Object.keys(clips).length - real} missing)`);
 } else {
 	console.log('prepare-clips: wrote src/clips.generated.json');
 	for (const [id, clip] of Object.entries(clips)) {
 		console.log(
 			clip.present
 				? `  ${id.padEnd(8)} ${clip.width}x${clip.height} @ ${clip.fps} fps, ${clip.durationInSeconds}s`
-				: `  ${id.padEnd(8)} missing -> placeholder footage`,
+				: `  ${id.padEnd(8)} missing (add docs/media/raw/${id}.mp4)`,
 		);
 	}
 }

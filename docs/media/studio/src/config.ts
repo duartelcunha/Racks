@@ -85,13 +85,13 @@ export const clips: Record<ClipId, ClipConfig> = {
 	finder: {
 		caption: 'Find anything instantly',
 		placeholder: 'demo-2',
-		trimStartSeconds: 5.0,
-		trimEndSeconds: 1.2,
+		trimStartSeconds: 2.2,
+		trimEndSeconds: 2.6,
 		zoom: [
-			{frame: 40, scale: 1, x: 0.5, y: 0.5},
-			{frame: 80, scale: 1.1, x: 0.5, y: 0.5},
-			{frame: 235, scale: 1.1, x: 0.5, y: 0.5},
-			{frame: 275, scale: 1, x: 0.5, y: 0.5},
+			{frame: 24, scale: 1, x: 0.5, y: 0.5},
+			{frame: 70, scale: 1.1, x: 0.5, y: 0.5},
+			{frame: 270, scale: 1.1, x: 0.5, y: 0.5},
+			{frame: 305, scale: 1, x: 0.5, y: 0.5},
 		],
 		// The path line of each result row (C:/Users/<name>/RacksWorkspace/...), which shows the Windows user name.
 		redact: [434, 498, 562, 628].map((y) => ({x: 756, y, w: 262, h: 19})),
