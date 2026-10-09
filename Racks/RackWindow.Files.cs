@@ -103,7 +103,8 @@ namespace Racks
                     _fileWatcherService.ParentRenamed += OnParentRenamed;
                     _fileWatcherWired = true;
                 }
-                _fileWatcherService.Initialize(Instance.Folder, _currentFolderPath);
+                // A desktop rack lists the Desktop but its files live in the workspace: watch both, so moving an item out refreshes the rack.
+                _fileWatcherService.Initialize(Instance.Folder, _currentFolderPath, Instance.IsDesktopFilterRack ? DesktopIconManager.RacksWorkspacePath : null);
             }
 
             if (!Path.Exists(Instance.Folder) && Instance.Folder != "empty")
@@ -304,7 +305,7 @@ namespace Racks
                     // Remove duplicates by name (if a file somehow exists in both, prefer Workspace)
                     filteredFiles = filteredFiles
                         .GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
-                        .Select(g => g.First())
+                        .Select(g => g.Last()) // the workspace is scanned last, so its copy (the hardlink a Ctrl+drop makes) wins
                         .ToList();
 
                     _folderCount = filteredFiles.OfType<DirectoryInfo>().Count();

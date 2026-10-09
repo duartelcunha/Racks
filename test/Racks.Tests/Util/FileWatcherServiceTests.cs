@@ -98,4 +98,33 @@ public class FileWatcherServiceTests
         }
         finally { svc.Dispose(); Directory.Delete(folder, true); }
     }
+
+    // A desktop rack lists the Desktop but keeps its files in the workspace. Dragging an item out
+    // deletes it from the workspace, and the rack only refreshes if that folder is watched too.
+    [Fact]
+    public void A_second_watched_folder_raises_events_too()
+    {
+        string main = Path.Combine(Path.GetTempPath(), "racks-watch-a-" + Guid.NewGuid().ToString("N"));
+        string extra = Path.Combine(Path.GetTempPath(), "racks-watch-b-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(main);
+        Directory.CreateDirectory(extra);
+        string file = Path.Combine(extra, "Holiday.jpg");
+        File.WriteAllText(file, "x");
+        try
+        {
+            using var svc = new FileWatcherService();
+            using var raised = new ManualResetEventSlim();
+            svc.FileChanged += (_, e) => { if (e.FullPath == file) raised.Set(); };
+            svc.Initialize(main, main, extra);
+
+            File.Delete(file);
+
+            Assert.True(raised.Wait(TimeSpan.FromSeconds(10)), "no event from the second folder");
+        }
+        finally
+        {
+            try { Directory.Delete(main, true); } catch { }
+            try { Directory.Delete(extra, true); } catch { }
+        }
+    }
 }
