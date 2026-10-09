@@ -10,9 +10,20 @@ namespace Racks.Rack;
 /// </summary>
 public static class DesktopRackClaims
 {
-    /// <summary>True when nothing exists at <paramref name="workspaceFullPath"/> any more (a file, a folder or a link).</summary>
-    public static bool IsGone(string workspaceFullPath) =>
-        !string.IsNullOrEmpty(workspaceFullPath)
-        && !File.Exists(workspaceFullPath)
-        && !Directory.Exists(workspaceFullPath);
+    /// <summary>
+    /// True when nothing exists at <paramref name="workspaceFullPath"/> any more (a file, a folder or a link)
+    /// while its folder is still reachable. File.Exists and Directory.Exists also answer false for an
+    /// unreachable path (no access, a dropped network share), which must not count as "moved away".
+    /// </summary>
+    public static bool IsGone(string workspaceFullPath)
+    {
+        if (string.IsNullOrEmpty(workspaceFullPath)) return false;
+        try
+        {
+            string? parent = Path.GetDirectoryName(workspaceFullPath);
+            if (string.IsNullOrEmpty(parent) || !Directory.Exists(parent)) return false;
+            return !File.Exists(workspaceFullPath) && !Directory.Exists(workspaceFullPath);
+        }
+        catch { return false; }
+    }
 }

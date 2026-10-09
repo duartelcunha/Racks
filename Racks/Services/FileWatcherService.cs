@@ -75,6 +75,11 @@ namespace Racks.Services
                     && Directory.Exists(alsoWatchFolder))
                     _extraWatcher = NewFileWatcher(alsoWatchFolder);
             }
+
+            // A restart timer can land here after Dispose; do not leave watchers running on a disposed service.
+            bool disposed;
+            lock (_gate) disposed = _disposed;
+            if (disposed) { DisposeParentWatcher(); DisposeFileWatcher(); }
         }
 
         private FileSystemWatcher NewFileWatcher(string folder)

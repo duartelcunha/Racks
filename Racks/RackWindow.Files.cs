@@ -305,7 +305,7 @@ namespace Racks
                     // Remove duplicates by name (if a file somehow exists in both, prefer Workspace)
                     filteredFiles = filteredFiles
                         .GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
-                        .Select(g => g.First())
+                        .Select(g => g.Last()) // the workspace is scanned last, so its copy (the hardlink a Ctrl+drop makes) wins
                         .ToList();
 
                     _folderCount = filteredFiles.OfType<DirectoryInfo>().Count();

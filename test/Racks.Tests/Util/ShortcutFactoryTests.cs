@@ -66,6 +66,7 @@ public sealed class ShortcutFactoryTests : IDisposable
         string created = ShortcutFactory.Create(src, _folder);
 
         Assert.NotEqual(existing, created);
+        Assert.EndsWith(".jpg.lnk", created); // keeps the full name, so a.jpg and a.png can't both become a.lnk
         Assert.True(File.Exists(created), created);
         Assert.Equal("already here", File.ReadAllText(existing));
     }

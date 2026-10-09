@@ -40,6 +40,6 @@ public class QuickFinderStyleTests
         var foreground = (string?)subtitle.Attribute("Foreground");
         Assert.NotNull(foreground);
         Assert.NotEqual("#888", foreground);
-        Assert.Matches("^#[B-F][0-9A-Fa-f]FFFFFF$", foreground!); // alpha 0xB0 or more, white
+        Assert.Matches("(?i)^#[B-F][0-9A-F]FFFFFF$", foreground!); // alpha 0xB0 or more, white
     }
 }

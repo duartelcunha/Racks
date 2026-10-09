@@ -21,7 +21,7 @@ public sealed class DesktopRackClaimsTests : IDisposable
         File.WriteAllText(file, "x");
         Assert.False(DesktopRackClaims.IsGone(file));
 
-        File.Move(file, Path.Combine(Path.GetTempPath(), "moved-" + Guid.NewGuid().ToString("N")));
+        File.Move(file, Path.Combine(_root, "moved-away.jpg"));
         Assert.True(DesktopRackClaims.IsGone(file));
     }
 
@@ -40,6 +40,12 @@ public sealed class DesktopRackClaimsTests : IDisposable
         File.WriteAllText(file, "x");
         File.Copy(file, Path.Combine(_root, "Beach-copy.jpg"));
         Assert.False(DesktopRackClaims.IsGone(file));
+    }
+
+    [Fact]
+    public void A_path_in_an_unreachable_folder_is_not_reported_as_gone()
+    {
+        Assert.False(DesktopRackClaims.IsGone(Path.Combine(_root, "no-such-folder", "Holiday.jpg")));
     }
 
     [Fact]

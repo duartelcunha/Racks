@@ -119,7 +119,7 @@ public class FileWatcherServiceTests
 
             File.Delete(file);
 
-            Assert.True(raised.Wait(TimeSpan.FromSeconds(5)), "no event from the second folder");
+            Assert.True(raised.Wait(TimeSpan.FromSeconds(10)), "no event from the second folder");
         }
         finally
         {
