@@ -82,12 +82,10 @@ Push one rack into another and it glides away like a puck on ice, with momentum,
 ## A rack for every mood
 
 <div align="center">
-  <img src="docs/screenshots/styling.gif" alt="The same rack in six themes: Dark, Light, Glass, Neon, Solarized Dark and Solarized Light" width="100%" />
+  <img src="docs/screenshots/styling.gif" alt="The rack settings panel open next to a rack: turning on the gradient and drop shadow, then changing the background colour to violet and emerald" width="100%" />
 </div>
 
-Every rack is styled on its own: colors, fonts, opacity, icon size, drop shadow, gradient, a background image, or nothing at all for pure glass. Six themes are one click away (Dark, Light, Glass, Neon, Solarized Dark, Solarized Light). Collapse any rack down to its title bar with the chevron.
-
-The settings panel snaps next to the rack you are editing and updates live, with no Apply button.
+Every rack is styled on its own: colors, fonts, opacity, icon size, drop shadow, gradient, a background image, or nothing at all for pure glass. Right-click a rack, choose **Settings**, and the panel opens next to it. Type or pick a color and the rack follows as you go, with no Apply button. Collapse any rack down to its title bar with the chevron.
 
 <br />
 

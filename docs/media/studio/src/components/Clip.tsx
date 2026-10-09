@@ -1,4 +1,4 @@
-import type {ZoomKeyframe} from '../config';
+import type {Rect, ZoomKeyframe} from '../config';
 import type {Footage} from '../footage';
 import {fitInside} from '../lib/fit';
 import {frame as frameStyle} from '../theme';
@@ -11,11 +11,12 @@ export type ClipProps = {
 	/** Largest area the frame may take; the frame keeps the footage's aspect ratio inside it. */
 	box: {width: number; height: number};
 	zoom: ZoomKeyframe[];
+	redact?: Rect[];
 	caption: {text: string; delay: number} | null;
 };
 
 /** A recording in a rounded, softly shadowed frame, with an optional lower-third caption. */
-export const Clip: React.FC<ClipProps> = ({footage, box, zoom, caption}) => {
+export const Clip: React.FC<ClipProps> = ({footage, box, zoom, redact, caption}) => {
 	const {width, height} = fitInside(footage, box);
 
 	return (
@@ -31,7 +32,7 @@ export const Clip: React.FC<ClipProps> = ({footage, box, zoom, caption}) => {
 				isolation: 'isolate',
 			}}
 		>
-			<ClipMedia footage={footage} zoom={zoom} width={width} height={height} />
+			<ClipMedia footage={footage} zoom={zoom} redact={redact} width={width} height={height} />
 			{/* Hairline drawn on top so it stays visible over light footage. */}
 			<div
 				style={{

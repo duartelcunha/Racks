@@ -8,7 +8,7 @@ import {describe, MB, outDir, progress, select, withBundle} from './lib/shared.m
 
 // GIF frame delays come in 1/100 s steps: 25 fps is an even 40 ms, 30 fps would alternate 30/40 ms and judder.
 const GIF_FPS = 25;
-const GIF_QUALITY = 90;
+const GIF_QUALITY = 80;
 
 // Composition id -> output name, width and size budget. The hero is shown full width in the
 // README, so it gets more pixels (and a bigger budget) than the section GIFs.

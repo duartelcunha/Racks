@@ -46,17 +46,6 @@ summary. A missing clip is marked absent and its placeholder GIF is used instead
 cannot be read (half-exported, damaged) gets a warning naming the file and is treated as missing,
 so the other compositions keep working.
 
-## The styling clip is a theme reel
-
-`styling.mp4` is not a screen recording. It is rendered by the `ThemeReel` composition from six real
-screenshots of one rack wearing each one-click theme (Dark, Light, Glass, Neon, Solarized Dark,
-Solarized Light), captured from the running app into `public/themes/01-dark.png` ... `06-solarized-light.png`
-(1920x1080, gitignored). Re-render it after changing the stills:
-
-```sh
-npm run render:themes   # writes docs/media/raw/styling.mp4
-```
-
 ## Preview
 
 ```sh

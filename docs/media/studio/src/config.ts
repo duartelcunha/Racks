@@ -32,6 +32,9 @@ export type PlaceholderId = 'demo-1' | 'demo-2' | 'demo-3';
  */
 export type ZoomKeyframe = {frame: number; scale: number; x: number; y: number};
 
+/** A rectangle in the recording's own pixels (not the frame's). */
+export type Rect = {x: number; y: number; w: number; h: number};
+
 export type ClipConfig = {
 	caption: string | null;
 	/** Old demo GIF shown while docs/media/raw/<id>.mp4 does not exist yet. */
@@ -40,6 +43,8 @@ export type ClipConfig = {
 	trimStartSeconds: number;
 	trimEndSeconds: number;
 	zoom: ZoomKeyframe[];
+	/** Areas of the recording to blur, e.g. a user name in a file path. They follow the zoom. */
+	redact?: Rect[];
 };
 
 export const clips: Record<ClipId, ClipConfig> = {
@@ -53,10 +58,9 @@ export const clips: Record<ClipId, ClipConfig> = {
 	'drag-in': {
 		caption: 'Drag in. Done.',
 		placeholder: 'demo-1',
-		trimStartSeconds: 2.0,
-		trimEndSeconds: 0.8,
+		trimStartSeconds: 2.2,
+		trimEndSeconds: 1.6,
 		zoom: [],
-
 	},
 	physics: {
 		caption: 'Physics that feel real',
@@ -68,16 +72,29 @@ export const clips: Record<ClipId, ClipConfig> = {
 	styling: {
 		caption: 'A rack for every mood',
 		placeholder: 'demo-1',
-		trimStartSeconds: 0,
-		trimEndSeconds: 0,
-		zoom: [],
+		trimStartSeconds: 3.4,
+		trimEndSeconds: 4.8,
+		// One push-in on the settings panel and the rack once the panel is open.
+		zoom: [
+			{frame: 75, scale: 1, x: 0.5, y: 0.5},
+			{frame: 115, scale: 1.35, x: 0, y: 0.62},
+			{frame: 430, scale: 1.35, x: 0, y: 0.62},
+			{frame: 465, scale: 1, x: 0.5, y: 0.5},
+		],
 	},
 	finder: {
 		caption: 'Find anything instantly',
 		placeholder: 'demo-2',
 		trimStartSeconds: 5.0,
 		trimEndSeconds: 1.2,
-		zoom: [],
+		zoom: [
+			{frame: 40, scale: 1, x: 0.5, y: 0.5},
+			{frame: 80, scale: 1.22, x: 0.5, y: 0.5},
+			{frame: 235, scale: 1.22, x: 0.5, y: 0.5},
+			{frame: 275, scale: 1, x: 0.5, y: 0.5},
+		],
+		// The path line of each result row (C:/Users/<name>/RacksWorkspace/...), which shows the Windows user name.
+		redact: [434, 498, 562, 628].map((y) => ({x: 756, y, w: 262, h: 19})),
 	},
 };
 

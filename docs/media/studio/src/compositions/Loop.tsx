@@ -21,7 +21,7 @@ export const Loop: React.FC<LoopProps> = ({clip}) => {
 	const t = useConfigFrame();
 	const last = useConfigLastFrame();
 	const {fps} = useVideoConfig();
-	const {caption, zoom} = clips[clip];
+	const {caption, zoom, redact} = clips[clip];
 	const fade = timing.loopFadeFrames;
 
 	const opacity = interpolate(t, [0, fade, last - fade, last], [0, 1, 1, 0], {
@@ -42,6 +42,7 @@ export const Loop: React.FC<LoopProps> = ({clip}) => {
 						footage={resolveFootage(clip, fps)}
 						box={BOX}
 						zoom={zoom}
+						redact={redact}
 						caption={caption ? {text: caption, delay: timing.captionDelayFrames} : null}
 					/>
 				</div>

@@ -1,7 +1,6 @@
 import {Composition} from 'remotion';
 import {Hero, calculateHeroMetadata} from './compositions/Hero';
 import {Loop, calculateLoopMetadata} from './compositions/Loop';
-import {ThemeReel, REEL_HEIGHT, REEL_WIDTH, THEME_REEL_FRAMES} from './compositions/ThemeReel';
 import {FALLBACK_SECONDS, FPS, HEIGHT, loops, WIDTH} from './config';
 
 // Durations here are only defaults; calculateMetadata replaces them with the probed clip lengths
@@ -19,14 +18,6 @@ export const RemotionRoot: React.FC = () => (
 			durationInFrames={DEFAULT_FRAMES}
 			defaultProps={{}}
 			calculateMetadata={calculateHeroMetadata}
-		/>
-		<Composition
-			id="ThemeReel"
-			component={ThemeReel}
-			width={REEL_WIDTH}
-			height={REEL_HEIGHT}
-			fps={FPS}
-			durationInFrames={THEME_REEL_FRAMES}
 		/>
 		{loops.map(({compositionId, clip}) => (
 			<Composition

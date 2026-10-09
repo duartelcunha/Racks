@@ -3,9 +3,9 @@
 > **Status.** The five clips in the README were captured with scripted mouse and keyboard input on a
 > 1920x1080 monitor (ffmpeg screen capture, one demo-file set, no personal files on screen), not with Cap.
 > The scripts are tied to one machine and are not part of the repo. This list stays as the brief for
-> re-recording by hand. Two deviations: `styling` is rendered from theme screenshots (see
-> [`studio/README.md`](studio/README.md)), and `finder` shows Quick Finder only, because Magic Organize
-> works on the real Desktop folder and can't be recorded safely on a working PC.
+> re-recording by hand. Two deviations: `styling` is the rack settings panel (right-click, Settings...)
+> with live colour changes, and `finder` shows Quick Finder only, because Magic Organize works on the
+> real Desktop folder and can't be recorded safely on a working PC.
 
 Five short clips for the README. Each is edited afterwards in `docs/media/studio` (Remotion), which
 adds the intro, captions, framing and zooms, so **record plain**: no text, no editing.

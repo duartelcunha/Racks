@@ -15,7 +15,6 @@
     "render:mp4": "node scripts/render-mp4.mjs",
     "prerender:gifs": "node scripts/prepare-clips.mjs",
     "render:gifs": "node scripts/render-gifs.mjs",
-    "render:themes": "remotion render src/index.ts ThemeReel ../raw/styling.mp4 --codec=h264 --crf=14",
     "render:all": "npm run render:mp4 && npm run render:gifs"
   },
   "dependencies": {

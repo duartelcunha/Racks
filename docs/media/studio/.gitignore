@@ -2,5 +2,3 @@
 public/clips/
 public/repo/
 src/clips.generated.json
-# Real theme screenshots captured from the app (input of the ThemeReel composition)
-public/themes/
