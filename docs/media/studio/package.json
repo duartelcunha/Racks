@@ -1,0 +1,35 @@
+{
+  "name": "racks-media-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Remotion project that turns the raw Racks screen recordings into the README hero video and GIFs.",
+  "type": "module",
+  "scripts": {
+    "postinstall": "node scripts/prepare-clips.mjs",
+    "prepare-clips": "node scripts/prepare-clips.mjs",
+    "prestudio": "node scripts/prepare-clips.mjs",
+    "studio": "remotion studio",
+    "pretypecheck": "node scripts/prepare-clips.mjs",
+    "typecheck": "tsc --noEmit",
+    "prerender:mp4": "node scripts/prepare-clips.mjs",
+    "render:mp4": "node scripts/render-mp4.mjs",
+    "prerender:gifs": "node scripts/prepare-clips.mjs",
+    "render:gifs": "node scripts/render-gifs.mjs",
+    "render:themes": "remotion render src/index.ts ThemeReel ../raw/styling.mp4 --codec=h264 --crf=14",
+    "render:all": "npm run render:mp4 && npm run render:gifs"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.529",
+    "@remotion/cli": "4.0.529",
+    "@remotion/gif": "4.0.529",
+    "@remotion/media-parser": "4.0.529",
+    "@remotion/renderer": "4.0.529",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "4.0.529"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "typescript": "5.9.3"
+  }
+}
