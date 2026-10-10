@@ -104,7 +104,7 @@ Colors, fonts, opacity, shadow, gradient or pure glass, per rack. Right-click �
 <br />
 
 - 🪄 **Magic Organizer.** Groups your desktop files into suggested racks, on your PC. Nothing moves until you confirm; undo right after.
-- 🤖 **Auto-routing.** A folder rack with a name pattern (regex) catches new matching files from the desktop.
+- 🤖 **Auto-routing.** A rack with a name pattern (regex) catches new matching files from the desktop.
 - 🔄 **Live refresh.** Racks follow changes made in Explorer.
 - 🖥️ **Multi-monitor.** Racks come back to the main screen when a monitor is unplugged.
 - ✈️ **Portable layouts.** Export and import your racks as one JSON file (files not included).
