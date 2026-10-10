@@ -59,6 +59,17 @@ namespace Racks
 {
     public partial class RackWindow
     {
+        // One-click look from the Theme submenu: store the preset (saved like any other setting) and
+        // repaint the parts that read those colours, the same way the Settings panel does.
+        public void ApplyTheme(ThemePresets.Preset preset)
+        {
+            ThemePresets.Apply(Instance, preset);
+            titleBar.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(Instance.TitleBarColor));
+            title.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(Instance.TitleTextColor));
+            ChangeBackgroundOpacity(Instance.Opacity);
+            AnimateActiveColor(Instance.AnimationSpeed);
+        }
+
         public void ChangeBackgroundOpacity(int num)
         {
             try

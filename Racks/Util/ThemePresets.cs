@@ -40,7 +40,7 @@ namespace Racks.Util
                 ListViewBackgroundColor = "#B3F0F0F0",
                 TitleTextColor = "#202020",
                 ListViewFontColor = "#202020",
-                ListViewFontShadowColor = "#88FFFFFF",
+                ListViewFontShadowColor = "#00FFFFFF", // no glow: a white halo blurs dark text
                 BorderColor = "#C0C0C0",
                 BorderEnabled = true,
             },
@@ -84,7 +84,7 @@ namespace Racks.Util
                 ListViewBackgroundColor = "#AAEEE8D5",
                 TitleTextColor = "#073642",
                 ListViewFontColor = "#073642",
-                ListViewFontShadowColor = "#80FDF6E3",
+                ListViewFontShadowColor = "#00FDF6E3", // no glow: a light halo blurs dark text
                 BorderColor = "#93A1A1",
                 BorderEnabled = true,
             },
@@ -99,6 +99,8 @@ namespace Racks.Util
             instance.ListViewFontShadowColor = preset.ListViewFontShadowColor;
             instance.BorderColor = preset.BorderColor;
             instance.BorderEnabled = preset.BorderEnabled;
+            // The background's alpha is the rack opacity; keep them in step like the Settings panel does.
+            instance.Opacity = ((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(preset.ListViewBackgroundColor)).A;
         }
     }
 }
