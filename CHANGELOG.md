@@ -4,6 +4,23 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-10
+
+### Added
+- **Theme menu.** Right-click a rack > Theme: Dark, Light, Glass, Neon, Solarized Dark, Solarized Light, applied live and saved. The two light themes no longer draw a white glow around dark text.
+
+### Fixed
+- **Physics.** A rack you pushed into another froze for up to a third of a second and then jumped; glides now follow the cursor and stay smooth. A hit rack slides away from the rack that hit it instead of jittering back, slow glides no longer stall, and throws use the speed of the last 80 ms of the drag. Position is saved once per drag instead of on every mouse move.
+- **Collapsed racks lost their name.** With the drop shadow on, collapsing left a 10 px sliver; it now shows the title bar and name.
+- **Ctrl+drop onto a rack** created the link but the item never showed in the rack. Dragging an item out of a rack now removes it from the rack.
+- **Quick Finder:** the selected result was black text on a dark accent colour; it is now white on a neutral bar and the path line is readable.
+- **No file in two places.** A move between drives whose delete fails no longer leaves the original next to the copy. Removing a rack when the Desktop already has a file with that name returns it as "name (from Racks).ext" instead of leaving it hidden. A file belongs to one rack only.
+- **Magic Organize** reused the rack names of the previous run, overwriting its racks (undo could close the wrong one). New racks get unique names.
+- **Auto-routing** (a rack's name pattern) did nothing on normal racks; it now works on every rack.
+
+### Changed
+- New README with a hero demo and a short clip per feature; the Remotion project that renders them is in `docs/media/studio`.
+
 ## [1.3.1] - 2026-10-08
 
 ### Fixed
