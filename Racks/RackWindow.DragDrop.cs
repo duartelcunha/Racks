@@ -279,22 +279,9 @@ namespace Racks
 
         private void ReassignDesktopFileToThisRack(string fullPath)
         {
-            if (Instance.AssignedFiles == null) Instance.AssignedFiles = new List<string>();
-            string fileName = Path.GetFileName(fullPath);
-            if (!Instance.AssignedFiles.Contains(fileName))
-            {
-                Instance.AssignedFiles.Add(fileName);
-            }
-
-            // Remove from other racks
-            foreach (var inst in MainWindow._controller.Instances.Where(i => i != Instance && i.IsDesktopFilterRack))
-            {
-                if (inst.AssignedFiles != null && inst.AssignedFiles.Contains(fileName))
-                {
-                    inst.AssignedFiles.Remove(fileName);
-                    MainWindow._controller.WriteInstanceToKey(inst);
-                }
-            }
+            // This rack takes the name; every other rack that claimed it loses it.
+            foreach (var lost in Rack.DesktopRackClaims.Claim(MainWindow._controller.Instances, Instance, Path.GetFileName(fullPath)))
+                MainWindow._controller.WriteInstanceToKey(lost);
 
             MainWindow._controller.WriteInstanceToKey(Instance);
 
