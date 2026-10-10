@@ -26,4 +26,23 @@ public static class DesktopRackClaims
         }
         catch { return false; }
     }
+
+    /// <summary>
+    /// Makes <paramref name="target"/> the only desktop rack that claims <paramref name="name"/>. Returns the other
+    /// racks that lost the claim, so the caller can save them. A claim is just a file name, so two racks claiming
+    /// one name would both show any file that has it.
+    /// </summary>
+    public static List<Instance> Claim(IEnumerable<Instance> all, Instance target, string name)
+    {
+        target.AssignedFiles ??= new List<string>();
+        if (!target.AssignedFiles.Contains(name)) target.AssignedFiles.Add(name);
+
+        var changed = new List<Instance>();
+        foreach (var other in all)
+        {
+            if (ReferenceEquals(other, target) || !other.IsDesktopFilterRack || other.AssignedFiles == null) continue;
+            if (other.AssignedFiles.Remove(name)) changed.Add(other);
+        }
+        return changed;
+    }
 }

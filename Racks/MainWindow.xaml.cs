@@ -221,8 +221,10 @@ namespace Racks
                             string safeName = string.Join("_", cluster.Name.Split(System.IO.Path.GetInvalidFileNameChars()));
                             if (string.IsNullOrWhiteSpace(safeName)) safeName = "Cluster_" + Guid.NewGuid().ToString().Substring(0, 4);
 
+                            // The name is the registry key: a second run must not reuse (and overwrite) the first run's racks.
+                            safeName = Racks.Rack.RackNames.Unique(safeName, _controller.Instances.Select(r => r.Name));
                             var inst = new Instance(safeName, false);
-                            inst.TitleText = cluster.Name;
+                            inst.TitleText = safeName;
                             inst.Folder = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                             inst.IsDesktopFilterRack = true;
                             inst.PosX = slots[i].X;
@@ -247,7 +249,9 @@ namespace Racks
                                 if (moveResult == Racks.Util.SafeMove.Result.Moved)
                                 {
                                     Racks.Util.Interop.NotifyShellMove(fp, destPath, System.IO.Directory.Exists(fp));
-                                    inst.AssignedFiles.Add(fileName);
+                                    // One rack owns the name: take it from any other rack that still claims it.
+                                    foreach (var lost in Racks.Rack.DesktopRackClaims.Claim(_controller.Instances, inst, fileName))
+                                        _controller.WriteInstanceToKey(lost);
                                     undo.RecordMove(fp, destPath); // fp = original desktop path
                                     movedFilesCount++;
                                 }
