@@ -17,7 +17,7 @@ namespace Racks.Util
     {
         public enum Result
         {
-            Moved,      // Move (or copy+delete fallback) completed.
+            Moved,      // Move (or copy+delete fallback) completed. A folder may carry a reason: its original could not be fully removed.
             Skipped,    // Name collision in the destination — no-op.
             Rejected,   // Refused on safety grounds. Reason is populated.
         }
@@ -110,7 +110,7 @@ namespace Racks.Util
             }
         }
 
-        private static Result CopyThenDelete(string src, string dest, bool srcIsDir, out string reason)
+        internal static Result CopyThenDelete(string src, string dest, bool srcIsDir, out string reason)
         {
             reason = "";
             try
@@ -133,8 +133,10 @@ namespace Racks.Util
             }
 
             // Copy succeeded; remove the source. Use SafeDelete (never follows junctions) rather
-            // than a raw recursive delete. If the source can't be fully removed, the destination
-            // still has the data, so it's a Move - just tell the user the original remains.
+            // than a raw recursive delete. A folder that can't be fully removed is already partly
+            // gone, so the destination holds the only complete copy: keep it and say so. A single
+            // file is untouched when its delete fails, so take the copy back out - otherwise the
+            // file would exist twice and the rack would claim one of them.
             if (srcIsDir)
             {
                 SafeDelete.DeleteDirectoryRecursive(src);
@@ -146,7 +148,9 @@ namespace Racks.Util
                 try { File.Delete(src); }
                 catch (Exception ex)
                 {
-                    reason = $"Copied \"{TryGetLeafName(src)}\" but couldn't delete the original: {ex.Message}";
+                    try { File.Delete(dest); } catch { }
+                    reason = $"Couldn't move \"{TryGetLeafName(src)}\" because the original is in use or protected ({ex.Message}). Nothing was changed.";
+                    return Result.Rejected;
                 }
             }
             return Result.Moved;
