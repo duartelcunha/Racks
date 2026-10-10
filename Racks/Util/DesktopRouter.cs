@@ -16,10 +16,10 @@ namespace Racks.Util
         private readonly DispatcherTimer _debounce;
         private readonly HashSet<string> _pending = new(StringComparer.OrdinalIgnoreCase);
         private readonly Func<IEnumerable<Instance>> _instancesProvider;
-        private readonly Action<string, string> _routeShortcut; // (sourcePath, destFolder)
+        private readonly Action<string, Instance, string> _routeShortcut; // (sourcePath, rack, destFolder)
 
         public DesktopRouter(Func<IEnumerable<Instance>> instancesProvider,
-                             Action<string, string> routeShortcut)
+                             Action<string, Instance, string> routeShortcut)
         {
             _instancesProvider = instancesProvider;
             _routeShortcut = routeShortcut;
@@ -76,11 +76,18 @@ namespace Racks.Util
                     catch { continue; /* bad or too-slow regex — skip silently rather than spam */ }
                     if (!match) continue;
 
-                    try { _routeShortcut(path, inst.Folder); } catch { }
+                    // A desktop rack's folder IS the Desktop (moving there is a no-op the safety check
+                    // rejects); its files live in the workspace, so route them there.
+                    string dest = DestinationFor(inst, Racks.Core.DesktopIconManager.RacksWorkspacePath);
+                    try { _routeShortcut(path, inst, dest); } catch { }
                     break; // first match wins
                 }
             }
         }
+
+        // Where a matching file goes: a desktop rack's folder is the Desktop itself, so its files go to the workspace.
+        internal static string DestinationFor(Instance rack, string workspace)
+            => rack.IsDesktopFilterRack ? workspace : rack.Folder;
 
         public void Dispose()
         {

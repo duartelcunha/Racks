@@ -90,7 +90,7 @@ namespace Racks
             {
                 _desktopRouter = new DesktopRouter(
                     () => _controller.Instances,
-                    (sourcePath, destFolder) =>
+                    (sourcePath, routedRack, destFolder) =>
                     {
                         // Auto-route MOVES matching files into the rack (no duplicate on Desktop).
                         // Routed through SafeMove so a too-greedy regex (e.g., ".*") can't
@@ -110,6 +110,13 @@ namespace Racks
                             }
                             Util.Interop.NotifyShellMove(sourcePath, dest, isDir);
                             Util.Interop.NotifyShellUpdateDir(System.IO.Path.GetDirectoryName(sourcePath)!);
+                            if (routedRack.IsDesktopFilterRack)
+                            {
+                                // A desktop rack lists the files it claims by name: claim it (the rack refreshes itself, it watches the workspace).
+                                foreach (var lost in Racks.Rack.DesktopRackClaims.Claim(_controller.Instances, routedRack, System.IO.Path.GetFileName(sourcePath)))
+                                    _controller.WriteInstanceToKey(lost);
+                                _controller.WriteInstanceToKey(routedRack);
+                            }
                         }
                         catch (System.Exception ex) { Debug.WriteLine($"Auto-route move failed: {ex.Message}"); }
                     });
