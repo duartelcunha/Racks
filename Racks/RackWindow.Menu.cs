@@ -360,24 +360,7 @@ namespace Racks
                 if (!on) KeepWindowBehind();
             };
 
-            MenuItem themeMenu = new MenuItem
-            {
-                Header = "Theme",
-                Height = 34,
-                Icon = new SymbolIcon(SymbolRegular.Color20),
-            };
-            foreach (var preset in ThemePresets.All)
-            {
-                var captured = preset;
-                var item = new MenuItem { Header = captured.Name, Height = 30 };
-                item.Click += (_, _) =>
-                {
-                    ThemePresets.Apply(Instance, captured);
-                    // Re-apply runtime visuals that read from Instance colors.
-                    ChangeBackgroundOpacity(Instance.Opacity);
-                };
-                themeMenu.Items.Add(item);
-            }
+            MenuItem themeMenu = Util.ThemeMenu.Build(ApplyTheme);
 
             MenuItem showInExplorerItem = new MenuItem
             {
@@ -924,6 +907,7 @@ namespace Racks
             contextMenu.Items.Add(toggleHiddenFiles);
             contextMenu.Items.Add(toggleFileExtension);
             contextMenu.Items.Add(changeItemView);
+            contextMenu.Items.Add(themeMenu);
             contextMenu.Items.Add(pinToTopToggle);
             contextMenu.Items.Add(lockToggle);
             contextMenu.Items.Add(new Separator());
