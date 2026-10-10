@@ -82,7 +82,7 @@ Push or flick a rack and it glides like a puck on ice. A **locked** rack (orange
   <img src="docs/screenshots/styling.gif" alt="The rack settings panel open next to a rack: turning on the gradient and drop shadow, then changing the background colour to violet, emerald and rose" width="100%" />
 </div>
 
-Colors, fonts, opacity, shadow, gradient or pure glass, per rack. Right-click › **Settings**; changes apply live.
+Colors, fonts, opacity, shadow, gradient or pure glass, per rack. Right-click › **Theme** for six ready-made looks, or › **Settings** to fine-tune; changes apply live.
 
 <br />
 

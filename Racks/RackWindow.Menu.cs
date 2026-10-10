@@ -360,24 +360,7 @@ namespace Racks
                 if (!on) KeepWindowBehind();
             };
 
-            MenuItem themeMenu = new MenuItem
-            {
-                Header = "Theme",
-                Height = 34,
-                Icon = new SymbolIcon(SymbolRegular.Color20),
-            };
-            foreach (var preset in ThemePresets.All)
-            {
-                var captured = preset;
-                var item = new MenuItem { Header = captured.Name, Height = 30 };
-                item.Click += (_, _) =>
-                {
-                    ThemePresets.Apply(Instance, captured);
-                    // Re-apply runtime visuals that read from Instance colors.
-                    ChangeBackgroundOpacity(Instance.Opacity);
-                };
-                themeMenu.Items.Add(item);
-            }
+            MenuItem themeMenu = Util.ThemeMenu.Build(ApplyTheme);
 
             MenuItem showInExplorerItem = new MenuItem
             {
@@ -657,13 +640,8 @@ namespace Racks
                             // workspace and move an arbitrary file to the desktop.
                             if (string.IsNullOrEmpty(fileName) || System.IO.Path.GetFileName(fileName) != fileName)
                                 continue;
-                            string wpPath = System.IO.Path.Combine(DesktopIconManager.RacksWorkspacePath, fileName);
-                            string destPath = System.IO.Path.Combine(desktopPath, fileName);
-                            if (System.IO.File.Exists(wpPath) || System.IO.Directory.Exists(wpPath))
-                            {
-                                if (Util.SafeMove.TryMove(wpPath, destPath, out _) == Util.SafeMove.Result.Moved)
-                                    returnedToDesktop.Add(destPath);
-                            }
+                            var back = Rack.WorkspaceReturn.ToDesktop(DesktopIconManager.RacksWorkspacePath, desktopPath, fileName);
+                            if (back != null) returnedToDesktop.Add(back);
                         }
                     }
                     else if (isSandboxed && System.IO.Directory.Exists(Instance.Folder))
@@ -924,6 +902,7 @@ namespace Racks
             contextMenu.Items.Add(toggleHiddenFiles);
             contextMenu.Items.Add(toggleFileExtension);
             contextMenu.Items.Add(changeItemView);
+            contextMenu.Items.Add(themeMenu);
             contextMenu.Items.Add(pinToTopToggle);
             contextMenu.Items.Add(lockToggle);
             contextMenu.Items.Add(new Separator());
