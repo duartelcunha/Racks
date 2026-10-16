@@ -75,20 +75,29 @@ only build step is `install-signer.ps1`, from a commit you reviewed.
    ```
 
 4. **Install the signer from a reviewed commit.** Pick the commit (normally the latest signed
-   release tag, or `main` after you reviewed it), read `tools/install-signer.ps1` and
-   `tools/RacksSigner` at that commit, then:
+   release tag, or `main` after you reviewed it). Never run `install-signer.ps1` from the working
+   tree: take it out of that commit, read that copy, and run that copy:
 
    ```powershell
-   git -C $clone show --stat <commit>
-   & "$clone\tools\install-signer.ps1" -Commit <full 40-char sha> -Clone $clone
+   $sha = '<full 40-char sha>'
+   git -C $clone show --stat $sha
+   git -C $clone show "${sha}:tools/install-signer.ps1" > "$env:TEMP\install-signer-$sha.ps1"
+   notepad "$env:TEMP\install-signer-$sha.ps1"     # read it before you run it
+   & "$env:TEMP\install-signer-$sha.ps1" -Commit $sha -Clone $clone
    ```
 
-   It builds RacksSigner from that commit's tree (`git archive`, not the working tree) into
+   Write `${sha}` with braces: `$sha:tools` would be read as a different variable. The script
+   refuses to run unless its own content is exactly `tools/install-signer.ps1` at `-Commit`. It
+   builds RacksSigner from that commit's tree (`git archive`, not the working tree) into
    `%LOCALAPPDATA%\RacksSigner\<commit>\`, copies that commit's `release-sign.ps1` next to it, and
-   records the SHA-256 of every file in `%LOCALAPPDATA%\RacksSigner\trusted.json`. A commit inside a
-   tag signed with your key is accepted directly; otherwise you type the commit sha back after
-   reviewing `git show --stat`. Reinstall the same way whenever `tools/` or
-   `Racks/Util/UpdateManifest.cs` / `UpdateTrust.cs` change (`release-sign.ps1` tells you).
+   records the SHA-256 of every file (hidden ones included) in
+   `%LOCALAPPDATA%\RacksSigner\trusted.json`. A commit inside a tag signed with your key is
+   accepted directly; otherwise it shows `git show --stat`, the history of the signer and build
+   inputs, and what changed in them since your installed signer, and you type the commit sha back.
+   The signer and build inputs are everything under `tools/`, `Racks/Util/UpdateManifest.cs`,
+   `Racks/Util/UpdateTrust.cs`, and any `Directory.Build.*`, `Directory.Packages.props`,
+   `global.json`, `NuGet.config` and `.gitattributes` in the tree. Reinstall the same way whenever
+   one of them changes (`release-sign.ps1` tells you). Delete the `%TEMP%` copy afterwards.
 
 5. **Create the update signing key** with the installed signer. The private key goes straight into
    Credential Manager; only the public key is printed:
@@ -193,8 +202,9 @@ it is there before signing).
      the signer sources since your installed signer, and asks you to type `sign and publish v1.4.1`.
      **Nothing is signed before you type it.** Anything else stops with the draft untouched;
    - signs, verifies, uploads the manifest and signature, checks them byte for byte and publishes
-     immediately. If any step after signing fails, it deletes the signed files from the draft and
-     from disk: no signed draft is left behind.
+     immediately. If any step after signing fails, or you stop the run (Ctrl+C, closing the
+     window), its `finally` block deletes the signed files from the draft and from disk: no signed
+     draft is left behind. If it says it could not remove them, delete them on the release page.
 
 To check a release by hand:
 `dotnet $signer verify --installer .\Racks-Setup-1.4.1.exe` (manifest and `.sig` next to it).

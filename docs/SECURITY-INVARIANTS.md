@@ -81,12 +81,20 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   `docs/RELEASING.md`)* A máquina com a chave nunca compila nem corre código de uma working tree:
   o RacksSigner é compilado uma vez de um commit revisto (`tools/install-signer.ps1`, a partir do
   `git archive` desse commit) para `%LOCALAPPDATA%\RacksSigner\<commit>\`, com o SHA-256 de cada
-  ficheiro em `trusted.json` (fora do repo); o `release-sign.ps1` instalado só corre esse signer,
-  exige uma tag anotada assinada com uma chave SSH própria (que não é credencial do GitHub,
-  `allowed_signers` fora do repo) igual à do GitHub, mostra `git log`/`git diff --stat` desde a
-  última tag assinada e pede confirmação escrita ANTES de assinar; depois assina, envia e publica
-  de seguida, e se algo falhar apaga os ficheiros assinados do rascunho e do disco. A verificação
-  da chave pública no CI é um teste (`ReleaseGateTests`), não uma procura de texto.
+  ficheiro (ocultos incluídos, `-Force`) em `trusted.json` (fora do repo). O próprio
+  `install-signer.ps1` corre a partir da cópia extraída desse commit (`git show
+  <sha>:tools/install-signer.ps1`), nunca da working tree, e recusa correr se o seu conteúdo não
+  for igual ao do commit. Antes de confiar num commit sem tag assinada mostra o histórico e o diff,
+  desde o signer instalado, de tudo o que decide o build: `tools/`, `UpdateManifest.cs`,
+  `UpdateTrust.cs`, `Directory.Build.*`, `Directory.Packages.props`, `global.json`, `NuGet.config`
+  e `.gitattributes`. O `release-sign.ps1` instalado só corre esse signer (e recusa ficheiros a
+  mais, ocultos incluídos), exige uma tag anotada assinada com uma chave SSH própria (que não é
+  credencial do GitHub, `allowed_signers` fora do repo) igual à do GitHub, mostra `git log`/`git
+  diff --stat` desde a última tag assinada e pede confirmação escrita ANTES de assinar; depois
+  assina, envia e publica de seguida, e se algo falhar ou a execução for interrompida (Ctrl+C,
+  fechar a consola) o bloco `finally` apaga os ficheiros assinados do rascunho e do disco. A
+  verificação da chave pública no CI é um teste (`ReleaseGateTests`), não uma procura de texto.
+  *(teste: `ReleaseScriptTests`)*
 - **INV-INSTANCE-1** Single-instance usa namespace `Local\` (ou DACL owner-only). *(mecânica: grep
   `Global\\`)* ✅ Aplicado (Lote A #12).
 - **INV-PROC-1** Nunca passar strings externas por `cmd.exe /c` concatenado; usar `ArgumentList`

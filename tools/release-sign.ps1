@@ -19,8 +19,9 @@
       5. shows what changed since the last signed tag (git log, git diff --stat) and asks you to
          type the confirmation phrase. Nothing is signed before that.
       6. signs, verifies, uploads the manifest and signature, checks the upload byte for byte and
-         publishes straight away. If anything fails after signing, the signed files are deleted
-         from the draft and from disk: a signed draft is never left behind.
+         publishes straight away. If anything fails after signing, or the run is stopped
+         (Ctrl+C, closing the console), the signed files are deleted from the draft and from disk
+         in a finally block: a signed draft is not left behind.
 
     Uses gh.exe (the GitHub CLI logged in to the personal account). Nothing secret is passed on a
     command line.
@@ -78,7 +79,8 @@ if (-not [string]::Equals($here.TrimEnd('\'), $pinnedDir.TrimEnd('\'), [StringCo
 $expected = @{}
 foreach ($p in $trusted.files.PSObject.Properties) { $expected[$p.Name] = [string]$p.Value }
 $actual = @{}
-Get-ChildItem -LiteralPath $pinnedDir -Recurse -File | ForEach-Object {
+# -Force: a hidden or system file dropped next to the signer is an unexpected file too.
+Get-ChildItem -LiteralPath $pinnedDir -Recurse -File -Force | ForEach-Object {
     $actual[$_.FullName.Substring($pinnedDir.Length + 1)] = Get-Sha256 $_.FullName
 }
 foreach ($name in $expected.Keys) {
@@ -220,7 +222,18 @@ try {
         Write-Host "WARNING: no earlier release tag. Review the whole history." -ForegroundColor Yellow
         Invoke-Git log --oneline --no-decorate $localCommit | Out-Host
     }
-    $signerChanges = @(Invoke-Git diff --stat --no-ext-diff --no-textconv $trusted.commit $localCommit -- tools Racks/Util/UpdateManifest.cs Racks/Util/UpdateTrust.cs | Where-Object { $_ })
+    # Same list as install-signer.ps1. '--' is quoted so PowerShell passes it on to git.
+    $signerSources = @(
+        'tools',
+        'Racks/Util/UpdateManifest.cs',
+        'Racks/Util/UpdateTrust.cs',
+        ':(glob)**/Directory.Build.*',
+        ':(glob)**/Directory.Packages.props',
+        ':(glob)**/global.json',
+        ':(glob,icase)**/nuget.config',
+        ':(glob)**/.gitattributes'
+    )
+    $signerChanges = @(Invoke-Git diff --stat --no-ext-diff --no-textconv $trusted.commit $localCommit '--' @signerSources | Where-Object { $_ })
     if ($signerChanges.Count -gt 0) {
         Write-Host ""
         Write-Host "Note: the signer sources changed since your installed signer ($($trusted.commit)):" -ForegroundColor Yellow
@@ -264,22 +277,37 @@ try {
 
     Invoke-Gh release edit $tag --repo $Repo --draft=false --latest | Out-Null
     $published = $true
-} catch {
+} finally {
+    # In finally, not catch: PowerShell runs it on an error AND when the run is stopped (Ctrl+C,
+    # Ctrl+Break, closing the console), so a stopped run cannot leave a signed draft behind.
     if ($uploaded -and -not $published) {
-        Write-Host "Removing the signed files from the draft so no signed draft is left behind..." -ForegroundColor Yellow
-        foreach ($name in @($manifestName, $sigName)) {
-            & $gh release delete-asset $tag $name --repo $Repo --yes 2>$null | Out-Null
-        }
+        # The publish call may have gone through just before the stop: a published release keeps
+        # its signature. Anything else (still a draft, or the state is unknown) loses it.
+        $stillDraft = $true
         try {
-            $left = @((& $gh release view $tag --repo $Repo --json assets | ConvertFrom-Json).assets |
-                    ForEach-Object { $_.name } | Where-Object { $_ -eq $manifestName -or $_ -eq $sigName })
-        } catch { $left = @('(could not check)') }
-        if ($left.Count -gt 0) {
-            Write-Host "COULD NOT REMOVE $($left -join ', ') from the draft. Delete them on the release page NOW." -ForegroundColor Red
+            $view = & $gh release view $tag --repo $Repo --json isDraft
+            if ($LASTEXITCODE -eq 0) {
+                $isDraft = ($view | Out-String | ConvertFrom-Json).isDraft
+                if ($isDraft -is [bool] -and -not $isDraft) { $stillDraft = $false }
+            }
+        } catch { $stillDraft = $true }
+        if ($stillDraft) {
+            Write-Host "Removing the signed files from the draft so no signed draft is left behind..." -ForegroundColor Yellow
+            foreach ($name in @($manifestName, $sigName)) {
+                & $gh release delete-asset $tag $name --repo $Repo --yes 2>$null | Out-Null
+            }
+            try {
+                $left = @((& $gh release view $tag --repo $Repo --json assets | ConvertFrom-Json).assets |
+                        ForEach-Object { $_.name } | Where-Object { $_ -eq $manifestName -or $_ -eq $sigName })
+            } catch { $left = @('(could not check)') }
+            if ($left.Count -gt 0) {
+                Write-Host "COULD NOT REMOVE $($left -join ', ') from the draft. Delete them on the release page NOW." -ForegroundColor Red
+            }
+        } else {
+            $published = $true
+            Write-Host "The release was published before the run stopped; its signature stays." -ForegroundColor Yellow
         }
     }
-    throw
-} finally {
     # Signed files, downloads and the round-trip copies never outlive the run.
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $work) { Write-Host "Could not delete $work. Delete it by hand." -ForegroundColor Yellow }
