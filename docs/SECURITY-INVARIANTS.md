@@ -20,8 +20,15 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   *(revisão + teste)*
 - **INV-IMPORT-1** Input importado é validado antes de virar estado persistido: allowlist de nomes
   de valor, tipos/ranges validados, `Folder`/`BackgroundImagePath` canonicalizados e a rejeitar
-  UNC/sistema/traversal, e `rack.Name` só um segmento de chave seguro. *(teste)* Parcial: nome de
-  rack já validado (Lote A #5).
+  UNC/sistema/traversal, e `rack.Name` só um segmento de chave seguro. *(teste)* ✅ Aplicado
+  (2026-10, `RackLayoutIO.ParseAndValidate`): allowlist de nomes+tipos comparada sem distinguir
+  maiúsculas (o registo também não distingue), nomes reescritos na grafia canónica, duas grafias do
+  mesmo nome rejeitadas, nomes desconhecidos descartados, `MultiString` só para `LastAccessedFiles`/
+  `CustomOrderFiles`; `Folder`/`BackgroundImagePath` só aceitam caminhos locais totalmente
+  qualificados (`X:\...`): tudo o que começa por dois separadores (`\\host`, `//host`, `\\?\`,
+  `\\.\`, `\\?\UNC\`, `\\host@SSL`) é rejeitado, tal como `C:x`, `\x`, `..` e `:` de ADS. O
+  `DesktopRouter` NÃO revalida: um utilizador pode escolher uma pasta de rede na própria app; a
+  regra é só para ficheiros importados. *(teste: `RackLayoutImportValidationTests`)*
 - **INV-IMPORT-2** Um replace destrutivo é atómico ou tem backup: validar e preparar tudo primeiro,
   só apagar quando o novo estado escreve limpo, e fazer rollback do snapshot em falha. *(teste)*
   ✅ Aplicado (Lote A #5).
@@ -73,7 +80,7 @@ Gravidade / estado. `file:line` do sweep (podem ter drift de 1-2 linhas).
 **H1 — Updater executa `assets[0]` do release sem verificação** `Racks/Util/Updater.cs` · ✅ CORRIGIDO PARCIAL (Lote B)
 Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), URL validada (HTTPS + host `github.com` + path `/duartelcunha/Racks/releases/download/`), tamanho verificado vs a API, e re-validação antes de descarregar. **Resíduo aceite:** a app não é code-signed, portanto não há verificação Authenticode; o vetor fica reduzido a um compromisso genuíno do repo/conta GitHub (mesma confiança de `git clone` + build). Fecho total exige code-signing. → INV-UPDATE-1.
 
-**H2 — Import de layout JSON sem validação, persistido no registo** `Racks/Util/RackLayoutIO.cs` · ✅ CORRIGIDO (Lote A nome; Lote C valida `Folder`/`BackgroundImagePath`: rejeita traversal `..` e paths não-rooted, na passagem atómica antes de apagar). Regex do import já limitado por SafeRegex (#3). Resíduo: sem allowlist total de nomes de valor (importar é ação explícita do utilizador; vetores perigosos já fechados). → INV-IMPORT-1.
+**H2 — Import de layout JSON sem validação, persistido no registo** `Racks/Util/RackLayoutIO.cs` · ✅ CORRIGIDO (Lote A nome; Lote C valida `Folder`/`BackgroundImagePath`: rejeita traversal `..` e paths não-rooted, na passagem atómica antes de apagar). Regex do import já limitado por SafeRegex (#3). ~~Resíduo: sem allowlist total de nomes de valor~~ e ~~UNC permitido~~: um audit independente (2026-10) mostrou que um layout com `Folder` UNC (ou `folder` em minúsculas, que escapava ao check sensível a maiúsculas) fazia o `DesktopRouter`/`SafeMove` mover novos ficheiros do Desktop para uma share remota e vazava o hash NTLM. ✅ CORRIGIDO (2026-10): allowlist de nomes+tipos sem distinguir maiúsculas e só caminhos locais `X:\...`. → INV-IMPORT-1.
 
 **H3 — Regex do utilizador sem `MatchTimeout` no UI thread (ReDoS)** `DesktopRouter.cs:73`, `RackWindow.xaml.cs`, `RackViewModel.cs` · ✅ CORRIGIDO (Lote A #3) → INV-REGEX-1.
 

@@ -62,36 +62,9 @@ namespace Racks.Util
         // on bad input; the caller shows the reason.
         public static int Import(string json, bool replaceExisting)
         {
-            LayoutFile? layout;
-            try
-            {
-                layout = JsonSerializer.Deserialize<LayoutFile>(json,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            }
-            catch (JsonException)
-            {
-                throw new InvalidDataException("The layout file is not valid JSON.");
-            }
-            if (layout?.Racks == null || layout.Racks.Count == 0) return 0;
-
-            // Validate every rack name BEFORE touching existing state. A rack name becomes a
-            // registry subkey, so it must be a single safe segment: no separators (which would
-            // write keys outside Instances\<name>) and no traversal. Reject the whole import if
-            // any is bad - a partially-valid file must not wipe the user's racks.
-            foreach (var rack in layout.Racks)
-            {
-                if (!IsValidRackName(rack.Name))
-                    throw new InvalidDataException($"Layout contains an unsafe rack name: '{rack.Name}'.");
-                foreach (var key in _pathValueNames)
-                {
-                    if (rack.Values.TryGetValue(key, out var raw))
-                    {
-                        string? p = ValueAsString(raw);
-                        if (!IsSafeImportedPath(p))
-                            throw new InvalidDataException($"Layout rack '{rack.Name}' has an unsafe {key}: '{p}'.");
-                    }
-                }
-            }
+            // Everything is parsed, validated and normalized BEFORE existing state is touched.
+            var racks = ParseAndValidate(json);
+            if (racks.Count == 0) return 0;
 
             string root = $@"SOFTWARE\{InstanceController.appName}\Instances";
 
@@ -103,7 +76,7 @@ namespace Racks.Util
                 if (replaceExisting)
                     Registry.CurrentUser.DeleteSubKeyTree(root, throwOnMissingSubKey: false);
 
-                return WriteRacks(root, layout.Racks);
+                return WriteRacks(root, racks);
             }
             catch
             {
@@ -123,6 +96,84 @@ namespace Racks.Util
             }
         }
 
+        // Parse a layout file and return its racks validated and normalized, or throw
+        // InvalidDataException. Pure (no registry access) so it can be tested directly.
+        //
+        // INV-IMPORT-1: only value names the app itself persists are kept, matched
+        // case-insensitively (registry value names are case-insensitive, so "folder" would
+        // otherwise slip past a case-sensitive check and still overwrite "Folder"), written back
+        // under their canonical spelling, and type-checked. Two spellings of one name are
+        // rejected. Unknown names are dropped: the app never reads them, and old backups may
+        // carry legacy names. A partially-valid file is rejected whole, never half-applied.
+        internal static List<RackDto> ParseAndValidate(string json)
+        {
+            LayoutFile? layout;
+            try
+            {
+                layout = JsonSerializer.Deserialize<LayoutFile>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (JsonException)
+            {
+                throw new InvalidDataException("The layout file is not valid JSON.");
+            }
+            var result = new List<RackDto>();
+            if (layout?.Racks == null) return result;
+
+            foreach (var rack in layout.Racks)
+            {
+                if (rack == null) throw new InvalidDataException("Layout contains an empty rack entry.");
+                // A rack name becomes a registry subkey, so it must be a single safe segment.
+                if (!IsValidRackName(rack.Name))
+                    throw new InvalidDataException($"Layout contains an unsafe rack name: '{rack.Name}'.");
+
+                var clean = new RackDto { Name = rack.Name };
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var kv in rack.Values ?? new Dictionary<string, object?>())
+                {
+                    if (!_allowedValues.TryGetValue(kv.Key ?? "", out var spec)) continue; // unknown: dropped
+                    if (!seen.Add(spec.Name))
+                        throw new InvalidDataException($"Layout rack '{rack.Name}' sets '{spec.Name}' more than once.");
+                    if (spec.Kind == ValueKind.MultiString)
+                        throw new InvalidDataException($"Layout rack '{rack.Name}' has '{spec.Name}' in the wrong section.");
+
+                    // JSON null is skipped, as before. Anything else must be a JSON scalar; paths
+                    // and the rack name must be strings and pass their own checks.
+                    if (kv.Value is null) continue;
+                    if (kv.Value is not JsonElement e)
+                        throw new InvalidDataException($"Layout rack '{rack.Name}' has an invalid {spec.Name}.");
+                    if (e.ValueKind == JsonValueKind.Null) continue;
+                    bool ok = spec.Kind == ValueKind.Scalar
+                        ? e.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False
+                        : e.ValueKind == JsonValueKind.String;
+                    if (!ok)
+                        throw new InvalidDataException($"Layout rack '{rack.Name}' has an invalid {spec.Name}.");
+                    string? s = e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+                    if ((spec.Kind == ValueKind.Path && !IsSafeImportedPath(s))
+                        || (spec.Kind == ValueKind.RackName && !IsValidRackName(s)))
+                        throw new InvalidDataException($"Layout rack '{rack.Name}' has an unsafe {spec.Name}: '{s}'.");
+
+                    clean.Values[spec.Name] = e;
+                }
+
+                foreach (var kv in rack.MultiStringValues ?? new Dictionary<string, string[]>())
+                {
+                    if (!_allowedValues.TryGetValue(kv.Key ?? "", out var spec)) continue; // unknown: dropped
+                    if (spec.Kind != ValueKind.MultiString)
+                        throw new InvalidDataException($"Layout rack '{rack.Name}' has '{spec.Name}' in the wrong section.");
+                    if (!seen.Add(spec.Name))
+                        throw new InvalidDataException($"Layout rack '{rack.Name}' sets '{spec.Name}' more than once.");
+                    if (kv.Value == null || kv.Value.Any(x => x == null))
+                        throw new InvalidDataException($"Layout rack '{rack.Name}' has an invalid {spec.Name}.");
+                    clean.MultiStringValues[spec.Name] = kv.Value;
+                }
+
+                result.Add(clean);
+            }
+            return result;
+        }
+
         // A rack name is used verbatim as a registry subkey: it must be one safe segment.
         private static bool IsValidRackName(string? name)
             => !string.IsNullOrWhiteSpace(name)
@@ -131,26 +182,70 @@ namespace Racks.Util
                && name != "." && name != ".."
                && name.Length <= 255;
 
-        // Value names that hold a filesystem path and so are validated on import.
-        private static readonly string[] _pathValueNames = { "Folder", "BackgroundImagePath" };
+        private enum ValueKind { Scalar, Path, RackName, MultiString }
 
-        private static string? ValueAsString(object? raw)
-            => raw is JsonElement je
-                ? (je.ValueKind == JsonValueKind.String ? je.GetString() : null)
-                : raw as string;
+        private readonly record struct ValueSpec(string Name, ValueKind Kind);
 
-        // An imported path must be empty, a known sentinel, or an absolute rooted path with no
-        // ".." traversal segment - so a hostile layout can't point a rack at a relative/traversal
-        // location the app then reads or mirrors. UNC/network paths are allowed (legitimate).
-        private static bool IsSafeImportedPath(string? value)
+        // Every per-rack value the app reads back (InstanceController.InitInstances) and nothing
+        // else. Keys are case-insensitive; ValueSpec.Name is the canonical spelling written.
+        private static readonly Dictionary<string, ValueSpec> _allowedValues = BuildAllowList();
+
+        private static Dictionary<string, ValueSpec> BuildAllowList()
+        {
+            var map = new Dictionary<string, ValueSpec>(StringComparer.OrdinalIgnoreCase);
+            void Add(ValueKind kind, params string[] names)
+            {
+                foreach (var n in names) map.Add(n, new ValueSpec(n, kind));
+            }
+            Add(ValueKind.Path, "Folder", "BackgroundImagePath");
+            Add(ValueKind.RackName, "Name");
+            Add(ValueKind.MultiString, "LastAccessedFiles", "CustomOrderFiles");
+            Add(ValueKind.Scalar,
+                "PosX", "PosY", "Width", "Height", "IconSize", "IdleOpacity", "AnimationSpeed",
+                "MaxGrayScaleStrength", "GrayScaleEnabled", "GrayScaleEnabled_InactiveOnly",
+                "TitleFontFamily", "ItemFontFamily", "Minimized", "ShowHiddenFiles",
+                "LastAccesedToFirstRow", "EnableCustomItemsOrder", "ShowFileExtension",
+                "ShowFileExtensionIcon", "ShowHiddenFilesIcon", "ShowDisplayName", "IsLocked",
+                "ShowInGrid", "AutoExpandonCursor", "ShowShortcutArrow", "FolderOpenInsideFrame",
+                "HideTitleBarIconsWhenInactive", "SnapWidthToIconWidth",
+                "SnapWidthToIconWidth_PlusScrollbarWidth", "CheckFolderSize", "LinkOnDrop",
+                "MoveFilesOnDrop", "SnapToGrid", "GridSize", "AutoRouteRegex", "PinToTop",
+                "IsTransparent", "DropShadowEnabled", "GradientBackgroundEnabled", "DisableAnimations",
+                "IsDesktopFilterRack", "AssignedFiles", "TitleBarColor", "TitleTextColor", "TitleText",
+                "TitleTextAlignment", "BorderColor", "BorderEnabled", "ActiveBorderEnabled",
+                "ActiveBackgroundEnabled", "ActiveTitleTextEnabled", "FileFilterRegex",
+                "FileFilterHideRegex", "ListViewBackgroundColor", "ActiveBackgroundColor",
+                "ActiveBorderColor", "ActiveTitleTextColor", "ListViewFontColor",
+                "ListViewFontShadowColor", "Opacity", "SortBy", "FolderOrder", "ShowOnVirtualDesktops",
+                "TitleFontSize");
+            return map;
+        }
+
+        // An imported path must be empty, a known sentinel, or a fully-qualified LOCAL drive path
+        // ("C:\..." or "C:/...") with no ".." segment. Anything that starts with two separators
+        // is refused: UNC ("\\host\share", "//host/share", "\\host@SSL\..."), and the DOS device
+        // forms "\\?\", "\\.\", "\\?\UNC\". A hostile layout could otherwise point a rack (and,
+        // through auto-routing, new Desktop files) at a remote share, and merely touching that
+        // path leaks the user's NTLM hash. Users can still pick a network folder themselves in
+        // the app; only an IMPORTED file is held to this rule (DesktopRouter does not re-check).
+        internal static bool IsSafeImportedPath(string? value)
         {
             if (string.IsNullOrEmpty(value)) return true;
             if (value == "empty" || value == "Default Style") return true; // rack sentinels
+            if (value.Length < 3) return false;
+            if (IsSeparator(value[0])) return false;                  // UNC, device paths, "\rooted"
+            if (!char.IsAsciiLetter(value[0]) || value[1] != ':' || !IsSeparator(value[2]))
+                return false;                                         // "C:x" (drive-relative), "relative"
+            if (value.IndexOf(':', 2) >= 0) return false;             // alternate data streams
+            foreach (char ch in value)
+                if (ch < 0x20 || ch is '"' or '<' or '>' or '|' or '*' or '?') return false;
             foreach (var seg in value.Split('\\', '/'))
                 if (seg == "..") return false;
-            try { return Path.IsPathRooted(value); }
+            try { return Path.IsPathFullyQualified(value); }
             catch { return false; }
         }
+
+        private static bool IsSeparator(char c) => c == '\\' || c == '/';
 
         private static int WriteRacks(string root, List<RackDto> racks)
         {
