@@ -45,7 +45,7 @@ release. It never signs and never publishes.
 
 Do this once, on the machine that will sign releases. Paths below are examples; use your own
 clone. Never run `release-sign.ps1` or build RacksSigner from a working tree on this machine: the
-only build step is `install-signer.ps1`, from a commit you reviewed.
+only build step is `install-signer.ps1`, run as the copy taken out of a commit you reviewed (step 4).
 
 1. **Tag signing key.** A separate SSH key whose only job is signing release tags:
 
