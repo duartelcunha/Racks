@@ -56,6 +56,15 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   `new FontFamily(...)` com dados de racks passam por `SafeWpfValues.CreateFontFamily` (fallback
   "Segoe UI"). *(teste: `SafeWpfValuesTests`, incl. guarda contra `new FontFamily(` fora da
   fábrica; `RackLayoutImportValidationTests`)*
+- **INV-IMPORT-4** Um SVG mostrado como miniatura nunca resolve nada fora do ficheiro. O Svg 3.4.7
+  resolve por omissão imagens e elementos externos (`ExternalType.Local | Remote`): um
+  `<image xlink:href="http://host/x.png">`, `\\host\share\x.png` ou `<use xlink:href="file://host/...">`
+  num `.svg` do Desktop faria o Racks ir à rede ao mostrar o ficheiro (beacon; hash NTLM em
+  UNC/`file:`). *(teste)* ✅ Aplicado (2026-10, `Util/SafeSvg`): `ResolveExternalImages`,
+  `ResolveExternalElements` e `ResolveExternalXmlEntites` a `None` e `DisableDtdProcessing`, no
+  arranque (`App.OnStartup`) e outra vez antes de cada parse; todo o parse de SVG passa por
+  `SafeSvg.Open`. *(teste: `SafeSvgTests`: API estática fixada por reflexão, imagem externa local
+  desenhada só com a resolução ligada, guarda contra `SvgDocument.Open` fora do `SafeSvg`; sem rede)*
 - **INV-IMPORT-2** Um replace destrutivo é atómico ou tem backup: validar e preparar tudo primeiro,
   só apagar quando o novo estado escreve limpo, e fazer rollback do snapshot em falha. *(teste)*
   ✅ Aplicado (Lote A #5).
@@ -154,6 +163,9 @@ Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), UR
 **L3 — `SafeDelete` check-then-recurse TOCTOU em junctions** `SafeDelete.cs` · ✅ CORRIGIDO (Lote D). Reescrito com `DirectoryInfo`, classifica pelos atributos da própria enumeração (uma só operação) em vez de um stat separado. Testado: árvore com junction é apagada, o alvo do junction sobrevive (sem perda de dados).
 **L4 — `CopyDirectory` cross-volume segue junctions (recursão/explosão)** `SafeMove.cs` · ✅ CORRIGIDO (Lote D). Salta reparse points na cópia + cap de profundidade (64). Deletes do `CopyThenDelete` roteados por `SafeDelete`.
 **L5 — Mutex single-instance `Global\` (squatting DoS)** `App.xaml.cs` · ✅ CORRIGIDO (Lote A #12, `Local\`) → INV-INSTANCE-1.
+**L7: Miniaturas SVG resolviam imagens e elementos externos** `RackWindow.Files.cs` (Svg 3.4.7) ·
+✅ CORRIGIDO (2026-10, QA ronda 3). Um `.svg` com `<image href>` remoto ou UNC fazia o thumbnailer
+contactar esse host. → INV-IMPORT-4.
 
 ### INFO
 

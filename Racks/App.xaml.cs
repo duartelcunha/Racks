@@ -162,6 +162,8 @@ namespace Racks
             // never pin a thread. Explicit-timeout call sites (Util.SafeRegex) still win; this
             // only backstops anything that slips through. Must be set before any Regex runs.
             AppDomain.CurrentDomain.SetData("REGEX_DEFAULT_MATCH_TIMEOUT", Racks.Util.SafeRegex.MatchTimeout);
+            // SVG thumbnails never fetch external images, elements or entities (INV-IMPORT-4).
+            Racks.Util.SafeSvg.Apply();
             // Run by the uninstaller (installer/Racks.iss) before it removes the app: give the
             // user's rack files back to the Desktop and remove what Racks added to the shell.
             // Headless: no windows, no mutex, no registry migration.

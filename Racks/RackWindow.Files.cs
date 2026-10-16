@@ -703,7 +703,8 @@ namespace Racks
         {
             try
             {
-                var svgDocument = Svg.SvgDocument.Open(path);
+                // Never resolves anything outside the file (INV-IMPORT-4).
+                var svgDocument = Racks.Util.SafeSvg.Open(path);
 
                 using (var bitmap = svgDocument.Draw(iconSize, iconSize))
                 {
