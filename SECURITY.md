@@ -26,11 +26,11 @@ The codebase is reviewed against a set of security invariants documented in
 - The Delete verb is blocked for files inside a rack, and dragging an item out sends the original to the Recycle Bin, never a permanent delete.
 - Path guards are canonicalized (junctions, 8.3 names, `\\?\` aliases) before comparison.
 - User- and import-supplied regular expressions run with a bounded match timeout (no ReDoS).
-- Layout import is validated and atomic (a bad file can never wipe your racks).
-- The updater only downloads the expected installer asset (`Racks-Setup-*.exe`) over HTTPS from this project's GitHub releases and checks its size against the release metadata. It does not verify a code signature yet (see below).
+- Layout import is validated and atomic (a bad file can never wipe your racks); imported folder paths must be local drive paths, never network shares.
+- The updater installs a release only if its manifest is signed by the update key built into Racks, names exactly that release and a newer version, and matches the downloaded installer's size and SHA-256. The private key never touches GitHub or CI, so a compromised GitHub account cannot push an installer to existing installs. Anything missing or mismatched fails closed. See [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## A note on code signing
 
-Racks is not yet code-signed, so Windows SmartScreen may warn on first run and the updater
-cannot verify an Authenticode signature. This is a known limitation for an independent
-open-source project; the source is public and can be built from scratch.
+Racks is not yet Authenticode code-signed, so Windows SmartScreen may warn on first run. Updates
+are protected by the separate update signature above. The source is public and can be built from
+scratch.

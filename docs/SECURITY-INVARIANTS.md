@@ -4,6 +4,9 @@ Registo de segurança do Racks. Cada invariante é uma regra que previne uma cla
 Origem: sweep multi-agente read-only (5 lentes + síntese) em 2026-07-11.
 
 Estado dos fixes: **Lotes A, B, C e D aplicados**. Todos os achados do sweep tratados.
+Audit independente de 2026-10 (após o incidente de 2026-10-09: token GitHub roubado substituiu
+assets de releases por malware): H1 fechado com assinatura própria, H2 sem UNC + allowlist, M4, L2 e
+L6 corrigidos.
 
 Modelo de ameaça: app desktop nativa (sem servidor/HTTP/backend). A fronteira de confiança é
 outros processos locais (mesmo utilizador), o sistema de ficheiros, o caminho de rede até ao
@@ -17,7 +20,13 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
 - **INV-UPDATE-1** Nunca executar um binário descarregado sem verificar proveniência E integridade
   independentes do transporte: validar a URL (HTTPS, host do GitHub, repo esperado, nome de asset
   esperado) e verificar a assinatura Authenticode / hash publicado antes do `Process.Start`.
-  *(revisão + teste)*
+  *(revisão + teste)* ✅ Aplicado (2026-10) com uma assinatura própria ancorada FORA do GitHub:
+  manifesto canónico `{product, version, fileName, sha256, size}` assinado com ECDSA P-256; chave
+  pública compilada (`Util/UpdateTrust.cs`), privada só no Credential Manager do dono. O updater
+  exige assinatura válida, versão assinada == tag do release e > versão atual, e tamanho/sha256
+  dos bytes descarregados, verificados por um handle que nega escrita/apagamento e fica aberto até
+  o instalador arrancar. Placeholder da chave ⇒ nenhum update. *(teste: `UpdateSignatureTests`,
+  `UpdaterAssetTests`; código partilhado com `tools/RacksSigner`)*
 - **INV-IMPORT-1** Input importado é validado antes de virar estado persistido: allowlist de nomes
   de valor, tipos/ranges validados, `Folder`/`BackgroundImagePath` canonicalizados e a rejeitar
   UNC/sistema/traversal, e `rack.Name` só um segmento de chave seguro. *(teste)* ✅ Aplicado
@@ -48,7 +57,14 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   único ponto auditado; classificar e apagar contra o mesmo handle (`FILE_FLAG_OPEN_REPARSE_POINT`).
   *(revisão + mecânica: grep "Directory.Delete(" fora de SafeDelete)*
 - **INV-EXEC-1** Executáveis em diretórios graváveis pelo utilizador têm nome aleatório e são
-  verificados imediatamente antes de lançar. *(revisão)*
+  verificados imediatamente antes de lançar. *(revisão)* Updater: pasta nova
+  `%TEMP%\Racks-update-<guid>` com DACL só do utilizador, verificação pelo handle mantido aberto
+  até ao `Process.Start` (*teste: `UpdaterTempDirTests`*).
+- **INV-RELEASE-1** O CI nunca assina nem publica: só cria um release em rascunho. Actions fixadas
+  por SHA completo, permissões por job (`build` lê, só `draft` escreve), `persist-credentials:
+  false`, dados do evento só via `env`, ferramentas de build (Inno Setup) com versão e SHA-256
+  fixos. Assinar e publicar é feito pelo dono com `tools/release-sign.ps1`. *(revisão:
+  `docs/RELEASING.md`)*
 - **INV-INSTANCE-1** Single-instance usa namespace `Local\` (ou DACL owner-only). *(mecânica: grep
   `Global\\`)* ✅ Aplicado (Lote A #12).
 - **INV-PROC-1** Nunca passar strings externas por `cmd.exe /c` concatenado; usar `ArgumentList`
@@ -78,7 +94,7 @@ Gravidade / estado. `file:line` do sweep (podem ter drift de 1-2 linhas).
 ### HIGH
 
 **H1 — Updater executa `assets[0]` do release sem verificação** `Racks/Util/Updater.cs` · ✅ CORRIGIDO PARCIAL (Lote B)
-Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), URL validada (HTTPS + host `github.com` + path `/duartelcunha/Racks/releases/download/`), tamanho verificado vs a API, e re-validação antes de descarregar. **Resíduo aceite:** a app não é code-signed, portanto não há verificação Authenticode; o vetor fica reduzido a um compromisso genuíno do repo/conta GitHub (mesma confiança de `git clone` + build). Fecho total exige code-signing. → INV-UPDATE-1.
+Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), URL validada (HTTPS + host `github.com` + path `/duartelcunha/Racks/releases/download/`), tamanho verificado vs a API, e re-validação antes de descarregar. ~~Resíduo aceite: compromisso genuíno do repo/conta GitHub~~. Em 2026-10-09 isso aconteceu (token roubado substituiu assets de releases por malware). ✅ CORRIGIDO (2026-10): assinatura ECDSA P-256 de um manifesto canónico, com a chave privada fora do GitHub; ver INV-UPDATE-1 e `docs/RELEASING.md`. Resíduo: instalações ≤ 1.4.0 têm o updater antigo até atualizarem; a chave no Credential Manager é legível por qualquer processo do mesmo utilizador na máquina que assina. → INV-UPDATE-1.
 
 **H2 — Import de layout JSON sem validação, persistido no registo** `Racks/Util/RackLayoutIO.cs` · ✅ CORRIGIDO (Lote A nome; Lote C valida `Folder`/`BackgroundImagePath`: rejeita traversal `..` e paths não-rooted, na passagem atómica antes de apagar). Regex do import já limitado por SafeRegex (#3). ~~Resíduo: sem allowlist total de nomes de valor~~ e ~~UNC permitido~~: um audit independente (2026-10) mostrou que um layout com `Folder` UNC (ou `folder` em minúsculas, que escapava ao check sensível a maiúsculas) fazia o `DesktopRouter`/`SafeMove` mover novos ficheiros do Desktop para uma share remota e vazava o hash NTLM. ✅ CORRIGIDO (2026-10): allowlist de nomes+tipos sem distinguir maiúsculas e só caminhos locais `X:\...`. → INV-IMPORT-1.
 
@@ -92,12 +108,15 @@ Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), UR
 
 **M2 — `SafeMove` compara paths como strings; contornável por 8.3, `\\?\`, UNC, junctions** `SafeMove.cs` · ✅ CORRIGIDO (Lote C). `Canonicalize` via `GetFinalPathNameByHandle` resolve 8.3/junctions/subst/`\\?\` antes de comparar, em `IsProtectedPath` e `IsAncestorOrEqual`. Testado: nome 8.3 canonicaliza para o mesmo path (bypass fechado), sem falso-positivo em paths normais. → INV-PATH-1.
 
+**M4 — Workflow de release com action de terceiros por tag mutável e `contents: write`** `.github/workflows/release.yml` · ✅ CORRIGIDO (2026-10). `softprops/action-gh-release@v3` (tag mutável) corria com `contents: write` no job inteiro, o checkout persistia o token e o `SHA256SUMS` era gerado no mesmo job. Agora: actions fixadas por SHA, jobs `build` (read) e `draft` (write, recebe o artefacto por id e confirma o digest), `gh release create --draft`, nunca publica. → INV-RELEASE-1.
+
 **M3 — Proteção de delete fail-open, só verbo "delete" ANSI** `ShellContextMenu.cs` · PARCIAL: VERBW+VERBA aplicado (Lote A #7). Allowlist total NÃO aplicada de propósito: bloquear todos os verbos não-allowlisted arriscava partir itens legítimos de terceiros (Open With, Send To, extensões) — regressão de QoL. Verbo irresolúvel continua a passar. → INV-DELETE-1 (parcial).
 
 ### LOW
 
 **L1 — Installer no temp com nome previsível `%TEMP%\Racks.exe`** `Updater.cs` · ✅ CORRIGIDO (Lote B, nome aleatório `Racks-update-{guid}.exe` + verificação de tamanho) → INV-EXEC-1.
 **L2 — Uninstaller corre cópia de `{tmp}\RacksFarewell` (TOCTOU same-user)** `installer/Racks.iss` · ✅ CORRIGIDO (2026-10). O risco real era o modo admin: `PrivilegesRequiredOverridesAllowed=dialog` permitia instalar "para todos", e o uninstall elevado corria binários de pastas graváveis pelo utilizador. Esse modo nunca foi suportado (README: "No admin rights needed"; registo em HKCU) e foi removido: o instalador é só per-user. Defesa extra: com `IsAdmin` o `[Code]` não copia nem corre a animação a partir de `{tmp}`. Sem elevação, `{tmp}` é do mesmo utilizador (sem fronteira de privilégio). Resíduo: quem já instalou em modo admin fica com essa instalação; o próximo setup instala per-user ao lado (desinstalar a antiga à mão).
+**L6 — `choco install innosetup` sem versão no CI** · ✅ CORRIGIDO (2026-10). Inno Setup 6.7.1 descarregado do fornecedor com SHA-256 fixo e editor Authenticode "Pyrsys B.V." verificado. → INV-RELEASE-1.
 **L3 — `SafeDelete` check-then-recurse TOCTOU em junctions** `SafeDelete.cs` · ✅ CORRIGIDO (Lote D). Reescrito com `DirectoryInfo`, classifica pelos atributos da própria enumeração (uma só operação) em vez de um stat separado. Testado: árvore com junction é apagada, o alvo do junction sobrevive (sem perda de dados).
 **L4 — `CopyDirectory` cross-volume segue junctions (recursão/explosão)** `SafeMove.cs` · ✅ CORRIGIDO (Lote D). Salta reparse points na cópia + cap de profundidade (64). Deletes do `CopyThenDelete` roteados por `SafeDelete`.
 **L5 — Mutex single-instance `Global\` (squatting DoS)** `App.xaml.cs` · ✅ CORRIGIDO (Lote A #12, `Local\`) → INV-INSTANCE-1.

@@ -4,6 +4,14 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 
 ## [Unreleased]
 
+### Security
+- **Updates must be signed.** The updater now installs a release only if its `Racks-Setup-<v>.manifest.json` is signed (ECDSA P-256) by the key built into Racks, names exactly that release, is newer than what you run, and matches the downloaded installer's size and SHA-256. The installer is downloaded to a private folder and kept locked from the check until it starts. Anything missing or wrong: nothing runs and you see why. The signing key never touches GitHub, so a compromised GitHub account can no longer push an installer to existing users. See `docs/RELEASING.md`.
+- **Layout import only accepts local folders.** An imported layout could point a rack at a network share (`\\host\share`), so new Desktop files could be routed there and Windows would send your sign-in hash to that host. Imported `Folder` and background image paths must now be local drive paths (`C:\...`), value names are checked without regard to case, and only settings Racks itself saves are imported. Folders you choose yourself in the app can still be network folders.
+- **Release pipeline.** CI now only builds a draft release (pinned actions, least-privilege jobs, pinned and checksummed Inno Setup); signing and publishing happen on the owner's machine.
+
+### Changed
+- The installer is per-user only. The unsupported "install for all users" choice is gone. If you installed that way, uninstall that copy from Apps & Features after updating.
+
 ## [1.4.0] - 2026-10-10
 
 ### Added
