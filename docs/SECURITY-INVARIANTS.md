@@ -53,7 +53,8 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   vírgula, sem `\ / : # %`), cor só `#hex`, nome ou `sc#` e que o `ColorConverter` aceite (o padrão
   corre primeiro e recusa `ContextColor` antes de qualquer parse), imagem de fundo só caminho local
   `X:\...`. Validado no import (tipos `FontFamily`/`Color` na allow-list), nos setters do
-  `Instance` (cobre valores já gravados no registo, o diálogo e as bindings XAML) e todos os
+  `Instance` (cobre valores já gravados no registo, incluindo os defaults globais que o construtor
+  `Instance(name, settingDefault)` lê com a persistência suspensa, o diálogo e as bindings XAML) e todos os
   `new FontFamily(...)` com dados de racks passam por `SafeWpfValues.CreateFontFamily` (fallback
   "Segoe UI"). *(teste: `SafeWpfValuesTests`, incl. guarda contra `new FontFamily(` fora da
   fábrica; `RackLayoutImportValidationTests`)*

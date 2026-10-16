@@ -970,6 +970,10 @@ public class Instance : INotifyPropertyChanged
             // A single corrupt or hand-edited value used to throw here and abort startup.
             // Wrapped so the window still comes up (with whatever it managed to read)
             // instead of vanishing; the app-level handler is the backstop if this throws.
+            // Fonts and colors go through the validating setters (INV-IMPORT-3), like every other
+            // value read from the registry. Persistence is suspended, so reading a default never
+            // writes one back.
+            using var noWrites = SuspendPersistence();
             try
             {
                 RegistryHelper helper = new RegistryHelper(InstanceController.appName);
@@ -990,10 +994,10 @@ public class Instance : INotifyPropertyChanged
                 if (v != null) _grayScaleEnabled_InactiveOnly = (bool)v;
 
                 v = helper.ReadKeyValueRoot("TitleFontFamily");
-                if (v != null) _titleFontFamily = v.ToString();
+                if (v != null) TitleFontFamily = v.ToString() ?? "";
 
                 v = helper.ReadKeyValueRoot("ItemFontFamily");
-                if (v != null) _itemFontFamily = v.ToString();
+                if (v != null) ItemFontFamily = v.ToString() ?? "";
 
                 v = helper.ReadKeyValueRoot("ShowHiddenFiles");
                 if (v != null) _showHiddenFiles = (bool)v;
@@ -1032,28 +1036,28 @@ public class Instance : INotifyPropertyChanged
                 if (v != null) _fileFilterHideRegex = v.ToString();
 
                 v = helper.ReadKeyValueRoot("TitleBarColor");
-                if (v != null) _titleBarColor = v.ToString();
+                if (v != null) TitleBarColor = v.ToString() ?? "";
 
                 v = helper.ReadKeyValueRoot("TitleTextColor");
-                if (v != null) _titleTextColor = v.ToString();
+                if (v != null) TitleTextColor = v.ToString() ?? "";
 
                 v = helper.ReadKeyValueRoot("ListViewBackgroundColor");
-                if (v != null) _listViewBackgroundColor = v.ToString();
+                if (v != null) ListViewBackgroundColor = v.ToString() ?? "";
 
                 v = helper.ReadKeyValueRoot("ActiveBackgroundColor");
-                if (v != null) _activeBackgroundColor = v.ToString();
+                if (v != null) ActiveBackgroundColor = v.ToString() ?? "";
 
                 v = helper.ReadKeyValueRoot("ActiveTitleTextColor");
-                if (v != null) _activeTitleTextColor = v.ToString();
+                if (v != null) ActiveTitleTextColor = v.ToString() ?? "";
 
                 v = helper.ReadKeyValueRoot("ActiveBorderColor");
-                if (v != null) _activeBorderColor = v.ToString();
+                if (v != null) ActiveBorderColor = v.ToString() ?? "";
 
                 v = helper.ReadKeyValueRoot("ListViewFontColor");
-                if (v != null) _listViewFontColor = v.ToString();
+                if (v != null) ListViewFontColor = v.ToString() ?? "";
 
                 v = helper.ReadKeyValueRoot("ListViewFontShadowColor");
-                if (v != null) _listViewFontShadowColor = v.ToString();
+                if (v != null) ListViewFontShadowColor = v.ToString() ?? "";
 
                 v = helper.ReadKeyValueRoot("Opacity");
                 if (v != null) _opacity = int.Parse(v.ToString());
