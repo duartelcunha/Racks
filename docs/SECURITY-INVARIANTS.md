@@ -50,7 +50,8 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   `BrushConverter` aceita `ContextColor <uri> ...` e abre esse perfil ICC, e uma imagem de fundo
   UNC é aberta (até o `File.Exists`). Qualquer destes vaza o hash NTLM. *(teste)* ✅ Aplicado
   (2026-10, `Util/SafeWpfValues`): fonte só com nomes (`[\p{L}\p{N} ._'&-]`, até 8 separados por
-  vírgula, sem `\ / : # %`), cor só `#hex`, nome ou `sc#`, imagem de fundo só caminho local
+  vírgula, sem `\ / : # %`), cor só `#hex`, nome ou `sc#` e que o `ColorConverter` aceite (o padrão
+  corre primeiro e recusa `ContextColor` antes de qualquer parse), imagem de fundo só caminho local
   `X:\...`. Validado no import (tipos `FontFamily`/`Color` na allow-list), nos setters do
   `Instance` (cobre valores já gravados no registo, o diálogo e as bindings XAML) e todos os
   `new FontFamily(...)` com dados de racks passam por `SafeWpfValues.CreateFontFamily` (fallback

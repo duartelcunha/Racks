@@ -85,10 +85,39 @@ public class SafeWpfValuesTests
     [InlineData("#FFF;")]
     [InlineData("")]
     [InlineData(null)]
+    [InlineData("Foo")]
+    [InlineData("NotAColorName")]
+    [InlineData("sc#,,")]
+    [InlineData("sc#1,2")]
     public void Colors_that_are_not_plain_values_are_refused(string? color)
     {
         Assert.False(SafeWpfValues.IsSafeColor(color));
         Assert.Equal("#FFFFFF", SafeWpfValues.SafeColorOr(color, "#FFFFFF"));
+    }
+
+    [Theory]
+    [InlineData("Foo")]
+    [InlineData("sc#,,")]
+    public void Values_the_pattern_allows_are_still_refused_when_wpf_cannot_parse_them(string color)
+    {
+        // The shape is plain (a name, sc# numbers), but it is not a color WPF knows. WPF throws
+        // FormatException for "Foo" and InvalidOperationException for "sc#,,".
+        Assert.ThrowsAny<Exception>(() => System.Windows.Media.ColorConverter.ConvertFromString(color));
+        Assert.False(SafeWpfValues.IsSafeColor(color));
+    }
+
+    [Fact]
+    public void Context_colors_are_refused_by_the_pattern_before_wpf_parses_anything()
+    {
+        // ColorConverter opens the profile URI of "ContextColor <uri> ..." while parsing, so the
+        // pattern check must come first and return before the converter is called.
+        string src = File.ReadAllText(RepoPaths.App("Util", "SafeWpfValues.cs"));
+        int method = src.IndexOf("public static bool IsSafeColor(", StringComparison.Ordinal);
+        int pattern = src.IndexOf("if (!SafeMatch(ColorPattern, value)) return false;", method, StringComparison.Ordinal);
+        int parse = src.IndexOf("ColorConverter.ConvertFromString(value)", method, StringComparison.Ordinal);
+        Assert.True(method > 0 && pattern > method && parse > pattern);
+        foreach (var context in new[] { "ContextColor file://attacker.example/share/p.icc 1.0,0.5,0.5,0.5", "ContextColor x" })
+            Assert.False(SafeWpfValues.IsSafeColor(context));
     }
 
     [Theory]

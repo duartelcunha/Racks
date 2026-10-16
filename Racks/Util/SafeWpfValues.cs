@@ -37,7 +37,16 @@ namespace Racks.Util
         public static System.Windows.Media.FontFamily CreateFontFamily(string? name)
             => new(SafeFontFamilyName(name));
 
-        public static bool IsSafeColor(string? value) => SafeMatch(ColorPattern, value);
+        // The pattern runs FIRST: "ContextColor <uri>" and anything else that can name a location
+        // is refused before any WPF parser sees the string. Only then must WPF itself accept it,
+        // so a name that is not a color ("Foo") or broken sc# numbers ("sc#,,") never reach a
+        // binding or converter that would throw later.
+        public static bool IsSafeColor(string? value)
+        {
+            if (!SafeMatch(ColorPattern, value)) return false;
+            try { return System.Windows.Media.ColorConverter.ConvertFromString(value) is System.Windows.Media.Color; }
+            catch (Exception) { return false; }
+        }
 
         public static string SafeColorOr(string? value, string fallback) => IsSafeColor(value) ? value! : fallback;
 
