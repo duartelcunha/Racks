@@ -81,8 +81,10 @@ namespace Racks
                     return;
                 }
 
-                // Prefer image background when one is configured and the file still exists.
-                if (!string.IsNullOrWhiteSpace(Instance.BackgroundImagePath)
+                // Prefer image background when one is configured and the file still exists. Only a
+                // local drive path is opened: a UNC path (even the existence check) would contact
+                // that server and leak the user's NTLM hash (INV-IMPORT-3).
+                if (SafeWpfValues.IsLocalDrivePath(Instance.BackgroundImagePath)
                     && File.Exists(Instance.BackgroundImagePath))
                 {
                     try

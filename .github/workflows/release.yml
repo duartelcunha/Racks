@@ -1,36 +1,65 @@
 name: release
 
-# Push a tag like v1.2.0 to build the installer and publish a GitHub release.
+# Push a tag like v1.2.0 to build the installer and upload it to a DRAFT GitHub release.
+# CI never signs and never publishes: the owner checks the draft against this run, signs it with
+# the key that only exists on their machine, and publishes it (tools/release-sign.ps1,
+# docs/RELEASING.md). The updater ignores any release without that signature.
 # The tag must match <Version> in Racks/Racks.csproj.
+#
+# Hardening: third-party code is pinned by full commit SHA (Dependabot keeps the pins fresh),
+# no job gets more permission than it needs, the checkout does not keep the token, and nothing
+# from the event (tag name) is pasted into a script: it goes through env.
 on:
   push:
     tags: [ 'v*' ]
 
-permissions:
-  contents: write
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build installer and publish release
+  build:
+    name: Build installer
     runs-on: windows-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      installer-sha256: ${{ steps.package.outputs.installer-sha256 }}
+    env:
+      # Inno Setup is downloaded from the vendor and checked against this SHA-256 (the value
+      # Chocolatey's moderated package records for the same file) and its Authenticode publisher.
+      # To upgrade: change both values together (docs/RELEASING.md).
+      INNO_VERSION: 6.7.1
+      INNO_SHA256: 4d11e8050b6185e0d49bd9e8cc661a7a59f44959a621d31d11033124c4e8a7b0
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
       - name: Check tag matches csproj version
         id: ver
         shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
-          $tag = "${{ github.ref_name }}".TrimStart('v')
+          if ($env:TAG -cnotmatch '\Av(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})\z') {
+            throw "Tag '$env:TAG' is not of the form vX.Y.Z"
+          }
+          $tag = $env:TAG.Substring(1)
           [xml]$csproj = Get-Content Racks/Racks.csproj
           $version = ($csproj.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1)
-          if ($tag -ne $version) { throw "Tag v$tag does not match <Version> $version in Racks.csproj" }
+          if ($tag -cne $version) { throw "Tag v$tag does not match <Version> $version in Racks.csproj" }
           "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Build and test
@@ -39,49 +68,132 @@ jobs:
           dotnet build Racks.sln -c Release --no-restore
           dotnet test Racks.sln -c Release --no-build
 
-      - name: Ensure Inno Setup
+      - name: Check the update signing key is set (release gate test)
+        shell: pwsh
+        env:
+          RACKS_RELEASE_GATE: '1'
+        run: |
+          # A release built without a real update key could never verify (and so never install) a
+          # later update. The test parses the key the build compiled in, so any placeholder or
+          # malformed value fails, not just one spelling. Set it once with RacksSigner keygen
+          # (docs/RELEASING.md).
+          $out = dotnet test Racks.sln -c Release --no-build --filter "Category=ReleaseGate" 2>&1
+          $out | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw "The release gate test failed: Racks/Util/UpdateTrust.cs has no real update signing key." }
+          if (-not ($out -match 'Passed:\s+1,') -or -not ($out -match 'Skipped:\s+0,')) {
+            throw "The release gate test did not run."
+          }
+
+      - name: Install pinned Inno Setup
+        id: inno
         shell: pwsh
         run: |
-          $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "${env:ProgramFiles}\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ }
-          if (-not $iscc) { choco install innosetup -y --no-progress }
+          $ErrorActionPreference = 'Stop'
+          $dl = Join-Path $env:RUNNER_TEMP 'innosetup-download'
+          New-Item -ItemType Directory -Force $dl | Out-Null
+          $exe = Join-Path $dl "innosetup-$env:INNO_VERSION.exe"
+          Invoke-WebRequest -Uri "https://files.jrsoftware.org/is/6/innosetup-$env:INNO_VERSION.exe" -OutFile $exe -UseBasicParsing
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $env:INNO_SHA256) { throw "Inno Setup download hash $hash does not match the pinned $env:INNO_SHA256" }
+          $sig = Get-AuthenticodeSignature $exe
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'Pyrsys B\.V\.') {
+            throw "Unexpected Inno Setup signature: $($sig.Status) / $($sig.SignerCertificate.Subject)"
+          }
+          $target = Join-Path $env:RUNNER_TEMP 'innosetup'
+          $p = Start-Process -FilePath $exe -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$target") -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Inno Setup install failed with exit code $($p.ExitCode)" }
+          $iscc = Join-Path $target 'ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found in $target" }
+          "iscc=$iscc" >> $env:GITHUB_OUTPUT
 
       - name: Build installer
         shell: pwsh
-        run: ./build-installer.ps1
+        env:
+          ISCC: ${{ steps.inno.outputs.iscc }}
+        run: ./build-installer.ps1 -IsccPath $env:ISCC
 
       - name: Package portable zip and checksums
+        id: package
         shell: pwsh
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          $v = "${{ steps.ver.outputs.version }}"
-          New-Item -ItemType Directory -Force release | Out-Null
-          Copy-Item "installer/Output/Racks-Setup-$v.exe" release/
-          Compress-Archive -Path publish/* -DestinationPath "release/Racks-portable-$v.zip"
-          Push-Location release
-          Get-ChildItem -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } |
-            ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } |
-            Set-Content SHA256SUMS.txt
-          Pop-Location
+          $v = $env:VERSION
+          $assets = 'dist/assets'
+          New-Item -ItemType Directory -Force $assets | Out-Null
+          Copy-Item "installer/Output/Racks-Setup-$v.exe" $assets
+          Compress-Archive -Path publish/* -DestinationPath "$assets/Racks-portable-$v.zip"
+          $lines = Get-ChildItem -File $assets | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | Sort-Object Name |
+            ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $($_.Name)" }
+          # LF line endings so `sha256sum -c` works anywhere.
+          [IO.File]::WriteAllText((Join-Path (Resolve-Path $assets) 'SHA256SUMS.txt'), (($lines -join "`n") + "`n"))
+          $h = (Get-FileHash "$assets/Racks-Setup-$v.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "installer-sha256=$h" >> $env:GITHUB_OUTPUT
 
       - name: Extract release notes from CHANGELOG
         shell: pwsh
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          $v = "${{ steps.ver.outputs.version }}"
+          $v = $env:VERSION
           $lines = Get-Content CHANGELOG.md
           $start = ($lines | Select-String -Pattern "^## \[$([regex]::Escape($v))\]" | Select-Object -First 1).LineNumber
           if ($start) {
             $rest = $lines[$start..($lines.Length - 1)]
             $end = ($rest | Select-String -Pattern '^## \[' | Select-Object -First 1).LineNumber
             $body = if ($end) { $rest[0..($end - 2)] } else { $rest }
-            $body -join "`n" | Set-Content release-notes.md
+            $body -join "`n" | Set-Content dist/release-notes.md
           } else {
-            "See CHANGELOG.md." | Set-Content release-notes.md
+            "See CHANGELOG.md." | Set-Content dist/release-notes.md
           }
 
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v3
+      - name: Upload build output
+        id: upload
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          body_path: release-notes.md
-          files: |
-            release/Racks-Setup-${{ steps.ver.outputs.version }}.exe
-            release/Racks-portable-${{ steps.ver.outputs.version }}.zip
-            release/SHA256SUMS.txt
+          name: release-${{ steps.ver.outputs.version }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  draft:
+    name: Upload to a draft release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build output
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          path: dist
+          merge-multiple: true
+
+      - name: Verify the files are the ones the build job produced
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          EXPECTED_SHA256: ${{ needs.build.outputs.installer-sha256 }}
+        run: |
+          set -euo pipefail
+          cd dist/assets
+          sha256sum -c SHA256SUMS.txt
+          actual="$(sha256sum "Racks-Setup-${VERSION}.exe" | cut -d' ' -f1)"
+          if [ "$actual" != "$EXPECTED_SHA256" ]; then
+            echo "Installer digest $actual does not match the build job's $EXPECTED_SHA256" >&2
+            exit 1
+          fi
+
+      - name: Create draft release (never published by CI)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" --draft --verify-tag --title "$TAG" --notes-file dist/release-notes.md \
+            "dist/assets/Racks-Setup-${VERSION}.exe" \
+            "dist/assets/Racks-portable-${VERSION}.zip" \
+            "dist/assets/SHA256SUMS.txt"
+          echo "Draft created for $TAG. Sign and publish it locally with tools/release-sign.ps1 -Version $VERSION" >> "$GITHUB_STEP_SUMMARY"

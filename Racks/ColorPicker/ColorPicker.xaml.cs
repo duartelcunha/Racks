@@ -85,6 +85,7 @@ namespace Racks.ColorPicker
             this.DataContext = this;
             try
             {
+                if (!Racks.Util.SafeWpfValues.IsSafeColor(_tb.Text)) throw new FormatException();
                 ThisColor = (Color)ColorConverter.ConvertFromString(_tb.Text);
             }
             catch

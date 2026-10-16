@@ -308,25 +308,9 @@ namespace Racks
             titleBarIcons.Opacity = Instance.HideTitleBarIconsWhenInactive ? 0 : 1;
 
             if (Instance.TitleFontFamily != null)
-            {
-                try
-                {
-                    title.FontFamily = new System.Windows.Media.FontFamily(Instance.TitleFontFamily);
-                }
-                catch
-                {
-                }
-            }
+                title.FontFamily = SafeWpfValues.CreateFontFamily(Instance.TitleFontFamily);
             if (Instance.ItemFontFamily != null)
-            {
-                try
-                {
-                    this.Resources["ItemFont"] = new System.Windows.Media.FontFamily(Instance.ItemFontFamily);
-                }
-                catch
-                {
-                }
-            }
+                this.Resources["ItemFont"] = SafeWpfValues.CreateFontFamily(Instance.ItemFontFamily);
             if (Instance.ShowInGrid)
             {
                 showFolder.Visibility = Visibility.Visible;

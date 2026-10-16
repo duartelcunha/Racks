@@ -37,8 +37,10 @@ AppUpdatesURL={#AppUrl}
 DefaultDirName={userpf}\{#AppName}
 DefaultGroupName={#AppName}
 ; Per-user install — no admin prompt, no UAC. Matches VS Code / Slack model.
+; Per-user ONLY: there is deliberately no PrivilegesRequiredOverridesAllowed. Admin ("all users")
+; mode was never supported (HKCU registry, per-user paths) and made the uninstaller run binaries
+; from user-writable folders with admin rights (docs/SECURITY-INVARIANTS.md L2).
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
 ; Suppress every page that asks the user a question.
 DisableWelcomePage=yes
 DisableDirPage=yes
@@ -169,16 +171,21 @@ begin
     Exec(ExpandConstant('{app}\{#AppExeName}'), '--uninstall-cleanup "' + CleanupReport + '"', '',
       SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-    // Snapshot the app folder before it's deleted.
-    AnimDir := ExpandConstant('{tmp}\RacksFarewell');
-    Exec(ExpandConstant('{cmd}'), '/C xcopy "' + ExpandConstant('{app}') + '" "' + AnimDir + '" /E /I /Q /Y', '',
-      SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // Snapshot the app folder before it's deleted. Never when elevated: the copy would sit in a
+    // folder the non-elevated user can write to and then run with admin rights.
+    AnimDir := '';
+    if not IsAdmin then
+    begin
+      AnimDir := ExpandConstant('{tmp}\RacksFarewell');
+      Exec(ExpandConstant('{cmd}'), '/C xcopy "' + ExpandConstant('{app}') + '" "' + AnimDir + '" /E /I /Q /Y', '',
+        SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    end;
   end
   else if CurUninstallStep = usPostUninstall then
   begin
     if not UninstallSilent then ShowCleanupSummary;
     Exe := AnimDir + '\{#AppExeName}';
-    if FileExists(Exe) then
+    if (AnimDir <> '') and (not IsAdmin) and FileExists(Exe) then
     begin
       // Run the animation, wait for it, then schedule the temp copy for deletion.
       Exec(Exe, '--uninstall-anim', '', SW_SHOW, ewWaitUntilTerminated, ResultCode);
