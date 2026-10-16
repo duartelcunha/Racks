@@ -9,6 +9,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{0C88DD14-F
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Racks.Tests", "test\Racks.Tests\Racks.Tests.csproj", "{6E81A2F3-001C-4D59-AC20-1973DD955925}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E-EAC7-C090-1BA3-A61EC2A24D84}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RacksSigner", "tools\RacksSigner\RacksSigner.csproj", "{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,11 +47,24 @@ Global
 		{6E81A2F3-001C-4D59-AC20-1973DD955925}.Release|x64.Build.0 = Release|Any CPU
 		{6E81A2F3-001C-4D59-AC20-1973DD955925}.Release|x86.ActiveCfg = Release|Any CPU
 		{6E81A2F3-001C-4D59-AC20-1973DD955925}.Release|x86.Build.0 = Release|Any CPU
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}.Debug|x64.Build.0 = Debug|Any CPU
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}.Debug|x86.Build.0 = Debug|Any CPU
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}.Release|x64.ActiveCfg = Release|Any CPU
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}.Release|x64.Build.0 = Release|Any CPU
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}.Release|x86.ActiveCfg = Release|Any CPU
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{6E81A2F3-001C-4D59-AC20-1973DD955925} = {0C88DD14-F956-CE84-757C-A364CCF449FC}
+		{0FD482B9-8CF0-4285-8FA7-0078BE759DFC} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 	EndGlobalSection
 EndGlobal
