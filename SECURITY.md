@@ -26,8 +26,8 @@ The codebase is reviewed against a set of security invariants documented in
 - The Delete verb is blocked for files inside a rack, and dragging an item out sends the original to the Recycle Bin, never a permanent delete.
 - Path guards are canonicalized (junctions, 8.3 names, `\\?\` aliases) before comparison.
 - User- and import-supplied regular expressions run with a bounded match timeout (no ReDoS).
-- Layout import is validated and atomic (a bad file can never wipe your racks); imported folder paths must be local drive paths, never network shares.
-- The updater installs a release only if its manifest is signed by the update key built into Racks, names exactly that release and a newer version, and matches the downloaded installer's size and SHA-256. The private key never touches GitHub or CI, so a compromised GitHub account cannot push an installer to existing installs. Anything missing or mismatched fails closed. See [`docs/RELEASING.md`](docs/RELEASING.md).
+- Layout import is validated and atomic (a bad file can never wipe your racks); imported folder paths must be local drive paths, never network shares, and font names and colors (from imports or saved settings) can never name a network location.
+- The updater installs a release only if its manifest is signed by the update key built into Racks, names exactly that release and a newer version, and matches the downloaded installer's size and SHA-256. The private key never touches GitHub or CI, and the owner signs only after verifying a release tag signed with a separate key and reviewing the changes, so a compromised GitHub account cannot push an installer to installs that check signatures (the first signed release and later; 1.4.0 and earlier cannot). Anything missing or mismatched fails closed. See [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## A note on code signing
 

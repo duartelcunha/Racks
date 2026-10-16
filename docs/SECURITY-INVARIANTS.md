@@ -25,8 +25,11 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   pública compilada (`Util/UpdateTrust.cs`), privada só no Credential Manager do dono. O updater
   exige assinatura válida, versão assinada == tag do release e > versão atual, e tamanho/sha256
   dos bytes descarregados, verificados por um handle que nega escrita/apagamento e fica aberto até
-  o instalador arrancar. Placeholder da chave ⇒ nenhum update. *(teste: `UpdateSignatureTests`,
-  `UpdaterAssetTests`; código partilhado com `tools/RacksSigner`)*
+  o instalador arrancar. Placeholder da chave ⇒ nenhum update. O updater lê a primeira página de
+  `/releases` (até 30) e oferece o release assinado mais recente que verifica, para um release
+  partido não esconder um bom; os toasts só mostram a versão validada, nunca texto da API.
+  *(teste: `UpdateSignatureTests`, `UpdaterAssetTests`, `UpdaterReleaseScanTests`; código
+  partilhado com `tools/RacksSigner`)*
 - **INV-IMPORT-1** Input importado é validado antes de virar estado persistido: allowlist de nomes
   de valor, tipos/ranges validados, `Folder`/`BackgroundImagePath` canonicalizados e a rejeitar
   UNC/sistema/traversal, e `rack.Name` só um segmento de chave seguro. *(teste)* ✅ Aplicado
@@ -38,6 +41,17 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   `\\.\`, `\\?\UNC\`, `\\host@SSL`) é rejeitado, tal como `C:x`, `\x`, `..` e `:` de ADS. O
   `DesktopRouter` NÃO revalida: um utilizador pode escolher uma pasta de rede na própria app; a
   regra é só para ficheiros importados. *(teste: `RackLayoutImportValidationTests`)*
+- **INV-IMPORT-3** Valores de racks que o WPF transforma em recursos nunca podem nomear uma
+  localização: `new FontFamily(@"\\host\share\#Fonte")` abre a share, o `ColorConverter`/
+  `BrushConverter` aceita `ContextColor <uri> ...` e abre esse perfil ICC, e uma imagem de fundo
+  UNC é aberta (até o `File.Exists`). Qualquer destes vaza o hash NTLM. *(teste)* ✅ Aplicado
+  (2026-10, `Util/SafeWpfValues`): fonte só com nomes (`[\p{L}\p{N} ._'&-]`, até 8 separados por
+  vírgula, sem `\ / : # %`), cor só `#hex`, nome ou `sc#`, imagem de fundo só caminho local
+  `X:\...`. Validado no import (tipos `FontFamily`/`Color` na allow-list), nos setters do
+  `Instance` (cobre valores já gravados no registo, o diálogo e as bindings XAML) e todos os
+  `new FontFamily(...)` com dados de racks passam por `SafeWpfValues.CreateFontFamily` (fallback
+  "Segoe UI"). *(teste: `SafeWpfValuesTests`, incl. guarda contra `new FontFamily(` fora da
+  fábrica; `RackLayoutImportValidationTests`)*
 - **INV-IMPORT-2** Um replace destrutivo é atómico ou tem backup: validar e preparar tudo primeiro,
   só apagar quando o novo estado escreve limpo, e fazer rollback do snapshot em falha. *(teste)*
   ✅ Aplicado (Lote A #5).
@@ -64,7 +78,15 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   por SHA completo, permissões por job (`build` lê, só `draft` escreve), `persist-credentials:
   false`, dados do evento só via `env`, ferramentas de build (Inno Setup) com versão e SHA-256
   fixos. Assinar e publicar é feito pelo dono com `tools/release-sign.ps1`. *(revisão:
-  `docs/RELEASING.md`)*
+  `docs/RELEASING.md`)* A máquina com a chave nunca compila nem corre código de uma working tree:
+  o RacksSigner é compilado uma vez de um commit revisto (`tools/install-signer.ps1`, a partir do
+  `git archive` desse commit) para `%LOCALAPPDATA%\RacksSigner\<commit>\`, com o SHA-256 de cada
+  ficheiro em `trusted.json` (fora do repo); o `release-sign.ps1` instalado só corre esse signer,
+  exige uma tag anotada assinada com uma chave SSH própria (que não é credencial do GitHub,
+  `allowed_signers` fora do repo) igual à do GitHub, mostra `git log`/`git diff --stat` desde a
+  última tag assinada e pede confirmação escrita ANTES de assinar; depois assina, envia e publica
+  de seguida, e se algo falhar apaga os ficheiros assinados do rascunho e do disco. A verificação
+  da chave pública no CI é um teste (`ReleaseGateTests`), não uma procura de texto.
 - **INV-INSTANCE-1** Single-instance usa namespace `Local\` (ou DACL owner-only). *(mecânica: grep
   `Global\\`)* ✅ Aplicado (Lote A #12).
 - **INV-PROC-1** Nunca passar strings externas por `cmd.exe /c` concatenado; usar `ArgumentList`
@@ -94,9 +116,9 @@ Gravidade / estado. `file:line` do sweep (podem ter drift de 1-2 linhas).
 ### HIGH
 
 **H1 — Updater executa `assets[0]` do release sem verificação** `Racks/Util/Updater.cs` · ✅ CORRIGIDO PARCIAL (Lote B)
-Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), URL validada (HTTPS + host `github.com` + path `/duartelcunha/Racks/releases/download/`), tamanho verificado vs a API, e re-validação antes de descarregar. ~~Resíduo aceite: compromisso genuíno do repo/conta GitHub~~. Em 2026-10-09 isso aconteceu (token roubado substituiu assets de releases por malware). ✅ CORRIGIDO (2026-10): assinatura ECDSA P-256 de um manifesto canónico, com a chave privada fora do GitHub; ver INV-UPDATE-1 e `docs/RELEASING.md`. Resíduo: instalações ≤ 1.4.0 têm o updater antigo até atualizarem; a chave no Credential Manager é legível por qualquer processo do mesmo utilizador na máquina que assina. → INV-UPDATE-1.
+Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), URL validada (HTTPS + host `github.com` + path `/duartelcunha/Racks/releases/download/`), tamanho verificado vs a API, e re-validação antes de descarregar. ~~Resíduo aceite: compromisso genuíno do repo/conta GitHub~~. Em 2026-10-09 isso aconteceu (token roubado substituiu assets de releases por malware). ✅ CORRIGIDO (2026-10): assinatura ECDSA P-256 de um manifesto canónico, com a chave privada fora do GitHub; ver INV-UPDATE-1 e `docs/RELEASING.md`. Resíduo: instalações ≤ 1.4.0 têm o updater antigo até atualizarem; a chave no Credential Manager é legível por qualquer processo do mesmo utilizador na máquina que assina; a assinatura só vale o que vale a revisão do dono (assinar sem rever um commit malicioso produz um instalador assinado), daí a tag assinada, o signer fixado e a confirmação depois da lista de alterações (QA 2026-10, F2/F3). → INV-UPDATE-1, INV-RELEASE-1.
 
-**H2 — Import de layout JSON sem validação, persistido no registo** `Racks/Util/RackLayoutIO.cs` · ✅ CORRIGIDO (Lote A nome; Lote C valida `Folder`/`BackgroundImagePath`: rejeita traversal `..` e paths não-rooted, na passagem atómica antes de apagar). Regex do import já limitado por SafeRegex (#3). ~~Resíduo: sem allowlist total de nomes de valor~~ e ~~UNC permitido~~: um audit independente (2026-10) mostrou que um layout com `Folder` UNC (ou `folder` em minúsculas, que escapava ao check sensível a maiúsculas) fazia o `DesktopRouter`/`SafeMove` mover novos ficheiros do Desktop para uma share remota e vazava o hash NTLM. ✅ CORRIGIDO (2026-10): allowlist de nomes+tipos sem distinguir maiúsculas e só caminhos locais `X:\...`. → INV-IMPORT-1.
+**H2 — Import de layout JSON sem validação, persistido no registo** `Racks/Util/RackLayoutIO.cs` · ✅ CORRIGIDO (Lote A nome; Lote C valida `Folder`/`BackgroundImagePath`: rejeita traversal `..` e paths não-rooted, na passagem atómica antes de apagar). Regex do import já limitado por SafeRegex (#3). ~~Resíduo: sem allowlist total de nomes de valor~~ e ~~UNC permitido~~: um audit independente (2026-10) mostrou que um layout com `Folder` UNC (ou `folder` em minúsculas, que escapava ao check sensível a maiúsculas) fazia o `DesktopRouter`/`SafeMove` mover novos ficheiros do Desktop para uma share remota e vazava o hash NTLM. ✅ CORRIGIDO (2026-10): allowlist de nomes+tipos sem distinguir maiúsculas e só caminhos locais `X:\...`. → INV-IMPORT-1. A revisão QA seguinte mostrou o mesmo vazamento por `TitleFontFamily`/`ItemFontFamily` (`\\host\share\#Fonte`) e pelas cores (`ContextColor <uri>`), que eram escalares livres: ✅ CORRIGIDO → INV-IMPORT-3.
 
 **H3 — Regex do utilizador sem `MatchTimeout` no UI thread (ReDoS)** `DesktopRouter.cs:73`, `RackWindow.xaml.cs`, `RackViewModel.cs` · ✅ CORRIGIDO (Lote A #3) → INV-REGEX-1.
 

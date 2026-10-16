@@ -3,7 +3,8 @@ namespace Racks.Util;
 // The update signing public key, compiled into Racks. Updates are only installed when their
 // manifest is signed by the matching private key, which lives in the owner's Windows Credential
 // Manager (never on GitHub, never in CI). Compromising the GitHub account or a release therefore
-// cannot push an installer to existing users. See docs/RELEASING.md.
+// cannot push an installer to installs that check signatures, as long as the owner signs only
+// reviewed releases from a signed tag. See docs/RELEASING.md.
 //
 // While this is the placeholder, the updater refuses EVERY update (fail closed) and tells the user
 // to download from the releases page instead. Linked into tools/RacksSigner, which refuses to sign
