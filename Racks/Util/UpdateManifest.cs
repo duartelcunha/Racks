@@ -114,10 +114,14 @@ public static class UpdateSignature
 
     public static bool Verify(ReadOnlySpan<byte> manifestBytes, string? signatureText, string? publicKeySpkiBase64)
     {
-        if (!TryDecodeSignature(signatureText, out var sig)) return false;
         using var key = TryImportPublicKey(publicKeySpkiBase64);
-        if (key == null) return false;
-        return key.VerifyData(manifestBytes, sig, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        return key != null && Verify(manifestBytes, signatureText, key);
+    }
+
+    public static bool Verify(ReadOnlySpan<byte> manifestBytes, string? signatureText, ECDsa publicKey)
+    {
+        if (!TryDecodeSignature(signatureText, out var sig)) return false;
+        return publicKey.VerifyData(manifestBytes, sig, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
     }
 
     // Exactly one P-256 SPKI, nothing trailing. Returns null for anything else (including the
@@ -184,12 +188,12 @@ public static class UpdateVerifier
                                              string releaseTag, string currentVersion, out UpdateManifest? manifest)
     {
         manifest = null;
-        using (var key = UpdateSignature.TryImportPublicKey(publicKeySpkiBase64))
-            if (key == null) return UpdateCheck.NoTrustedKey;
+        using var key = UpdateSignature.TryImportPublicKey(publicKeySpkiBase64);
+        if (key == null) return UpdateCheck.NoTrustedKey;
         if (manifestBytes == null || manifestBytes.Length == 0 || manifestBytes.Length > UpdateManifest.MaxManifestBytes)
             return UpdateCheck.MissingManifest;
         if (string.IsNullOrWhiteSpace(signatureText)) return UpdateCheck.MissingSignature;
-        if (!UpdateSignature.Verify(manifestBytes, signatureText, publicKeySpkiBase64)) return UpdateCheck.BadSignature;
+        if (!UpdateSignature.Verify(manifestBytes, signatureText, key)) return UpdateCheck.BadSignature;
         if (!UpdateManifest.TryParseCanonical(manifestBytes, out var m) || m == null) return UpdateCheck.MalformedManifest;
         if (!TagMatches(releaseTag, m.Version)) return UpdateCheck.WrongRelease;
         if (!IsNewer(m.Version, currentVersion)) return UpdateCheck.NotNewer;
@@ -205,7 +209,6 @@ public static class UpdateVerifier
         installer.Position = 0;
         byte[] actual = SHA256.HashData(installer);
         byte[] expected = Convert.FromHexString(manifest.Sha256);
-        if (installer.Position != manifest.Size) return UpdateCheck.SizeMismatch;
         return CryptographicOperations.FixedTimeEquals(actual, expected) ? UpdateCheck.Ok : UpdateCheck.HashMismatch;
     }
 
@@ -213,8 +216,9 @@ public static class UpdateVerifier
     public static bool TagMatches(string? releaseTag, string version)
         => releaseTag == "v" + version || releaseTag == version;
 
-    // Signed version strictly greater than the running one (FileVersion "1.4.0.0" or "1.4.0").
-    // An unparsable current version counts as "not newer" (fail closed).
+    // The one version comparison of the updater: a plain version (UpdateManifest.IsValidVersion,
+    // so check that first) strictly greater than the running one (FileVersion "1.4.0.0" or
+    // "1.4.0"). An unparsable current version counts as "not newer" (fail closed).
     public static bool IsNewer(string signedVersion, string? currentVersion)
     {
         if (!Version.TryParse(signedVersion, out var signed)) return false;
@@ -225,18 +229,19 @@ public static class UpdateVerifier
         return signed > current3;
     }
 
+    // The reason, shown after "This update can't be verified, so Racks won't install it."
     public static string Describe(UpdateCheck result) => result switch
     {
         UpdateCheck.Ok => "The update was verified.",
-        UpdateCheck.NoTrustedKey => "This build of Racks has no update signing key, so it cannot verify updates. Download new versions from the GitHub releases page.",
-        UpdateCheck.MissingManifest => "The release has no signed update manifest. The update was not installed.",
-        UpdateCheck.MissingSignature => "The release has no update signature. The update was not installed.",
-        UpdateCheck.BadSignature => "The update signature is not valid. The update was not installed.",
-        UpdateCheck.MalformedManifest => "The update manifest is malformed. The update was not installed.",
-        UpdateCheck.WrongRelease => "The signed manifest does not match this release. The update was not installed.",
-        UpdateCheck.NotNewer => "The signed update is not newer than this version. The update was not installed.",
-        UpdateCheck.SizeMismatch => "The downloaded installer does not have the signed size. It was discarded.",
-        UpdateCheck.HashMismatch => "The downloaded installer does not match its signed checksum. It was discarded.",
-        _ => "The update could not be verified. It was not installed.",
+        UpdateCheck.NoTrustedKey => "This build of Racks can't check update signatures. Download new versions from the releases page:",
+        UpdateCheck.MissingManifest => "The release has no signed update manifest.",
+        UpdateCheck.MissingSignature => "The release has no update signature.",
+        UpdateCheck.BadSignature => "The update signature is not valid.",
+        UpdateCheck.MalformedManifest => "The update manifest is malformed.",
+        UpdateCheck.WrongRelease => "The signed manifest is for a different release.",
+        UpdateCheck.NotNewer => "The signed update is not newer than this version.",
+        UpdateCheck.SizeMismatch => "The downloaded installer does not have the signed size. It was deleted.",
+        UpdateCheck.HashMismatch => "The downloaded installer does not match its signed checksum. It was deleted.",
+        _ => "The update could not be verified.",
     };
 }

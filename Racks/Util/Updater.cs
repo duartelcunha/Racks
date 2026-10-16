@@ -21,7 +21,7 @@ namespace Racks
     public class Updater
     {
         internal sealed record ReleaseAssets(string Version, string InstallerUrl, string ManifestUrl, string SignatureUrl);
-        private sealed record PendingUpdate(string Tag, ReleaseAssets Assets, UpdateManifest Manifest);
+        internal sealed record PendingUpdate(string Tag, ReleaseAssets Assets, UpdateManifest Manifest);
 
         // Set only after the manifest verified; Install uses nothing else.
         private static PendingUpdate? _pending;
@@ -30,108 +30,141 @@ namespace Racks
         // this proves it's OUR repo's release asset and not an arbitrary URL from the JSON.
         private const string TrustedAssetHost = "github.com";
         private const string TrustedAssetPathPrefix = "/duartelcunha/Racks/releases/download/";
-        // Releases are read from this repository only.
-        public const string LatestReleaseApi = "https://api.github.com/repos/duartelcunha/Racks/releases/latest";
+        // Releases are read from this repository only: the first page (newest first, up to 30).
+        public const string ReleasesApi = "https://api.github.com/repos/duartelcunha/Racks/releases?per_page=30";
         public const string ReleasesPage = "https://github.com/duartelcunha/Racks/releases";
 
+        private const string CantVerify = "This update can't be verified, so Racks won't install it.";
+
+        // Reads the first page of releases (up to 30, newest first as GitHub lists them) and offers
+        // the NEWEST release that is correctly signed and newer than this build. Looking past
+        // /releases/latest means one broken or tampered release (a missing .sig, a swapped
+        // installer) cannot hide an older good update. Toasts only ever show a version that passed
+        // UpdateManifest.IsValidVersion, never raw text from the API (tag, name or body).
         public static async Task CheckUpdateAsync(string url, bool showToastIfNoUpdate)
         {
             string currentVersion = Process.GetCurrentProcess().MainModule!.FileVersionInfo.FileVersion!.ToString();
             try
             {
-                using (var httpClient = NewHttpClient(currentVersion))
+                using var httpClient = NewHttpClient(currentVersion);
+                var response = await httpClient.GetStringAsync(url);
+                using JsonDocument doc = JsonDocument.Parse(response);
+                var candidates = SelectCandidates(doc.RootElement, currentVersion, out string? newestVersion);
+
+                if (newestVersion == null)
                 {
-                    var response = await httpClient.GetStringAsync(url);
-                    Debug.WriteLine("got response");
-                    using (JsonDocument doc = JsonDocument.Parse(response))
-                    {
-                        var root = doc.RootElement;
-                        string latestVersion = root.GetProperty("tag_name").GetString()!;
-                        string description = root.GetProperty("body").GetString()!;
-                        string name = root.GetProperty("name").GetString()!;
-                        string emoji = (name.ToLower().Contains("fix"), name.ToLower().Contains("feature")) switch
-                        {
-                            (true, true) => "🚀",
-                            (true, false) => "🪛", // (screwdriver)
-                            (false, true) => "✨",
-                            _ => "🚀"
-                        };
-
-                        if (!IsNewer(latestVersion, currentVersion))
-                        {
-                            if (showToastIfNoUpdate)
-                                ShowToast("You are up to date!", "There is no available update.");
-                            return;
-                        }
-
-                        // A newer release exists. Offer it only if it is a correctly signed Racks
-                        // release; otherwise say why (manual check) or stay quiet (startup check).
-                        UpdateCheck check;
-                        UpdateManifest? manifest = null;
-                        if (!TrySelectSignedRelease(root, latestVersion, out var assets))
-                            check = UpdateCheck.MissingManifest;
-                        else
-                            (check, manifest) = await FetchAndVerifyManifestAsync(httpClient, assets, latestVersion, currentVersion);
-
-                        if (check == UpdateCheck.Ok && manifest != null)
-                        {
-                            _pending = new PendingUpdate(latestVersion, assets, manifest);
-                            var toastBuilder = new ToastContentBuilder()
-                                 .AddText($"{emoji} New release! {name}", AdaptiveTextStyle.Header)
-                                 .AddText(description, AdaptiveTextStyle.Body)
-                                 .AddButton(new ToastButton()
-                                     .SetContent("Install")
-                                     .AddArgument("action", "install_update")
-                                     .SetBackgroundActivation())
-                                 .AddButton(new ToastButton()
-                                     .SetContent("Close")
-                                     .AddArgument("action", "close")
-                                     .SetBackgroundActivation());
-                            toastBuilder.Show();
-                        }
-                        else
-                        {
-                            _pending = null;
-                            Debug.WriteLine($"Update {latestVersion} not offered: {check}");
-                            // Without a key the user should still learn that a new version exists.
-                            if (showToastIfNoUpdate || check == UpdateCheck.NoTrustedKey)
-                                ShowToast($"Racks {latestVersion} is available", $"{UpdateVerifier.Describe(check)} {ReleasesPage}");
-                        }
-                    }
+                    if (showToastIfNoUpdate)
+                        ShowToast("You are up to date!", "There is no available update.");
+                    return;
                 }
+
+                // No key compiled in: nothing can be verified, so don't download anything. Only a
+                // check the user asked for says so (not every startup).
+                if (!UpdateTrust.IsConfigured(UpdateTrust.PublicKeySpkiBase64))
+                {
+                    _pending = null;
+                    if (showToastIfNoUpdate)
+                        ShowToast($"Racks {newestVersion} is available", $"{UpdateVerifier.Describe(UpdateCheck.NoTrustedKey)} {ReleasesPage}");
+                    return;
+                }
+
+                var (offer, failure) = await ChooseVerifiedAsync(candidates,
+                    assets => FetchAndVerifyManifestAsync(httpClient, assets, currentVersion));
+
+                if (offer != null)
+                {
+                    _pending = offer;
+                    new ToastContentBuilder()
+                        .AddText($"🚀 Racks {offer.Manifest.Version} is available", AdaptiveTextStyle.Header)
+                        .AddText("A signed update is ready to install. See what's new on the releases page.", AdaptiveTextStyle.Body)
+                        .AddButton(new ToastButton()
+                            .SetContent("Install")
+                            .AddArgument("action", "install_update")
+                            .SetBackgroundActivation())
+                        .AddButton(new ToastButton()
+                            .SetContent("Close")
+                            .AddArgument("action", "close")
+                            .SetBackgroundActivation())
+                        .Show();
+                    return;
+                }
+
+                _pending = null;
+                Debug.WriteLine($"Update {newestVersion} not offered: {failure}");
+                if (showToastIfNoUpdate)
+                    ShowToast($"Racks {newestVersion} is available", $"{CantVerify} {UpdateVerifier.Describe(failure)} {ReleasesPage}");
             }
             catch (Exception e)
             {
                 // A check the user asked for must never fail silently (being offline on the first
                 // click used to show nothing). The automatic startup check stays quiet.
                 if (showToastIfNoUpdate)
-                    ShowToast("Failed to update.", e.Message);
+                    ShowToast("Failed to check for updates.", e.Message);
                 Debug.WriteLine($"Update error: {e.Message}");
             }
         }
 
-        // Is the released tag newer than what's running? The GitHub tag is like "v1.1.4" while
-        // FileVersion is a 4-part "1.1.4.0" - a plain string Contains() compare misfires (it
-        // reported an update even when identical). Normalize both to major.minor.build and
-        // compare numerically so "up to date" is actually detected.
-        internal static bool IsNewer(string latestTag, string currentRaw)
+        // From a /releases page: the releases newer than currentVersion that carry the three signed
+        // assets, newest version first. newestVersion is the highest newer version seen at all
+        // (signed or not), for the "can't be verified" message; null when nothing is newer.
+        // Drafts, prereleases and tags that are not exactly v<major>.<minor>.<patch> are ignored.
+        internal static List<ReleaseAssets> SelectCandidates(JsonElement releases, string currentVersion, out string? newestVersion)
         {
-            return Version.TryParse(Norm3(latestTag), out var latest)
-                && Version.TryParse(Norm3(currentRaw), out var current)
-                && latest > current;
+            newestVersion = null;
+            var found = new List<ReleaseAssets>();
+            if (releases.ValueKind != JsonValueKind.Array) return found;
+            Version? newest = null;
+            int seen = 0;
+            foreach (var release in releases.EnumerateArray())
+            {
+                if (++seen > MaxReleasesScanned) break;
+                if (release.ValueKind != JsonValueKind.Object) continue;
+                if (IsTrue(release, "draft") || IsTrue(release, "prerelease")) continue;
+                if (!TryGetTagVersion(release, out string tag, out string version)) continue;
+                if (!UpdateVerifier.IsNewer(version, currentVersion)) continue;
+
+                var v = Version.Parse(version);
+                if (newest == null || v > newest) { newest = v; newestVersion = version; }
+                if (TrySelectSignedRelease(release, tag, out var assets)) found.Add(assets);
+            }
+            found.Sort((a, b) => Version.Parse(b.Version).CompareTo(Version.Parse(a.Version)));
+            return found;
         }
 
-        internal static string Norm3(string s)
+        internal const int MaxReleasesScanned = 30;
+
+        // tag_name must be "v<version>" (or the bare version) with a strictly valid version.
+        internal static bool TryGetTagVersion(JsonElement release, out string tag, out string version)
         {
-            s = (s ?? "").Trim();
-            if (s.StartsWith("v", StringComparison.OrdinalIgnoreCase)) s = s.Substring(1);
-            int i = 0;
-            while (i < s.Length && (char.IsDigit(s[i]) || s[i] == '.')) i++;
-            s = s.Substring(0, i);
-            var parts = s.Split('.');
-            int Get(int idx) => parts.Length > idx && int.TryParse(parts[idx], out var v) ? v : 0;
-            return $"{Get(0)}.{Get(1)}.{Get(2)}";
+            tag = version = "";
+            if (!release.TryGetProperty("tag_name", out var t) || t.ValueKind != JsonValueKind.String) return false;
+            string raw = t.GetString() ?? "";
+            string v = raw.StartsWith('v') ? raw.Substring(1) : raw;
+            if (!UpdateManifest.IsValidVersion(v) || !UpdateVerifier.TagMatches(raw, v)) return false;
+            tag = raw;
+            version = v;
+            return true;
         }
+
+        private static bool IsTrue(JsonElement o, string name)
+            => o.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.True;
+
+        // Verify candidates newest first; the first that verifies is offered. Otherwise the reason
+        // the newest one failed (for the message).
+        internal static async Task<(PendingUpdate? Offer, UpdateCheck Failure)> ChooseVerifiedAsync(
+            IReadOnlyList<ReleaseAssets> candidates, Func<ReleaseAssets, Task<(UpdateCheck, UpdateManifest?)>> verify)
+        {
+            UpdateCheck? firstFailure = null;
+            foreach (var assets in candidates)
+            {
+                var (check, manifest) = await verify(assets);
+                if (check == UpdateCheck.Ok && manifest != null && manifest.Version == assets.Version)
+                    return (new PendingUpdate("v" + assets.Version, assets, manifest), UpdateCheck.Ok);
+                firstFailure ??= check == UpdateCheck.Ok ? UpdateCheck.WrongRelease : check;
+            }
+            return (null, firstFailure ?? UpdateCheck.MissingManifest);
+        }
+
 
         // Pick the release's three assets BY EXACT NAME for the tag's version (never assets[0],
         // which an extra asset uploaded first could hijack) and only on our GitHub release path
@@ -190,10 +223,9 @@ namespace Racks
                                              releaseTag, currentVersion, out manifest);
 
         private static async Task<(UpdateCheck, UpdateManifest?)> FetchAndVerifyManifestAsync(
-            HttpClient http, ReleaseAssets assets, string releaseTag, string currentVersion)
+            HttpClient http, ReleaseAssets assets, string currentVersion)
         {
-            // No key, nothing to verify against: don't even download.
-            if (!UpdateTrust.IsConfigured(UpdateTrust.PublicKeySpkiBase64)) return (UpdateCheck.NoTrustedKey, null);
+            string releaseTag = "v" + assets.Version;
             byte[]? manifestBytes = await GetSmallAssetAsync(http, assets.ManifestUrl, UpdateManifest.MaxManifestBytes);
             if (manifestBytes == null) return (UpdateCheck.MissingManifest, null);
             byte[]? sigBytes = await GetSmallAssetAsync(http, assets.SignatureUrl, UpdateManifest.MaxSignatureBytes);
@@ -237,7 +269,7 @@ namespace Racks
             var pending = _pending;
             if (pending == null || !IsTrustedDownloadUrl(pending.Assets.InstallerUrl))
             {
-                ShowToast("Update blocked", "The update could not be verified as an official Racks release. Check for updates again.");
+                ShowToast("Update blocked", $"{CantVerify} Check for updates again.");
                 return;
             }
             var manifest = pending.Manifest;
@@ -356,7 +388,7 @@ namespace Racks
                 locked?.Dispose();
                 locked = null;
                 TryDeleteDir(dir);
-                ShowToast("Update blocked", UpdateVerifier.Describe(why));
+                ShowToast("Update blocked", $"{CantVerify} {UpdateVerifier.Describe(why)}");
             }
         }
 
@@ -420,6 +452,36 @@ namespace Racks
             new DirectoryInfo(dir).Create(security);
             return dir;
         }
+
+        // The installer runs from its download folder, so that folder cannot be deleted while it
+        // runs. Folders from earlier updates are removed later instead: only our own
+        // "Racks-update-<32 hex>" folders directly in %TEMP%, never a reparse point, and only when
+        // they hold plain files. A folder still in use stays for the next time.
+        internal static int CleanupOldUpdateDirs(string? tempRoot = null)
+        {
+            int removed = 0;
+            try
+            {
+                var root = new DirectoryInfo(tempRoot ?? Path.GetTempPath());
+                foreach (var d in root.EnumerateDirectories("Racks-update-*"))
+                {
+                    if (!UpdateDirName.IsMatch(d.Name)) continue;
+                    if ((d.Attributes & FileAttributes.ReparsePoint) != 0) continue;
+                    if (d.EnumerateDirectories().Any()) continue;
+                    if (d.EnumerateFiles().Any(f => (f.Attributes & FileAttributes.ReparsePoint) != 0)) continue;
+                    TryDeleteDir(d.FullName);
+                    if (!Directory.Exists(d.FullName)) removed++;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+            {
+                Debug.WriteLine($"Update folder cleanup: {ex.Message}");
+            }
+            return removed;
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex UpdateDirName = new(
+            @"\ARacks-update-[0-9a-f]{32}\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
 
         // Our own download folder holds one file and no subfolders: delete that, then the empty folder.
         internal static void TryDeleteDir(string dir)

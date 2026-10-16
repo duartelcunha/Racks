@@ -149,6 +149,13 @@ namespace Racks
             {
                 _ = CheckForUpdatesInBackgroundAsync();
             }
+            // Download folders of earlier updates (the installer ran from there, so they could not
+            // be deleted at the time). A minute in, so a just-finished installer has exited.
+            _ = System.Threading.Tasks.Task.Run(async () =>
+            {
+                await System.Threading.Tasks.Task.Delay(TimeSpan.FromMinutes(1));
+                Updater.CleanupOldUpdateDirs();
+            });
         }
         private void HandleGlobalDoubleClick(object? sender, MouseEventArgs e)
         {
@@ -561,14 +568,14 @@ namespace Racks
             try
             {
                 await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(20));
-                await Updater.CheckUpdateAsync(Updater.LatestReleaseApi, showToastIfNoUpdate: false);
+                await Updater.CheckUpdateAsync(Updater.ReleasesApi, showToastIfNoUpdate: false);
             }
             catch (Exception ex) { Debug.WriteLine($"Background update check failed: {ex.Message}"); }
         }
 
         private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
         {
-            try { await Updater.CheckUpdateAsync(Updater.LatestReleaseApi, showToastIfNoUpdate: true); }
+            try { await Updater.CheckUpdateAsync(Updater.ReleasesApi, showToastIfNoUpdate: true); }
             catch (Exception ex) { Debug.WriteLine($"Manual update check failed: {ex.Message}"); }
         }
 

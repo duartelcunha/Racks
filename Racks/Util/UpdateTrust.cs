@@ -15,10 +15,9 @@ public static class UpdateTrust
     // >>> OWNER: replace the value below with the base64 SPKI printed by `RacksSigner keygen`. <<<
     public const string PublicKeySpkiBase64 = Placeholder;
 
-    // True only for a real P-256 public key (never for the placeholder or anything malformed).
+    // True only for a real P-256 public key. The placeholder is not base64, so it never imports.
     public static bool IsConfigured(string? spkiBase64)
     {
-        if (spkiBase64 == null || spkiBase64 == Placeholder) return false;
         using var key = UpdateSignature.TryImportPublicKey(spkiBase64);
         return key != null;
     }
