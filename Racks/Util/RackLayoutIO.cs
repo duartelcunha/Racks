@@ -144,15 +144,23 @@ namespace Racks.Util
                     if (kv.Value is not JsonElement e)
                         throw new InvalidDataException($"Layout rack '{rack.Name}' has an invalid {spec.Name}.");
                     if (e.ValueKind == JsonValueKind.Null) continue;
+                    // An empty font or color is what a cleared settings box exports: the rack
+                    // keeps its default, as it would on load.
+                    if (spec.Kind is ValueKind.FontFamily or ValueKind.Color
+                        && e.ValueKind == JsonValueKind.String && string.IsNullOrEmpty(e.GetString())) continue;
                     bool ok = spec.Kind == ValueKind.Scalar
                         ? e.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False
                         : e.ValueKind == JsonValueKind.String;
                     if (!ok)
                         throw new InvalidDataException($"Layout rack '{rack.Name}' has an invalid {spec.Name}.");
                     string? s = e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+                    if (spec.Kind == ValueKind.Path && IsNetworkOrDevicePath(s))
+                        throw new InvalidDataException(NetworkPathMessage(rack.Name, spec.Name, s!));
                     if ((spec.Kind == ValueKind.Path && !IsSafeImportedPath(s))
-                        || (spec.Kind == ValueKind.RackName && !IsValidRackName(s)))
-                        throw new InvalidDataException($"Layout rack '{rack.Name}' has an unsafe {spec.Name}: '{s}'.");
+                        || (spec.Kind == ValueKind.RackName && !IsValidRackName(s))
+                        || (spec.Kind == ValueKind.FontFamily && !SafeWpfValues.IsSafeFontFamily(s))
+                        || (spec.Kind == ValueKind.Color && !SafeWpfValues.IsSafeColor(s)))
+                        throw new InvalidDataException($"Layout rack '{rack.Name}' has an unsafe {spec.Name}: '{Shorten(s)}'.");
 
                     clean.Values[spec.Name] = e;
                 }
@@ -182,13 +190,16 @@ namespace Racks.Util
                && name != "." && name != ".."
                && name.Length <= 255;
 
-        private enum ValueKind { Scalar, Path, RackName, MultiString }
+        private enum ValueKind { Scalar, Path, RackName, FontFamily, Color, MultiString }
 
         private readonly record struct ValueSpec(string Name, ValueKind Kind);
 
         // Every per-rack value the app reads back (InstanceController.InitInstances) and nothing
         // else. Keys are case-insensitive; ValueSpec.Name is the canonical spelling written.
         private static readonly Dictionary<string, ValueSpec> _allowedValues = BuildAllowList();
+
+        // For the guard test that keeps this list equal to what InitInstances reads.
+        internal static IEnumerable<string> AllowedValueNames => _allowedValues.Values.Select(v => v.Name);
 
         private static Dictionary<string, ValueSpec> BuildAllowList()
         {
@@ -200,10 +211,16 @@ namespace Racks.Util
             Add(ValueKind.Path, "Folder", "BackgroundImagePath");
             Add(ValueKind.RackName, "Name");
             Add(ValueKind.MultiString, "LastAccessedFiles", "CustomOrderFiles");
+            // WPF resolves these through parsers that can open a URI (INV-IMPORT-3).
+            Add(ValueKind.FontFamily, "TitleFontFamily", "ItemFontFamily");
+            Add(ValueKind.Color,
+                "TitleBarColor", "TitleTextColor", "BorderColor", "ListViewBackgroundColor",
+                "ActiveBackgroundColor", "ActiveBorderColor", "ActiveTitleTextColor",
+                "ListViewFontColor", "ListViewFontShadowColor");
             Add(ValueKind.Scalar,
                 "PosX", "PosY", "Width", "Height", "IconSize", "IdleOpacity", "AnimationSpeed",
                 "MaxGrayScaleStrength", "GrayScaleEnabled", "GrayScaleEnabled_InactiveOnly",
-                "TitleFontFamily", "ItemFontFamily", "Minimized", "ShowHiddenFiles",
+                "Minimized", "ShowHiddenFiles",
                 "LastAccesedToFirstRow", "EnableCustomItemsOrder", "ShowFileExtension",
                 "ShowFileExtensionIcon", "ShowHiddenFilesIcon", "ShowDisplayName", "IsLocked",
                 "ShowInGrid", "AutoExpandonCursor", "ShowShortcutArrow", "FolderOpenInsideFrame",
@@ -211,12 +228,10 @@ namespace Racks.Util
                 "SnapWidthToIconWidth_PlusScrollbarWidth", "CheckFolderSize", "LinkOnDrop",
                 "MoveFilesOnDrop", "SnapToGrid", "GridSize", "AutoRouteRegex", "PinToTop",
                 "IsTransparent", "DropShadowEnabled", "GradientBackgroundEnabled", "DisableAnimations",
-                "IsDesktopFilterRack", "AssignedFiles", "TitleBarColor", "TitleTextColor", "TitleText",
-                "TitleTextAlignment", "BorderColor", "BorderEnabled", "ActiveBorderEnabled",
+                "IsDesktopFilterRack", "AssignedFiles", "TitleText",
+                "TitleTextAlignment", "BorderEnabled", "ActiveBorderEnabled",
                 "ActiveBackgroundEnabled", "ActiveTitleTextEnabled", "FileFilterRegex",
-                "FileFilterHideRegex", "ListViewBackgroundColor", "ActiveBackgroundColor",
-                "ActiveBorderColor", "ActiveTitleTextColor", "ListViewFontColor",
-                "ListViewFontShadowColor", "Opacity", "SortBy", "FolderOrder", "ShowOnVirtualDesktops",
+                "FileFilterHideRegex", "Opacity", "SortBy", "FolderOrder", "ShowOnVirtualDesktops",
                 "TitleFontSize");
             return map;
         }
@@ -232,18 +247,20 @@ namespace Racks.Util
         {
             if (string.IsNullOrEmpty(value)) return true;
             if (value == "empty" || value == "Default Style") return true; // rack sentinels
-            if (value.Length < 3) return false;
-            if (IsSeparator(value[0])) return false;                  // UNC, device paths, "\rooted"
-            if (!char.IsAsciiLetter(value[0]) || value[1] != ':' || !IsSeparator(value[2]))
-                return false;                                         // "C:x" (drive-relative), "relative"
-            if (value.IndexOf(':', 2) >= 0) return false;             // alternate data streams
-            foreach (char ch in value)
-                if (ch < 0x20 || ch is '"' or '<' or '>' or '|' or '*' or '?') return false;
-            foreach (var seg in value.Split('\\', '/'))
-                if (seg == "..") return false;
-            try { return Path.IsPathFullyQualified(value); }
-            catch { return false; }
+            return SafeWpfValues.IsLocalDrivePath(value);
         }
+
+        // Two leading separators: UNC ("\\host\share", "//host/share", "\\host@SSL\...") or a DOS
+        // device path ("\\?\", "\\.\"). Reported with its own message so the user knows what to fix.
+        private static bool IsNetworkOrDevicePath(string? value)
+            => value != null && value.Length >= 2 && IsSeparator(value[0]) && IsSeparator(value[1]);
+
+        private static string NetworkPathMessage(string rack, string valueName, string path)
+            => valueName == "Folder"
+                ? $"Layout rack '{rack}' has a network folder ('{Shorten(path)}'). Imported layouts can only use local folders. Remove that rack from the file or pick the folder again after importing."
+                : $"Layout rack '{rack}' has a {valueName} on a network folder ('{Shorten(path)}'). Imported layouts can only use local files. Remove that value from the file or pick the file again after importing.";
+
+        private static string? Shorten(string? s) => s != null && s.Length > 120 ? s.Substring(0, 120) + "..." : s;
 
         private static bool IsSeparator(char c) => c == '\\' || c == '/';
 

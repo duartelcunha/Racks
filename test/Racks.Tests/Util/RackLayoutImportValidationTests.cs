@@ -183,6 +183,78 @@ public class RackLayoutImportValidationTests
         Assert.Equal(2, rack.MultiStringValues.Count);
     }
 
+    [Theory]
+    [InlineData("TitleFontFamily", @"\\attacker.example\share\#Evil")]
+    [InlineData("itemfontfamily", @"\\attacker.example\share\#Evil")]
+    [InlineData("TitleFontFamily", "file://attacker.example/share/#Evil")]
+    [InlineData("ItemFontFamily", @"C:\Fonts\#Evil")]
+    [InlineData("TitleBarColor", "ContextColor file://attacker.example/share/p.icc 1.0,0.5,0.5,0.5")]
+    [InlineData("listviewfontcolor", @"ContextColor \\attacker.example\share\p.icc 1.0,0.5,0.5,0.5")]
+    [InlineData("BorderColor", "#GGG")]
+    public void Font_and_color_values_that_can_name_a_location_are_rejected(string key, string value)
+    {
+        var values = new Dictionary<string, string> { [key] = value };
+        var ex = Assert.Throws<InvalidDataException>(() => RackLayoutIO.ParseAndValidate(Layout(values)));
+        Assert.Contains("unsafe", ex.Message);
+    }
+
+    [Fact]
+    public void Plain_fonts_and_colors_are_kept_and_empty_ones_are_skipped()
+    {
+        var values = new Dictionary<string, object>
+        {
+            ["TitleFontFamily"] = "Segoe UI Variable Display, Segoe UI",
+            ["ItemFontFamily"] = "",
+            ["TitleBarColor"] = "#0C000000",
+            ["BorderColor"] = "",
+            ["ListViewFontColor"] = "White",
+        };
+        var rack = Assert.Single(RackLayoutIO.ParseAndValidate(Layout(values)));
+        Assert.Equal(new[] { "ListViewFontColor", "TitleBarColor", "TitleFontFamily" }, rack.Values.Keys.OrderBy(k => k, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_font_or_color_must_be_a_string()
+    {
+        Assert.Throws<InvalidDataException>(() => RackLayoutIO.ParseAndValidate(Layout(new { TitleFontFamily = 5 })));
+        Assert.Throws<InvalidDataException>(() => RackLayoutIO.ParseAndValidate(Layout(new { TitleBarColor = true })));
+    }
+
+    [Fact]
+    public void A_network_folder_is_explained_in_the_message()
+    {
+        var ex = Assert.Throws<InvalidDataException>(() => RackLayoutIO.ParseAndValidate(Layout(new { Folder = @"\\nas\share\inbox" })));
+        Assert.Equal(@"Layout rack 'Work' has a network folder ('\\nas\share\inbox'). Imported layouts can only use local folders. " +
+                     "Remove that rack from the file or pick the folder again after importing.", ex.Message);
+
+        ex = Assert.Throws<InvalidDataException>(() => RackLayoutIO.ParseAndValidate(Layout(new { BackgroundImagePath = "//nas/share/bg.png" })));
+        Assert.Contains("network folder", ex.Message);
+        Assert.Contains("BackgroundImagePath", ex.Message);
+    }
+
+    [Fact]
+    public void The_allow_list_is_exactly_what_the_app_reads_back()
+    {
+        // Every value InstanceController.InitInstances reads must be importable, and nothing else:
+        // a new setting has to be added (with its type) to RackLayoutIO's allow-list on purpose.
+        string src = File.ReadAllText(Racks.Tests.Guards.RepoPaths.App("Core", "InstanceController.cs"));
+        int sw = src.IndexOf("switch (valueName)", StringComparison.Ordinal);
+        Assert.True(sw >= 0, "InitInstances no longer has 'switch (valueName)'");
+        int open = src.IndexOf('{', sw), depth = 0, end = open;
+        for (; end < src.Length; end++)
+        {
+            if (src[end] == '{') depth++;
+            else if (src[end] == '}' && --depth == 0) break;
+        }
+        var read = System.Text.RegularExpressions.Regex.Matches(src.Substring(open, end - open), "case \"([A-Za-z_]+)\":")
+            .Select(m => m.Groups[1].Value)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.NotEmpty(read);
+        Assert.Equal(read, RackLayoutIO.AllowedValueNames.Order(StringComparer.Ordinal).ToArray());
+    }
+
     [Fact]
     public void Invalid_json_is_reported_as_invalid_data()
         => Assert.Throws<InvalidDataException>(() => RackLayoutIO.ParseAndValidate("{ not json"));

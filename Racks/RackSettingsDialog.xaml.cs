@@ -194,7 +194,7 @@ namespace Racks
                     if (!_initDone) return;
                     var val = TitleTextAutoSuggestionBox.Text;
                     if (string.IsNullOrWhiteSpace(val) || !fontIndex.Contains(val)) return;
-                    _frame.title.FontFamily = new System.Windows.Media.FontFamily(val);
+                    _frame.title.FontFamily = Racks.Util.SafeWpfValues.CreateFontFamily(val);
                     _instance.TitleFontFamily = val;
                 }));
 
@@ -206,7 +206,7 @@ namespace Racks
                     if (!_initDone) return;
                     var val = ItemTextAutoSuggestionBox.Text;
                     if (string.IsNullOrWhiteSpace(val) || !fontIndex.Contains(val)) return;
-                    _frame.Resources["ItemFont"] = new System.Windows.Media.FontFamily(val);
+                    _frame.Resources["ItemFont"] = Racks.Util.SafeWpfValues.CreateFontFamily(val);
                     _instance.ItemFontFamily = val;
                 }));
 
@@ -490,6 +490,8 @@ namespace Racks
         {
             try
             {
+                // "ContextColor <uri>" would make WPF open that URI: only plain colors are parsed.
+                if (!Racks.Util.SafeWpfValues.IsSafeColor(colorText)) throw new FormatException();
                 new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(colorText));
                 tb.BorderBrush = _borderBrush;
                 tb.Background = _backgroundBrush;

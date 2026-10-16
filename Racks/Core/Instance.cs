@@ -1,5 +1,6 @@
 #pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604, CS8618, CS8625
 using Racks;
+using Racks.Util;
 using System.ComponentModel;
 using System.Diagnostics;
 using static Racks.RackWindow;
@@ -408,12 +409,14 @@ public class Instance : INotifyPropertyChanged
             }
         }
     }
+    // Fonts and colors reach WPF parsers that can open a URI (INV-IMPORT-3): a value that is not
+    // a plain font name / color is ignored and the previous one stays.
     public string TitleFontFamily
     {
         get => _titleFontFamily;
         set
         {
-            if (_titleFontFamily != value)
+            if (_titleFontFamily != value && SafeWpfValues.IsSafeFontFamily(value))
             {
                 _titleFontFamily = value;
                 OnPropertyChanged(nameof(TitleFontFamily), value);
@@ -425,7 +428,7 @@ public class Instance : INotifyPropertyChanged
         get => _itemFontFamily;
         set
         {
-            if (_itemFontFamily != value)
+            if (_itemFontFamily != value && SafeWpfValues.IsSafeFontFamily(value))
             {
                 _itemFontFamily = value;
                 OnPropertyChanged(nameof(ItemFontFamily), value);
@@ -622,7 +625,7 @@ public class Instance : INotifyPropertyChanged
         get => _titleBarColor;
         set
         {
-            if (_titleBarColor != value)
+            if (_titleBarColor != value && SafeWpfValues.IsSafeColor(value))
             {
                 _titleBarColor = value;
                 OnPropertyChanged(nameof(TitleBarColor), value);
@@ -635,7 +638,7 @@ public class Instance : INotifyPropertyChanged
         get => _titleTextColor;
         set
         {
-            if (_titleTextColor != value)
+            if (_titleTextColor != value && SafeWpfValues.IsSafeColor(value))
             {
                 _titleTextColor = value;
                 OnPropertyChanged(nameof(TitleTextColor), value);
@@ -648,7 +651,7 @@ public class Instance : INotifyPropertyChanged
         get => _borderColor;
         set
         {
-            if (_borderColor != value)
+            if (_borderColor != value && SafeWpfValues.IsSafeColor(value))
             {
                 _borderColor = value;
                 OnPropertyChanged(nameof(BorderColor), value);
@@ -661,7 +664,7 @@ public class Instance : INotifyPropertyChanged
         get => _activeBackgroundColor;
         set
         {
-            if (_activeBackgroundColor != value)
+            if (_activeBackgroundColor != value && SafeWpfValues.IsSafeColor(value))
             {
                 _activeBackgroundColor = value;
                 OnPropertyChanged(nameof(ActiveBackgroundColor), value);
@@ -673,7 +676,7 @@ public class Instance : INotifyPropertyChanged
         get => _activeBorderColor;
         set
         {
-            if (_activeBorderColor != value)
+            if (_activeBorderColor != value && SafeWpfValues.IsSafeColor(value))
             {
                 _activeBorderColor = value;
                 OnPropertyChanged(nameof(ActiveBorderColor), value);
@@ -753,7 +756,7 @@ public class Instance : INotifyPropertyChanged
         get => _activeTitleTextColor;
         set
         {
-            if (_activeTitleTextColor != value)
+            if (_activeTitleTextColor != value && SafeWpfValues.IsSafeColor(value))
             {
                 _activeTitleTextColor = value;
                 OnPropertyChanged(nameof(ActiveTitleTextColor), value);
@@ -820,7 +823,7 @@ public class Instance : INotifyPropertyChanged
         get => _listViewBackgroundColor;
         set
         {
-            if (_listViewBackgroundColor != value)
+            if (_listViewBackgroundColor != value && SafeWpfValues.IsSafeColor(value))
             {
                 _listViewBackgroundColor = value;
                 OnPropertyChanged(nameof(ListViewBackgroundColor), value);
@@ -832,7 +835,7 @@ public class Instance : INotifyPropertyChanged
         get => _listViewFontColor;
         set
         {
-            if (_listViewFontColor != value)
+            if (_listViewFontColor != value && SafeWpfValues.IsSafeColor(value))
             {
                 _listViewFontColor = value;
                 OnPropertyChanged(nameof(ListViewFontColor), value);
@@ -844,7 +847,7 @@ public class Instance : INotifyPropertyChanged
         get => _listViewFontShadowColor;
         set
         {
-            if (_listViewFontShadowColor != value)
+            if (_listViewFontShadowColor != value && SafeWpfValues.IsSafeColor(value))
             {
                 _listViewFontShadowColor = value;
                 OnPropertyChanged(nameof(ListViewFontShadowColor), value);
