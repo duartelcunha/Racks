@@ -62,20 +62,27 @@ jobs:
           if ($tag -cne $version) { throw "Tag v$tag does not match <Version> $version in Racks.csproj" }
           "version=$version" >> $env:GITHUB_OUTPUT
 
-      - name: Check the update signing key is set
-        shell: pwsh
-        run: |
-          # A release built with the placeholder key could never verify (and so never install) a
-          # later update. Set it once with RacksSigner keygen (docs/RELEASING.md).
-          if (Select-String -Path Racks/Util/UpdateTrust.cs -SimpleMatch 'PublicKeySpkiBase64 = Placeholder;') {
-            throw "Racks/Util/UpdateTrust.cs still has the placeholder update signing key."
-          }
-
       - name: Build and test
         run: |
           dotnet restore Racks.sln
           dotnet build Racks.sln -c Release --no-restore
           dotnet test Racks.sln -c Release --no-build
+
+      - name: Check the update signing key is set (release gate test)
+        shell: pwsh
+        env:
+          RACKS_RELEASE_GATE: '1'
+        run: |
+          # A release built without a real update key could never verify (and so never install) a
+          # later update. The test parses the key the build compiled in, so any placeholder or
+          # malformed value fails, not just one spelling. Set it once with RacksSigner keygen
+          # (docs/RELEASING.md).
+          $out = dotnet test Racks.sln -c Release --no-build --filter "Category=ReleaseGate" 2>&1
+          $out | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw "The release gate test failed: Racks/Util/UpdateTrust.cs has no real update signing key." }
+          if (-not ($out -match 'Passed:\s+1,') -or -not ($out -match 'Skipped:\s+0,')) {
+            throw "The release gate test did not run."
+          }
 
       - name: Install pinned Inno Setup
         id: inno
