@@ -32,17 +32,37 @@ namespace Racks
         private const string TrustedAssetPathPrefix = "/duartelcunha/Racks/releases/download/";
         // Releases are read from this repository only: the first page (newest first, up to 30).
         public const string ReleasesApi = "https://api.github.com/repos/duartelcunha/Racks/releases?per_page=30";
-        public const string ReleasesPage = "https://github.com/duartelcunha/Racks/releases";
 
         private const string CantVerify = "This update can't be verified, so Racks won't install it.";
+
+        // What the user sees when nothing verified. Never a version number or a link: a release
+        // that does not verify may be an attacker's, and naming it or pointing at the releases
+        // page would steer the user to install it by hand.
+        internal const string NotVerifiedHeader = "Update not verified";
+        internal const string NotVerifiedBody = "A newer release exists but Racks can't verify it. Only install updates that Racks verifies.";
+        // A build without the update key (local and development builds) checks nothing and
+        // contacts nobody. Only a check the user asked for says so.
+        internal const string NoKeyHeader = "Updates are off in this build";
+        internal const string NoKeyBody = "This build of Racks can't verify updates, so it doesn't look for any.";
 
         // Reads the first page of releases (up to 30, newest first as GitHub lists them) and offers
         // the NEWEST release that is correctly signed and newer than this build. Looking past
         // /releases/latest means one broken or tampered release (a missing .sig, a swapped
-        // installer) cannot hide an older good update. Toasts only ever show a version that passed
-        // UpdateManifest.IsValidVersion, never raw text from the API (tag, name or body).
+        // installer) cannot hide an older good update. Only a release whose signed manifest verified
+        // is ever named (its signed version); nothing else from the API (tag, name, body) is shown,
+        // and a release that does not verify is never named or linked.
         public static async Task CheckUpdateAsync(string url, bool showToastIfNoUpdate)
         {
+            // No key compiled in: nothing can be verified, so nothing is fetched or named. Only a
+            // check the user asked for says so (not every startup).
+            if (!UpdateTrust.IsConfigured(UpdateTrust.PublicKeySpkiBase64))
+            {
+                _pending = null;
+                if (showToastIfNoUpdate)
+                    ShowToast(NoKeyHeader, NoKeyBody);
+                return;
+            }
+
             string currentVersion = Process.GetCurrentProcess().MainModule!.FileVersionInfo.FileVersion!.ToString();
             try
             {
@@ -55,16 +75,6 @@ namespace Racks
                 {
                     if (showToastIfNoUpdate)
                         ShowToast("You are up to date!", "There is no available update.");
-                    return;
-                }
-
-                // No key compiled in: nothing can be verified, so don't download anything. Only a
-                // check the user asked for says so (not every startup).
-                if (!UpdateTrust.IsConfigured(UpdateTrust.PublicKeySpkiBase64))
-                {
-                    _pending = null;
-                    if (showToastIfNoUpdate)
-                        ShowToast($"Racks {newestVersion} is available", $"{UpdateVerifier.Describe(UpdateCheck.NoTrustedKey)} {ReleasesPage}");
                     return;
                 }
 
@@ -90,9 +100,9 @@ namespace Racks
                 }
 
                 _pending = null;
-                Debug.WriteLine($"Update {newestVersion} not offered: {failure}");
+                Debug.WriteLine($"Newest release not offered: {failure}");
                 if (showToastIfNoUpdate)
-                    ShowToast($"Racks {newestVersion} is available", $"{CantVerify} {UpdateVerifier.Describe(failure)} {ReleasesPage}");
+                    ShowToast(NotVerifiedHeader, NotVerifiedBody);
             }
             catch (Exception e)
             {

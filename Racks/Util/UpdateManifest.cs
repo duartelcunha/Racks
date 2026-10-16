@@ -233,7 +233,7 @@ public static class UpdateVerifier
     public static string Describe(UpdateCheck result) => result switch
     {
         UpdateCheck.Ok => "The update was verified.",
-        UpdateCheck.NoTrustedKey => "This build of Racks can't check update signatures. Download new versions from the releases page:",
+        UpdateCheck.NoTrustedKey => "This build of Racks can't check update signatures.",
         UpdateCheck.MissingManifest => "The release has no signed update manifest.",
         UpdateCheck.MissingSignature => "The release has no update signature.",
         UpdateCheck.BadSignature => "The update signature is not valid.",

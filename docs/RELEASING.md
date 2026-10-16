@@ -19,6 +19,9 @@ newer than what runs and whose signature checks out against the public key compi
 (`Racks/Util/UpdateTrust.cs`): the signed version must be exactly the release tag, and the
 downloaded installer must have the signed size and SHA-256. Any mismatch or missing file: nothing
 is launched. Toasts show only the validated version number, never text from the release page.
+A release that does not verify is never named or linked: the user sees only that a newer release
+exists that Racks can't verify, and to install only updates Racks verifies. A build without the
+key (the placeholder) does not contact GitHub at all.
 
 The private key exists only in the owner's **Windows Credential Manager** (target
 `Racks/update-signing`) plus an optional passphrase-encrypted offline backup. It is never on

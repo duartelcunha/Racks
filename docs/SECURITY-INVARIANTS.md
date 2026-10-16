@@ -27,8 +27,12 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   dos bytes descarregados, verificados por um handle que nega escrita/apagamento e fica aberto até
   o instalador arrancar. Placeholder da chave ⇒ nenhum update. O updater lê a primeira página de
   `/releases` (até 30) e oferece o release assinado mais recente que verifica, para um release
-  partido não esconder um bom; os toasts só mostram a versão validada, nunca texto da API.
-  *(teste: `UpdateSignatureTests`, `UpdaterAssetTests`, `UpdaterReleaseScanTests`; código
+  partido não esconder um bom; os toasts só mostram a versão validada, nunca texto da API, e um
+  release que não verifica nunca é nomeado nem ligado (sem versão, sem link para a página de
+  releases: só "instale apenas updates que o Racks verifica"). Uma build sem a chave não contacta o
+  GitHub e só responde a uma verificação pedida pelo utilizador, com texto neutro.
+  *(teste: `UpdateSignatureTests`, `UpdaterAssetTests`, `UpdaterReleaseScanTests`,
+  `UpdaterMessageTests`; código
   partilhado com `tools/RacksSigner`)*
 - **INV-IMPORT-1** Input importado é validado antes de virar estado persistido: allowlist de nomes
   de valor, tipos/ranges validados, `Folder`/`BackgroundImagePath` canonicalizados e a rejeitar
