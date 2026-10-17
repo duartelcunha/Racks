@@ -26,7 +26,7 @@
 
 <img src="docs/screenshots/hero.gif" alt="Files dragged from a folder into two racks, leaving a clean desktop" width="100%" />
 
-<sub>Two drags and the clutter is gone. <a href="docs/screenshots/hero.mp4">Watch it as an MP4</a>.</sub>
+<sub>Two drags and the clutter is gone. 
 
 <br />
 <br />
