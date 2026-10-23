@@ -625,6 +625,10 @@ namespace Racks
 
                 if (confirmed)
                 {
+                    Instance.isWindowClosing = true;
+                    try { _fileWatcherService.Dispose(); } catch { }
+                    try { _watcherDebounce?.Stop(); } catch { }
+
                     // Collect everything that lands back on the desktop so we can arrange it
                     // into a clean grid afterwards (files just moved back land wherever
                     // Explorer decides, which looks messy).
@@ -675,10 +679,17 @@ namespace Racks
                     if (returnedToDesktop.Count > 0)
                         Util.DesktopIconPositioner.ArrangeInGrid(returnedToDesktop);
 
-                    RegistryKey key = Registry.CurrentUser.OpenSubKey(Instance.GetKeyLocation(), true)!;
-                    if (key != null)
+                    try
                     {
-                        Registry.CurrentUser.DeleteSubKeyTree(Instance.GetKeyLocation());
+                        string keyLocation = Instance.GetKeyLocation();
+                        if (!string.IsNullOrEmpty(keyLocation))
+                        {
+                            Registry.CurrentUser.DeleteSubKeyTree(keyLocation, throwOnMissingSubKey: false);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Failed to delete rack registry key: {ex.Message}");
                     }
                     MainWindow._controller.RemoveInstance(Instance, this);
                     // The sandbox folder was emptied and removed above (ReturnFolderToDesktop). Nothing

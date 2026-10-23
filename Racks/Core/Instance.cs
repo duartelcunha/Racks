@@ -1169,7 +1169,7 @@ public class Instance : INotifyPropertyChanged
 
     public string GetKeyLocation()
     {
-        if (_name != null && Name != null)
+        if (!string.IsNullOrEmpty(_name) && !string.IsNullOrEmpty(Name))
         {
             // MUST follow the rebranded root (InstanceController.appName) or per-instance
             // writes go to the legacy HKCU\SOFTWARE\DeskFrame tree while InitInstances
