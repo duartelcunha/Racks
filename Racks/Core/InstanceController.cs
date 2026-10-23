@@ -398,6 +398,12 @@ public class InstanceController
     {
         Instances.Remove(instance);
         _subWindows.Remove(window);
+        try
+        {
+            var handle = new WindowInteropHelper(window).Handle;
+            _subWindowsPtr.Remove(handle);
+        }
+        catch { }
         RefreshMirror();
     }
     public void ChangeBlur(bool toBlur)
@@ -945,8 +951,8 @@ public class InstanceController
                 subWindow.ChangeBackgroundOpacity(Instance.Opacity);
                 subWindow.Show();
                 _subWindowsPtr.Add(new WindowInteropHelper(subWindow).Handle);
-                InitDetails();
             }
+            InitDetails();
             foreach (var window in _subWindows)
             {
                 // Position each rack against the screen edge on startup. Neighbor docking

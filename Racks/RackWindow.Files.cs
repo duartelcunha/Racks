@@ -120,10 +120,15 @@ namespace Racks
 
         private void OnParentRenamed(object sender, RenamedEventArgs e)
         {
-            if (e.Name!.Equals(Path.GetFileName(Instance.Folder), StringComparison.OrdinalIgnoreCase))
+            if (Instance.isWindowClosing || string.IsNullOrEmpty(Instance.Folder)) return;
+            string? folderName = Path.GetFileName(Instance.Folder);
+            if (string.IsNullOrEmpty(folderName)) return;
+
+            if (!string.IsNullOrEmpty(e.Name) && string.Equals(e.Name, folderName, StringComparison.OrdinalIgnoreCase))
             {
-                Dispatcher.Invoke(() =>
+                Dispatcher.InvokeAsync(() =>
                 {
+                    if (Instance.isWindowClosing) return;
                     if (!Path.Exists(Instance.Folder) && Instance.Folder != "empty")
                     {
                         PathToBackButton.Visibility = Visibility.Collapsed;
@@ -138,57 +143,60 @@ namespace Racks
                     }
                 });
             }
-            if (e.OldName!.Equals(Path.GetFileName(Instance.Folder), StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(e.OldName) && string.Equals(e.OldName, folderName, StringComparison.OrdinalIgnoreCase))
             {
-
                 var lastInstanceName = Instance.Name;
-                Dispatcher.Invoke(() =>
+                Dispatcher.InvokeAsync(() =>
                 {
+                    if (Instance.isWindowClosing) return;
                     Instance.Folder = e.FullPath;
                     Instance.IsFolderMissing = false;
                     _currentFolderPath = Instance.Folder;
-                    Instance.Name = Path.GetFileName(e.Name!);
+                    Instance.Name = Path.GetFileName(e.Name ?? "");
                     MainWindow._controller.WriteOverInstanceToKey(Instance, lastInstanceName);
                     title.Text = Instance.TitleText == "" ? Instance.Name : Instance.TitleText;
                     PathToBackButton.Visibility = Visibility.Collapsed;
                     missingFolderGrid.Visibility = Visibility.Hidden;
                     foreach (var item in FileItems)
                     {
-                        item.FullPath = item.FullPath!.Replace(@$"\{e.OldName}\", @$"\{e.Name}\");
+                        if (item.FullPath != null && !string.IsNullOrEmpty(e.OldName) && !string.IsNullOrEmpty(e.Name))
+                            item.FullPath = item.FullPath.Replace(@$"\{e.OldName}\", @$"\{e.Name}\");
                     }
                     InitializeFileWatchers();
-
                 });
             }
         }
 
         private void OnParentChanged(object sender, FileSystemEventArgs e)
         {
+            if (Instance.isWindowClosing || string.IsNullOrEmpty(e.Name) || string.IsNullOrEmpty(Instance.Folder)) return;
+            string? folderName = Path.GetFileName(Instance.Folder);
+            if (string.IsNullOrEmpty(folderName) || !string.Equals(e.Name, folderName, StringComparison.OrdinalIgnoreCase)) return;
 
-            if (e.Name.Equals(Path.GetFileName(Instance.Folder), StringComparison.OrdinalIgnoreCase))
+            Dispatcher.InvokeAsync(() =>
             {
-                Dispatcher.Invoke(() =>
+                if (Instance.isWindowClosing) return;
+                if (!Path.Exists(Instance.Folder) && Instance.Folder != "empty")
                 {
-                    if (!Path.Exists(Instance.Folder) && Instance.Folder != "empty")
-                    {
-                        PathToBackButton.Visibility = Visibility.Collapsed;
-                        missingFolderGrid.Visibility = Visibility.Visible;
-                        FileItems.Clear();
-                    }
-                    else
-                    {
-                        missingFolderGrid.Visibility = Visibility.Hidden;
-                        LoadFiles(Instance.Folder);
-                        InitializeFileWatchers();
-                    }
-                });
-            }
+                    PathToBackButton.Visibility = Visibility.Collapsed;
+                    missingFolderGrid.Visibility = Visibility.Visible;
+                    FileItems.Clear();
+                }
+                else
+                {
+                    missingFolderGrid.Visibility = Visibility.Hidden;
+                    LoadFiles(Instance.Folder);
+                    InitializeFileWatchers();
+                }
+            });
         }
 
         private void OnFileChanged(object sender, FileSystemEventArgs e)
         {
+            if (Instance.isWindowClosing) return;
             Dispatcher.InvokeAsync(() =>
             {
+                if (Instance.isWindowClosing) return;
                 if ((!Path.Exists(Instance.Folder) && Instance.Folder != "empty") || e.Name == Instance.Folder)
                 {
                     PathToBackButton.Visibility = Visibility.Collapsed;
@@ -310,7 +318,7 @@ namespace Racks
 
                     _folderCount = filteredFiles.OfType<DirectoryInfo>().Count();
                     _fileCount = filteredFiles.OfType<FileInfo>().Count().ToString();
-                    _folderSize = !Instance.CheckFolderSize ? "" : Task.Run(() => BytesToStringAsync(filteredFiles.OfType<FileInfo>().Sum(file => file.Length))).Result;
+                    _folderSize = !Instance.CheckFolderSize ? "" : FolderSize.Kilobytes(filteredFiles.OfType<FileInfo>().Sum(file => file.Length));
 
                     filteredFiles = filteredFiles
                                 .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
@@ -409,7 +417,12 @@ namespace Racks
                             return;
                         }
 
-                        var existingItem = FileItems.FirstOrDefault(item => item.FullPath == entry.FullName);
+                        if (Util.SafeRegex.IsMatch(fileFilterHideRegex, entry.Name, onTimeout: false))
+                            continue;
+                        if (Instance.IsDesktopFilterRack && Instance.AssignedFiles != null && !Instance.AssignedFiles.Contains(entry.Name))
+                            continue;
+
+                        var existingItem = FileItems.FirstOrDefault(item => string.Equals(item.FullPath, entry.FullName, StringComparison.OrdinalIgnoreCase));
 
                         long size = 0;
                         if (entry is FileInfo fileInfo)
@@ -418,25 +431,22 @@ namespace Racks
                             size = await Task.Run(() => GetDirectorySize(directoryInfo, loadFiles_cts));
                         size = size > int.MaxValue ? int.MaxValue : size;
 
-                        string displaySize = entry is FileInfo ? await BytesToStringAsync(size)
-                                                               : Instance.CheckFolderSize ? await BytesToStringAsync(size)
-                                                                                          : "";
-                        var thumbnail = await GetThumbnailAsync(entry.FullName);
+                        string displaySize = FolderSize.Kilobytes(size);
+
+                        BitmapSource? thumbnail = null;
+                        if (existingItem?.Thumbnail != null && existingItem.DateModified == entry.LastWriteTime)
+                        {
+                            thumbnail = existingItem.Thumbnail;
+                        }
+                        else
+                        {
+                            thumbnail = await GetThumbnailAsync(entry.FullName);
+                        }
+
                         bool isFile = entry is FileInfo;
                         string actualExt = isFile ? Path.GetExtension(entry.Name) : string.Empty;
                         if (existingItem == null)
                         {
-                            if (Util.SafeRegex.IsMatch(fileFilterHideRegex, entry.Name, onTimeout: false))
-                            {
-                                continue;
-                            }
-
-                            // If it's a DesktopFilterRack, ensure it hasn't just been removed from AssignedFiles during the cleanup phase
-                            if (Instance.IsDesktopFilterRack && Instance.AssignedFiles != null && !Instance.AssignedFiles.Contains(entry.Name))
-                            {
-                                continue;
-                            }
-
                             FileItems.Add(new FileItem
                             {
                                 Name = Instance.ShowFileExtension || string.IsNullOrEmpty(actualExt)
@@ -467,24 +477,43 @@ namespace Racks
                             existingItem.Thumbnail = thumbnail;
                         }
                     }
-                    // Dedup by FullPath before committing. Two LoadFiles runs can overlap
-                    // (Reassign triggers one on every rack, a FileSystemWatcher fires another),
-                    // and the await between the "does this item already exist?" check and
-                    // FileItems.Add lets both pass the check and both add the same file - the
-                    // visual duplicate. Collapsing by FullPath here makes that race harmless.
+                    // Dedup by FullPath before committing
                     var sortedList = FileItems
+                        .Where(fi => !Util.SafeRegex.IsMatch(fileFilterHideRegex, fi.Name, onTimeout: false))
                         .GroupBy(fi => fi.FullPath, StringComparer.OrdinalIgnoreCase)
                         .Select(g => g.First())
                         .ToList();
 
-                    FileItems.Clear();
-                    foreach (var fileItem in sortedList)
+                    // In-place collection sync avoids wiping the entire WPF visual tree via FileItems.Clear(),
+                    // ensuring smooth, professional transitions without flickering or re-animating unchanged tiles.
+                    var targetSet = new HashSet<string>(sortedList.Select(x => x.FullPath!), StringComparer.OrdinalIgnoreCase);
+                    for (int i = FileItems.Count - 1; i >= 0; i--)
                     {
-                        if (Util.SafeRegex.IsMatch(fileFilterHideRegex, fileItem.Name, onTimeout: false))
+                        if (string.IsNullOrEmpty(FileItems[i].FullPath) || !targetSet.Contains(FileItems[i].FullPath!))
                         {
-                            continue;
+                            FileItems.RemoveAt(i);
                         }
-                        FileItems.Add(fileItem);
+                    }
+                    for (int i = 0; i < sortedList.Count; i++)
+                    {
+                        var targetItem = sortedList[i];
+                        int currentIndex = -1;
+                        for (int j = 0; j < FileItems.Count; j++)
+                        {
+                            if (string.Equals(FileItems[j].FullPath, targetItem.FullPath, StringComparison.OrdinalIgnoreCase))
+                            {
+                                currentIndex = j;
+                                break;
+                            }
+                        }
+                        if (currentIndex == -1)
+                        {
+                            FileItems.Insert(Math.Min(i, FileItems.Count), targetItem);
+                        }
+                        else if (currentIndex != i)
+                        {
+                            FileItems.Move(currentIndex, i);
+                        }
                     }
                     if (Instance.EnableCustomItemsOrder)
                     {
@@ -544,9 +573,21 @@ namespace Racks
                 {
                     return null;
                 }
-                IntPtr hBitmap = IntPtr.Zero;
-                BitmapSource? thumbnail = null;
                 int iconSize = (int)(Instance.IconSize * _windowsScalingFactor);
+                DateTime lastWrite = DateTime.MinValue;
+                try
+                {
+                    if (File.Exists(path)) lastWrite = File.GetLastWriteTimeUtc(path);
+                    else if (Directory.Exists(path)) lastWrite = Directory.GetLastWriteTimeUtc(path);
+                }
+                catch { }
+
+                if (Racks.Services.ThumbnailCache.TryGet(path, iconSize, lastWrite, out var cached) && cached != null)
+                {
+                    return cached;
+                }
+
+                BitmapSource? thumbnail = null;
                 if (Path.GetExtension(path).ToLower() == ".svg")
                 {
                     try
@@ -556,6 +597,10 @@ namespace Racks
                     catch (Exception e)
                     {
                         Debug.WriteLine(e);
+                    }
+                    if (thumbnail != null)
+                    {
+                        Racks.Services.ThumbnailCache.Put(path, iconSize, lastWrite, thumbnail);
                     }
                     return thumbnail;
                 }
@@ -570,30 +615,16 @@ namespace Racks
                         {
                             thumbnail = GetThumbnail(path, iconSize);
                         });
-                        if (Instance.ShowShortcutArrow)
+                        if (thumbnail != null && Instance.ShowShortcutArrow)
                         {
-                            return Application.Current.Dispatcher.Invoke(() =>
+                            var overlay = Racks.Services.ThumbnailCache.GetShortcutOverlay();
+                            if (overlay != null)
                             {
-                                IntPtr[] overlayIcons = new IntPtr[1];
-                                int overlayExtracted = ExtractIconEx(
-                                    Environment.SystemDirectory + "\\shell32.dll",
-                                    29,
-                                    overlayIcons,
-                                    null,
-                                    1);
-
-                                if (overlayExtracted > 0 && overlayIcons[0] != IntPtr.Zero)
+                                thumbnail = Application.Current.Dispatcher.Invoke(() =>
                                 {
-                                    var overlay = Imaging.CreateBitmapSourceFromHIcon(
-                                                  overlayIcons[0],
-                                                  Int32Rect.Empty,
-                                                  BitmapSizeOptions.FromEmptyOptions());
-                                    DestroyIcon(overlayIcons[0]);
-
                                     var visual = new DrawingVisual();
                                     using (var dc = visual.RenderOpen())
                                     {
-                                        Debug.WriteLine("iconsize: " + iconSize);
                                         double scale = iconSize / Math.Max(thumbnail.PixelWidth, thumbnail.PixelHeight);
                                         double thumbnailWidth = thumbnail.PixelWidth * scale;
                                         double thumbnailHeight = thumbnail.PixelHeight * scale;
@@ -614,19 +645,20 @@ namespace Racks
                                         {
                                             overlayScale *= (1 / _windowsScalingFactor);
                                         }
+                                        BitmapSource scaledOverlay = overlay;
                                         if (overlayScale != 1.0)
                                         {
-                                            overlay = new TransformedBitmap(overlay, new ScaleTransform(overlayScale, overlayScale));
-                                            overlay.Freeze();
+                                            scaledOverlay = new TransformedBitmap(overlay, new ScaleTransform(overlayScale, overlayScale));
+                                            scaledOverlay.Freeze();
                                         }
                                         double overlayX = thumbnailX;
-                                        double overlayY = thumbnailY + thumbnailHeight - overlay.PixelHeight;
-                                        dc.DrawImage(overlay,
+                                        double overlayY = thumbnailY + thumbnailHeight - scaledOverlay.PixelHeight;
+                                        dc.DrawImage(scaledOverlay,
                                             new Rect(
                                             overlayX,
                                             overlayY,
-                                            overlay.PixelWidth,
-                                            overlay.PixelHeight)
+                                            scaledOverlay.PixelWidth,
+                                            scaledOverlay.PixelHeight)
                                         );
                                     }
 
@@ -639,11 +671,9 @@ namespace Racks
                                     rtb.Render(visual);
                                     rtb.Freeze();
                                     return rtb;
-                                }
-                                return thumbnail;
-                            });
+                                });
+                            }
                         }
-                        return thumbnail;
                     }
                     catch (Exception e)
                     {
@@ -654,35 +684,10 @@ namespace Racks
                 {
                     try
                     {
-                        int attempt = 0;
-                        while (attempt < 3 && thumbnail == null)
+                        Application.Current.Dispatcher.Invoke(() =>
                         {
-                            ShellObject? shellObj = null;
-                            shellObj = Directory.Exists(path) ? ShellObject.FromParsingName(path) : ShellFile.FromFilePath(path);
-                            if (shellObj != null)
-                            {
-                                try
-                                {
-                                    Application.Current.Dispatcher.Invoke(() =>
-                                    {
-                                        thumbnail = GetThumbnail(path, iconSize);
-                                    });
-                                    if (thumbnail != null)
-                                    {
-                                        return thumbnail;
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Debug.WriteLine("Failed to fetch thumbnail:" + ex.Message);
-                                }
-                                finally
-                                {
-                                    shellObj?.Dispose();
-                                }
-                            }
-                            attempt++;
-                        }
+                            thumbnail = GetThumbnail(path, iconSize);
+                        });
                     }
                     catch (Exception e)
                     {
@@ -691,10 +696,9 @@ namespace Racks
                 }
                 if (thumbnail != null)
                 {
+                    Racks.Services.ThumbnailCache.Put(path, iconSize, lastWrite, thumbnail);
                     return thumbnail;
                 }
-
-                Debug.WriteLine("Failed to retrieve thumbnail after 3 attempts.");
                 return null;
             });
         }

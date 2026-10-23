@@ -156,18 +156,25 @@ namespace Racks.Util
                     _knownChildren.Add(child);
                     var scale = (ScaleTransform)((TransformGroup)child.RenderTransform).Children[ScaleIndex];
 
-                    // Initial state for pop-in animation
-                    scale.ScaleX = 0;
-                    scale.ScaleY = 0;
+                    // Initial state for smooth, professional pop-in animation
+                    scale.ScaleX = 0.88;
+                    scale.ScaleY = 0.88;
+                    child.Opacity = 0.0;
 
-                    // Animate to 1 with a slight delay based on index for a cascade effect
-                    var anim = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(400))
+                    var delay = TimeSpan.FromMilliseconds(Math.Min(newChildIndex * 20, 160));
+                    var scaleAnim = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(180))
                     {
-                        BeginTime = TimeSpan.FromMilliseconds(newChildIndex * 30), // staggered
-                        EasingFunction = new ElasticEase { Oscillations = 1, Springiness = 5, EasingMode = EasingMode.EaseOut }
+                        BeginTime = delay,
+                        EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
                     };
-                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
-                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+                    var opacityAnim = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(180))
+                    {
+                        BeginTime = delay,
+                        EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                    };
+                    scale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleAnim);
+                    scale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleAnim);
+                    child.BeginAnimation(UIElement.OpacityProperty, opacityAnim);
                     newChildIndex++;
                 }
             }
@@ -237,16 +244,10 @@ namespace Racks.Util
 
         private static DoubleAnimation MakeAnim(double to, int durationMs, IEasingFunction easing = null)
         {
-            var anim = new DoubleAnimation(to, TimeSpan.FromMilliseconds(durationMs));
-            if (easing != null)
+            var anim = new DoubleAnimation(to, TimeSpan.FromMilliseconds(durationMs))
             {
-                anim.EasingFunction = easing;
-            }
-            else
-            {
-                anim.AccelerationRatio = 0.2;
-                anim.DecelerationRatio = 0.8;
-            }
+                EasingFunction = easing ?? new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
             return anim;
         }
 
