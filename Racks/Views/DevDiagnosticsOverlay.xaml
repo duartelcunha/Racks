@@ -1,0 +1,51 @@
+<Window x:Class="Racks.Views.DevDiagnosticsOverlay"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        WindowStartupLocation="Manual"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Background="Transparent"
+        Foreground="White"
+        FontFamily="{StaticResource AppFont}"
+        ResizeMode="NoResize"
+        Width="340"
+        Height="270"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown"
+        KeyDown="Window_KeyDown">
+    <Border CornerRadius="12" BorderThickness="1" Margin="10"
+            Background="#E61A1C23"
+            BorderBrush="#44FFFFFF">
+        <Border.Effect>
+            <DropShadowEffect Color="Black" Direction="270" ShadowDepth="4" BlurRadius="16" Opacity="0.6"/>
+        </Border.Effect>
+        <Grid Margin="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,12">
+                <Button x:Name="CloseButton" DockPanel.Dock="Right" Width="24" Height="24" Padding="0"
+                        Background="Transparent" BorderThickness="0" Foreground="#FFAAAAAA"
+                        Cursor="Hand" Click="Close_Click"/>
+                <TextBlock x:Name="HeaderTitle" FontSize="13" FontWeight="SemiBold"
+                           Foreground="#FF00D2FF" VerticalAlignment="Center"/>
+            </DockPanel>
+
+            <!-- Metrics -->
+            <StackPanel Grid.Row="1" VerticalAlignment="Top">
+                <TextBlock x:Name="FpsText" FontFamily="Consolas" FontSize="12" Foreground="#FF55FF55" Margin="0,2"/>
+                <TextBlock x:Name="FrameDeltaText" FontFamily="Consolas" FontSize="12" Foreground="White" Margin="0,2"/>
+                <TextBlock x:Name="MemoryText" FontFamily="Consolas" FontSize="12" Foreground="White" Margin="0,2"/>
+                <TextBlock x:Name="InstancesText" FontFamily="Consolas" FontSize="12" Foreground="White" Margin="0,2"/>
+                <TextBlock x:Name="HwndText" FontFamily="Consolas" FontSize="12" Foreground="White" Margin="0,2"/>
+                <TextBlock x:Name="ThumbnailCacheText" FontFamily="Consolas" FontSize="12" Foreground="#FFFFCC00" Margin="0,2"/>
+                <TextBlock x:Name="PhysicsText" FontFamily="Consolas" FontSize="12" Foreground="#88FFFFFF" Margin="0,6,0,0"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

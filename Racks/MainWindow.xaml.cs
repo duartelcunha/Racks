@@ -31,6 +31,18 @@ namespace Racks
         private bool _hotCornerHidden; // tracks whether racks are currently hidden by hot-corner
         private const int QUICK_FINDER_HOTKEY_ID = 0xB0CC;
         private const int NEW_RACK_HOTKEY_ID = 0xB0CD;
+        private const int DEV_DIAGNOSTICS_HOTKEY_ID = 0xB0CE;
+        public const int WM_RACKS_OPEN_SETTINGS = 0x0400 + 100;
+        public const int WM_RACKS_OPEN_HELP = 0x0400 + 101;
+        public const int WM_RACKS_TOGGLE_LOCK_ALL = 0x0400 + 102;
+        public const int WM_RACKS_TOGGLE_ICE_PHYSICS = 0x0400 + 103;
+        public const int WM_RACKS_TOGGLE_DESKTOP_ICONS = 0x0400 + 104;
+        public const int WM_RACKS_TOGGLE_HOT_CORNER = 0x0400 + 105;
+        public const int WM_RACKS_OPEN_ABOUT = 0x0400 + 106;
+        public const int WM_RACKS_TOGGLE_DEV_DIAGNOSTICS = 0x0400 + 107;
+        private Views.DevDiagnosticsOverlay? _devDiagnostics;
+        private SettingsWindow? _settingsWindow;
+        private HelpWindow? _helpWindow;
         private IntPtr _mainHwnd = IntPtr.Zero;
         private static bool _doubleClickToHide;
         private DateTime _lastDoubleClickTime = DateTime.MinValue;
@@ -64,7 +76,10 @@ namespace Racks
 
         public MainWindow()
         {
+            Application.Current.MainWindow = this;
+            _mainWindow = this;
             InitializeComponent();
+            new WindowInteropHelper(this).EnsureHandle();
             _mainWindow = this;
 
             // App.OnStartup shows StartupAnimationWindow before WPF's own StartupUri
@@ -392,8 +407,44 @@ namespace Racks
 
         private void HelpMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            try { new HelpWindow().Show(); }
+            try
+            {
+                if (_helpWindow == null || !_helpWindow.IsLoaded)
+                {
+                    _helpWindow = new HelpWindow();
+                    _helpWindow.Closed += (_, _) => _helpWindow = null;
+                    _helpWindow.Show();
+                }
+                else
+                {
+                    _helpWindow.Activate();
+                }
+            }
             catch (Exception ex) { Debug.WriteLine($"HelpWindow open failed: {ex.Message}"); }
+        }
+
+        private void DevDiagnosticsMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            ToggleDevDiagnostics();
+        }
+
+        private void ToggleDevDiagnostics()
+        {
+            try
+            {
+                if (_devDiagnostics == null || !_devDiagnostics.IsLoaded)
+                {
+                    _devDiagnostics = new Views.DevDiagnosticsOverlay(_controller);
+                    _devDiagnostics.Closed += (_, _) => _devDiagnostics = null;
+                    _devDiagnostics.Show();
+                }
+                else
+                {
+                    _devDiagnostics.Close();
+                    _devDiagnostics = null;
+                }
+            }
+            catch (Exception ex) { Debug.WriteLine($"DevDiagnostics toggle failed: {ex.Message}"); }
         }
 
         private async void ImportLayout_Click(object sender, RoutedEventArgs e)
@@ -430,6 +481,9 @@ namespace Racks
         {
             base.OnSourceInitialized(e);
             var hwnd = new WindowInteropHelper(this).Handle;
+            _mainHwnd = hwnd;
+            this.Title = "RacksMainHost";
+            try { new RegistryHelper(InstanceController.appName).WriteToRegistryRoot("MainHwnd", (long)hwnd); } catch { }
             int exStyle = (int)GetWindowLong(hwnd, GWL_EXSTYLE);
             exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
             SetWindowLong(hwnd, GWL_EXSTYLE, (IntPtr)exStyle);
@@ -461,6 +515,8 @@ namespace Racks
             catch (Exception ex) { Debug.WriteLine($"RegisterHotKey QuickFinder failed: {ex.Message}"); }
             try { newRackOk = Interop.RegisterHotKey(_mainHwnd, NEW_RACK_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x4E /* VK_N */); }
             catch (Exception ex) { Debug.WriteLine($"RegisterHotKey NewRack failed: {ex.Message}"); }
+            try { Interop.RegisterHotKey(_mainHwnd, DEV_DIAGNOSTICS_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x44 /* VK_D */); }
+            catch (Exception ex) { Debug.WriteLine($"RegisterHotKey DevDiagnostics failed: {ex.Message}"); }
             if (!quickFinderOk || !newRackOk)
             {
                 try
@@ -680,7 +736,20 @@ namespace Racks
 
         private void Settings_Button_Click(object sender, RoutedEventArgs e)
         {
-            new SettingsWindow(_controller, this).Show();
+            try
+            {
+                if (_settingsWindow == null || !_settingsWindow.IsLoaded)
+                {
+                    _settingsWindow = new SettingsWindow(_controller, this);
+                    _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+                    _settingsWindow.Show();
+                }
+                else
+                {
+                    _settingsWindow.Activate();
+                }
+            }
+            catch (Exception ex) { Debug.WriteLine($"SettingsWindow open failed: {ex.Message}"); }
         }
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
@@ -729,6 +798,55 @@ namespace Racks
                 catch (Exception ex) { Debug.WriteLine($"New rack hotkey failed: {ex.Message}"); }
                 handled = true;
             }
+            if (msg == Interop.WM_HOTKEY && wParam.ToInt32() == DEV_DIAGNOSTICS_HOTKEY_ID)
+            {
+                ToggleDevDiagnostics();
+                handled = true;
+            }
+            if (msg == WM_RACKS_OPEN_SETTINGS)
+            {
+                Settings_Button_Click(this, new RoutedEventArgs());
+                handled = true;
+            }
+            else if (msg == WM_RACKS_OPEN_HELP)
+            {
+                HelpMenuItem_Click(this, new RoutedEventArgs());
+                handled = true;
+            }
+            else if (msg == WM_RACKS_TOGGLE_LOCK_ALL)
+            {
+                LockAllToggle.IsChecked = !(LockAllToggle.IsChecked == true);
+                LockAllToggle_CheckChanged(this, new RoutedEventArgs());
+                handled = true;
+            }
+            else if (msg == WM_RACKS_TOGGLE_ICE_PHYSICS)
+            {
+                IcePhysicsToggle.IsChecked = !(IcePhysicsToggle.IsChecked == true);
+                IcePhysicsToggle_CheckChanged(this, new RoutedEventArgs());
+                handled = true;
+            }
+            else if (msg == WM_RACKS_TOGGLE_DESKTOP_ICONS)
+            {
+                HideDesktopIconsToggle.IsChecked = !(HideDesktopIconsToggle.IsChecked == true);
+                HideDesktopIconsToggle_CheckChanged(this, new RoutedEventArgs());
+                handled = true;
+            }
+            else if (msg == WM_RACKS_TOGGLE_HOT_CORNER)
+            {
+                HotCornerHideToggle.IsChecked = !(HotCornerHideToggle.IsChecked == true);
+                HotCornerHideToggle_CheckChanged(this, new RoutedEventArgs());
+                handled = true;
+            }
+            else if (msg == WM_RACKS_OPEN_ABOUT)
+            {
+                try { new AboutWindow(150, 150, 320, 280).Show(); } catch { }
+                handled = true;
+            }
+            else if (msg == WM_RACKS_TOGGLE_DEV_DIAGNOSTICS)
+            {
+                ToggleDevDiagnostics();
+                handled = true;
+            }
             return IntPtr.Zero;
         }
         // On a real display or settings change (resolution, monitor plugged/unplugged,
@@ -766,6 +884,7 @@ namespace Racks
             {
                 try { Interop.UnregisterHotKey(_mainHwnd, QUICK_FINDER_HOTKEY_ID); } catch { }
                 try { Interop.UnregisterHotKey(_mainHwnd, NEW_RACK_HOTKEY_ID); } catch { }
+                try { Interop.UnregisterHotKey(_mainHwnd, DEV_DIAGNOSTICS_HOTKEY_ID); } catch { }
             }
             base.OnClosed(e);
         }

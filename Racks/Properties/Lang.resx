@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -598,6 +598,12 @@
   </data>
   <data name="Tray.Help.ToolTip" xml:space="preserve">
     <value>Keybindings, gestures, and feature overview.</value>
+  </data>
+  <data name="Tray.DevDiagnostics" xml:space="preserve">
+    <value>Diagnostics HUD</value>
+  </data>
+  <data name="Tray.DevDiagnostics.ToolTip" xml:space="preserve">
+    <value>Open live developer diagnostics HUD</value>
   </data>
   <data name="Hotkey.Conflict.Title" xml:space="preserve">
     <value>Some Racks shortcuts are unavailable</value>

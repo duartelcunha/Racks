@@ -1192,6 +1192,24 @@ namespace Racks.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Diagnostics HUD.
+        /// </summary>
+        public static string Tray_DevDiagnostics {
+            get {
+                return ResourceManager.GetString("Tray.DevDiagnostics", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Open live developer diagnostics HUD.
+        /// </summary>
+        public static string Tray_DevDiagnostics_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.DevDiagnostics.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Export racks….
         /// </summary>
         public static string Tray_Export {
