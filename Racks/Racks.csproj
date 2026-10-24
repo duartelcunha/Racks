@@ -24,6 +24,11 @@
   <ItemGroup>
     <None Remove="ico.png" />
     <None Remove="Icon\ico.png" />
+    <None Remove="Icon\tray.png" />
+    <None Remove="Icon\tray_16.png" />
+    <None Remove="Icon\tray_20.png" />
+    <None Remove="Icon\tray_24.png" />
+    <None Remove="Icon\tray_32.png" />
     <None Remove="Shaders\GrayscaleEffect.ps" />
   </ItemGroup>
   <!-- COMReference items for Shell32 + IWshRuntimeLibrary were removed because they
@@ -48,6 +53,11 @@
   <ItemGroup>
     <Resource Include="ico.png" />
     <Resource Include="Icon\ico.png" />
+    <Resource Include="Icon\tray.png" />
+    <Resource Include="Icon\tray_16.png" />
+    <Resource Include="Icon\tray_20.png" />
+    <Resource Include="Icon\tray_24.png" />
+    <Resource Include="Icon\tray_32.png" />
     <Resource Include="Shaders\GrayscaleEffect.ps" />
   </ItemGroup>
   <!-- Strongly typed Lang class.

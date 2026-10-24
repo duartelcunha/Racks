@@ -545,6 +545,21 @@ namespace Racks
         {
             try
             {
+                try
+                {
+                    int iconSize = System.Windows.Forms.SystemInformation.SmallIconSize.Width;
+                    string resName = iconSize switch
+                    {
+                        <= 16 => "tray_16.png",
+                        <= 20 => "tray_20.png",
+                        <= 24 => "tray_24.png",
+                        _ => "tray_32.png"
+                    };
+                    TrayIcon.Icon = new System.Windows.Media.Imaging.BitmapImage(
+                        new Uri($"/Icon/{resName}", UriKind.Relative));
+                }
+                catch { /* fallback to XAML default */ }
+
                 TrayIcon.Register();
                 TrayIcon.Visibility = Visibility.Visible;
             }

@@ -59,10 +59,12 @@ namespace Racks
 {
     public partial class RackWindow
     {
+        private void SaveInstance() => MainWindow._controller.WriteInstanceToKey(Instance);
+
         private void FileWrapPanel_GeneratorStatusChanged(object sender, EventArgs e)
         {
             if (_tilePanelWired) return;
-            if (FileWrapPanel.ItemContainerGenerator.Status != GeneratorStatus.ContainersGenerated) return;
+            
             var panel = FindParentOrChild<AnimatedTilePanel>(FileWrapPanel);
             if (panel == null) return;
             panel.ItemMoveRequested += OnTilePanelItemMoveRequested;
@@ -177,7 +179,7 @@ namespace Racks
                 // Drop the rack's claim so the item stops showing in the rack.
                 if (Instance.AssignedFiles != null && Instance.AssignedFiles.Remove(fileName))
                 {
-                    MainWindow._controller.WriteInstanceToKey(Instance);
+                    SaveInstance();
                 }
 
                 LoadFiles(_currentFolderPath);
@@ -261,7 +263,7 @@ namespace Racks
         // all shifted; AddToCustomOrder's one-at-a-time approach would lose them.
         private void OnTilePanelDragCompleted()
         {
-            if (!Instance.EnableCustomItemsOrder) return;
+            Instance.EnableCustomItemsOrder = true;
             try
             {
                 var newOrder = new List<Tuple<string, string>>(FileItems.Count);
@@ -273,6 +275,7 @@ namespace Racks
                     newOrder.Add(new Tuple<string, string>(id, i.ToString()));
                 }
                 Instance.CustomOrderFiles = newOrder;
+                SaveInstance();
             }
             catch (Exception ex) { Debug.WriteLine($"Persist custom order failed: {ex.Message}"); }
         }
@@ -283,7 +286,7 @@ namespace Racks
             foreach (var lost in Rack.DesktopRackClaims.Claim(MainWindow._controller.Instances, Instance, Path.GetFileName(fullPath)))
                 MainWindow._controller.WriteInstanceToKey(lost);
 
-            MainWindow._controller.WriteInstanceToKey(Instance);
+            SaveInstance();
 
             // Force refresh of all Desktop racks
             foreach (var window in MainWindow._controller._subWindows)
@@ -334,10 +337,26 @@ namespace Racks
                 // end and force the Desktop view (and any other open Explorer windows
                 // pointing at the same folder) to redraw without F5.
                 var sourceParents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                // Aggregate any SafeMove rejection/skip reasons across this batch
-                // and show them once at the end — one toast for "you dropped 3
-                // weird things" beats three modals.
                 var dropMessages = new List<string>();
+                int targetSlotIndex = -1;
+                try
+                {
+                    var panel = FindParentOrChild<AnimatedTilePanel>(FileWrapPanel);
+                    if (panel != null && panel.ActualWidth > 0 && string.IsNullOrEmpty(_dropIntoFolderPath))
+                    {
+                        System.Windows.Point pt = e.GetPosition(panel);
+                        double itemW = panel.ItemWidth;
+                        if (itemW > 0 && panel.SlotHeight > 0)
+                        {
+                            int cols = panel.Columns > 0 ? panel.Columns : Math.Max(1, (int)(panel.ActualWidth / itemW));
+                            int col = Math.Max(0, Math.Min(cols - 1, (int)(pt.X / itemW)));
+                            int row = Math.Max(0, (int)(pt.Y / panel.SlotHeight));
+                            targetSlotIndex = Math.Min(FileItems.Count, row * cols + col);
+                        }
+                    }
+                }
+                catch { }
+                var droppedPaths = new List<string>();
 
                 foreach (var file in files)
                 {
@@ -366,7 +385,7 @@ namespace Racks
                             title.Text = Path.GetFileName(_currentFolderPath);
                             Instance.Folder = file;
                             Instance.Name = Path.GetFileName(_currentFolderPath);
-                            MainWindow._controller.WriteInstanceToKey(Instance);
+                            SaveInstance();
                             LoadFiles(_currentFolderPath);
                             DataContext = this;
                             InitializeFileWatchers();
@@ -431,12 +450,11 @@ namespace Racks
 
                         if (Instance.IsDesktopFilterRack)
                         {
-                            // If it's a Desktop rack, we always move it physically to the RacksWorkspace
-                            // and claim it in AssignedFiles. (Unless they hold Ctrl for a link).
                             if (wantsLinkInsteadOfMove)
                             {
-                                // Claim whatever name CreateShortcut actually made (a hardlink keeps the file name, a .lnk gains an extension).
-                                ReassignDesktopFileToThisRack(CreateShortcut(file, destinationDir, Path.GetFileName(destinationPath)));
+                                string shortcut = CreateShortcut(file, destinationDir, Path.GetFileName(destinationPath));
+                                ReassignDesktopFileToThisRack(shortcut);
+                                droppedPaths.Add(shortcut);
                             }
                             else
                             {
@@ -445,6 +463,7 @@ namespace Racks
                                 {
                                     Util.Interop.NotifyShellMove(file, destinationPath, isDirectory: srcIsDir);
                                     ReassignDesktopFileToThisRack(destinationPath);
+                                    droppedPaths.Add(destinationPath);
                                 }
                                 else
                                 {
@@ -458,7 +477,8 @@ namespace Racks
                         {
                             if (wantsLinkInsteadOfMove)
                             {
-                                CreateShortcut(file, _currentFolderPath);
+                                string shortcut = CreateShortcut(file, _currentFolderPath);
+                                droppedPaths.Add(shortcut);
                             }
                             else
                             {
@@ -466,6 +486,7 @@ namespace Racks
                                 if (moveResult == SafeMove.Result.Moved)
                                 {
                                     Util.Interop.NotifyShellMove(file, destinationPath, isDirectory: srcIsDir);
+                                    droppedPaths.Add(destinationPath);
                                 }
                                 else
                                 {
@@ -494,6 +515,12 @@ namespace Racks
                 // Once all moves are done, tell the shell to refresh every source
                 // parent folder. This makes the Desktop view drop the now-gone icons
                 // immediately instead of after Explorer's lazy cache expires.
+                if (targetSlotIndex >= 0 && droppedPaths.Count > 0 && string.IsNullOrEmpty(_dropIntoFolderPath))
+                {
+                    InsertDroppedFilesIntoCustomOrder(droppedPaths, targetSlotIndex);
+                    LoadFiles(_currentFolderPath);
+                }
+
                 foreach (var parent in sourceParents)
                 {
                     Util.Interop.NotifyShellUpdateDir(parent);
@@ -537,7 +564,7 @@ namespace Racks
                 displayName = Path.GetFileName(firstDroppedFile);
             Instance.TitleText = string.IsNullOrEmpty(displayName) ? "New rack" : displayName;
             title.Text = Instance.TitleText;
-            MainWindow._controller.WriteInstanceToKey(Instance);
+            SaveInstance();
 
             try
             {
@@ -592,58 +619,88 @@ namespace Racks
 
         private void Window_DragLeave(object sender, DragEventArgs e)
         {
-            if (_isMinimized)
-            {
-                AnimateWindowHeight(CollapsedHeight, Instance.AnimationSpeed);
-            }
+            if (_isMinimized) AnimateWindowHeight(CollapsedHeight, Instance.AnimationSpeed);
             if (!IsCursorWithinWindowBounds() && !_isDragging)
             {
                 AnimateActiveColor(Instance.AnimationSpeed);
-                if (Instance.HideTitleBarIconsWhenInactive)
-                {
-                    TitleBarIconsFadeAnimation(true);
-                }
+                if (Instance.HideTitleBarIconsWhenInactive) TitleBarIconsFadeAnimation(true);
             }
             AnimateWindowOpacity(Instance.IdleOpacity, Instance.AnimationSpeed);
             _dragdropIntoFolder = false;
         }
 
+        private void Window_PreviewDragOver(object sender, DragEventArgs e)
+        {
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) { e.Effects = DragDropEffects.None; return; }
+            bool ctrlDown = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
+            e.Effects = (Instance.LinkOnDrop || ctrlDown) ? DragDropEffects.Link : DragDropEffects.Move;
+            e.Handled = true;
+            try
+            {
+                var hit = VisualTreeHelper.HitTest(this, e.GetPosition(this));
+                if (hit?.VisualHit != null && FindParentOrChild<Border>(hit.VisualHit) is Border b && b.DataContext is FileItem fi && fi.IsFolder)
+                {
+                    _dropIntoFolderPath = fi.FullPath; _dragdropIntoFolder = true; return;
+                }
+            }
+            catch { }
+            _dropIntoFolderPath = null; _dragdropIntoFolder = false;
+        }
+
+        private void Window_DragOver(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                bool ctrlDown = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
+                e.Effects = (Instance.LinkOnDrop || ctrlDown) ? DragDropEffects.Link : DragDropEffects.Move;
+                e.Handled = true;
+            }
+        }
+
         private void Window_DragEnter(object sender, DragEventArgs e)
         {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                bool ctrlDown = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
+                e.Effects = (Instance.LinkOnDrop || ctrlDown) ? DragDropEffects.Link : DragDropEffects.Move;
+            }
             if (!_mouseIsOver && IsCursorWithinWindowBounds())
             {
                 AnimateActiveColor(Instance.AnimationSpeed);
-                if (Instance.HideTitleBarIconsWhenInactive)
-                {
-                    TitleBarIconsFadeAnimation(true);
-                }
+                if (Instance.HideTitleBarIconsWhenInactive) TitleBarIconsFadeAnimation(true);
             }
-            AnimateWindowHeight(Instance.Height, Instance.AnimationSpeed); AnimateWindowOpacity(1, Instance.AnimationSpeed);
-            var sourceElement = e.OriginalSource as DependencyObject;
-            var currentBorder = new Border();
-            if (showFolderInGrid.Visibility == Visibility.Visible)
-            {
-                currentBorder = sourceElement as Border ?? FindParentOrChild<Border>(sourceElement);
-            }
-            else
-            {
-                currentBorder = sourceElement as Border ?? FindParent<Border>(sourceElement);
-            }
+            AnimateWindowHeight(Instance.Height, Instance.AnimationSpeed);
+            AnimateWindowOpacity(1, Instance.AnimationSpeed);
             _dragdropIntoFolder = true;
             if (Instance.Folder == "empty") StartParticles();
-            if (currentBorder != _lastBorder)
+        }
+
+        private void InsertDroppedFilesIntoCustomOrder(IEnumerable<string> droppedPaths, int targetIndex)
+        {
+            try
             {
-                if (_lastBorder != null)
+                Instance.EnableCustomItemsOrder = true;
+                var current = new List<Tuple<string, string>>(Instance.CustomOrderFiles ?? Enumerable.Empty<Tuple<string, string>>());
+                if (current.Count == 0 && FileItems.Count > 0)
                 {
-                    // _isDragging = true;
-                    FileItem_MouseLeave(_lastBorder, null);
+                    for (int i = 0; i < FileItems.Count; i++)
+                        if (FileItems[i]?.FullPath != null)
+                            current.Add(new Tuple<string, string>(Instance.IsDesktopFilterRack ? FileItems[i].Name : GetFileId(FileItems[i].FullPath).ToString(), i.ToString()));
                 }
-                _lastBorder = currentBorder;
+                int insertPos = Math.Clamp(targetIndex, 0, current.Count);
+                foreach (var path in droppedPaths)
+                {
+                    if (string.IsNullOrEmpty(path)) continue;
+                    string id = Instance.IsDesktopFilterRack ? Path.GetFileName(path) : GetFileId(path).ToString();
+                    current.RemoveAll(t => t.Item1 == id);
+                    current.Insert(insertPos, new Tuple<string, string>(id, insertPos.ToString()));
+                    insertPos++;
+                }
+                for (int i = 0; i < current.Count; i++) current[i] = new Tuple<string, string>(current[i].Item1, i.ToString());
+                Instance.CustomOrderFiles = current;
+                SaveInstance();
             }
-            if (currentBorder != null)
-            {
-                FileItem_MouseEnter(currentBorder, null);
-            }
+            catch (Exception ex) { Debug.WriteLine($"Insert custom order failed: {ex.Message}"); }
         }
     }
 }

@@ -46,6 +46,8 @@ namespace Racks.Util
         private int _rows;
         private Size _measuredSize;
         private double _slotHeight = 1;
+        public int Columns => _columns;
+        public double SlotHeight => _slotHeight;
         private bool _hasArrangedOnce;
 
         // Drag state. Null when no drag in progress.

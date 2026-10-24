@@ -11,7 +11,7 @@
         mc:Ignorable="d"
         Title="Racks" Height="450" Width="800" Initialized="Window_Initialized">
     <tray:NotifyIcon Grid.Row="0" FocusOnLeftClick="True"
-                   Icon="/ico.png"
+                   Icon="/Icon/tray.png"
                    Name="TrayIcon" MenuOnRightClick="True"
                    TooltipText="Racks" >
         <tray:NotifyIcon.Menu>

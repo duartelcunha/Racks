@@ -59,6 +59,16 @@ namespace Racks
 {
     public partial class RackWindow
     {
+        private void ApplyDropShadow()
+        {
+            if (Instance.DropShadowEnabled && !Instance.IsTransparent)
+            {
+                WindowBackground.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 12, ShadowDepth = 2, Direction = 270, Color = Colors.Black, Opacity = 0.45, RenderingBias = System.Windows.Media.Effects.RenderingBias.Performance };
+                WindowBackground.Margin = new Thickness(4);
+            }
+            else { WindowBackground.Effect = null; WindowBackground.Margin = new Thickness(0); }
+        }
+
         // One-click look from the Theme submenu: store the preset (saved like any other setting) and
         // repaint the parts that read those colours, the same way the Settings panel does.
         public void ApplyTheme(ThemePresets.Preset preset)
@@ -74,6 +84,7 @@ namespace Racks
         {
             try
             {
+                ApplyDropShadow();
                 if (Instance.IsTransparent)
                 {
                     WindowBackground.Background = System.Windows.Media.Brushes.Transparent;
@@ -105,28 +116,7 @@ namespace Racks
                     catch (Exception ex) { Debug.WriteLine($"BG image load failed: {ex.Message}"); }
                 }
 
-                if (Instance.DropShadowEnabled)
-                {
-                    WindowBackground.Effect = new System.Windows.Media.Effects.DropShadowEffect
-                    {
-                        BlurRadius = 15,
-                        ShadowDepth = 3,
-                        Direction = 270,
-                        Color = Colors.Black,
-                        Opacity = 0.4
-                    };
-                    WindowBackground.Margin = new Thickness(10);
-                    // Adjust sizing due to margin
-                    this.Width = Instance.Width + 20;
-                    this.Height = Instance.Height + 20;
-                }
-                else
-                {
-                    WindowBackground.Effect = null;
-                    WindowBackground.Margin = new Thickness(0);
-                    this.Width = Instance.Width;
-                    this.Height = Instance.Height;
-                }
+                // Drop shadow is managed via ApplyDropShadow() without window ballooning
 
                 var c = (Color)System.Windows.Media.ColorConverter.ConvertFromString(Instance.ListViewBackgroundColor);
                 if (Instance.GradientBackgroundEnabled && !Instance.ActiveBackgroundEnabled)
