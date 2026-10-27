@@ -23,6 +23,7 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 ### Changed
 - In a virtual rack, an item dragged out with a Move that Explorer completes as a copy (another drive) is no longer deleted from the rack's folder when it is the only copy of that file; the original stays in the rack until you remove it, so you may see it twice. Racks now only removes its own shortcuts and extra names of a file.
 - The uninstaller also removes `audit.log`, like `crash.log`.
+- A setting in the registry that Racks cannot use (wrong type or unreadable) now falls back to its default and leaves one line in `audit.log`; before, it was ignored silently. Nothing you saved is changed.
 - The installer is per-user only. The unsupported "install for all users" choice is gone. If you installed that way, uninstall that copy from Apps & Features after updating.
 
 ## [1.4.0] - 2026-10-10

@@ -76,7 +76,7 @@ public class InstanceController
 
             using var dest = Registry.CurrentUser.CreateSubKey($@"SOFTWARE\{appName}");
             CopyRegistryKey(legacy, dest);
-            dest.SetValue("_MigratedFromDeskFrame", "1");
+            Racks.Infrastructure.Registry.MigrationMarkers.Default.Set(Racks.Infrastructure.Registry.MigrationMarkers.MigratedFromDeskFrame);
         }
         catch (Exception ex)
         {
@@ -127,9 +127,9 @@ public class InstanceController
     }
     private void InitDetails()
     {
-        if (reg.KeyExistsRoot("blurBackground"))
+        if (Racks.Infrastructure.Registry.AppSettings.Default.BlurBackground is bool blur)
         {
-            ChangeBlur(reg.ReadKeyValueRoot("blurBackground") as bool? ?? false);
+            ChangeBlur(blur);
         }
     }
     public void WriteInstanceToKey(Instance instance)
@@ -476,20 +476,21 @@ public class InstanceController
     // the original stayed on the Desktop — users perceived this as duplication.
     // We revert those racks back to move-on-drop here. Marker so we don't fight
     // a user who deliberately re-enables link mode after this runs.
-    private const string LinkOnDropRevertedKey = "VirtualRackLinkOnDropRevertedToMove";
+    private const string LinkOnDropRevertedKey = Racks.Infrastructure.Registry.MigrationMarkers.VirtualRackLinkOnDropRevertedToMove;
 
     // One-shot: flip FolderOpenInsideFrame to false for every rack. The
     // upstream default was inside-rack navigation; users find the OS-native
     // "double-click opens Explorer" behavior more intuitive. Marker prevents
     // overriding a user-driven toggle on subsequent launches.
-    private const string FolderOpenInsideFrameDefaultFlippedKey = "FolderOpenInsideFrameDefaultedToExplorer";
+    private const string FolderOpenInsideFrameDefaultFlippedKey = Racks.Infrastructure.Registry.MigrationMarkers.FolderOpenInsideFrameDefaultedToExplorer;
 
     public void InitInstances()
     {
         isInitializingInstances = true;
         Debug.WriteLine("Init...");
-        bool needsRevertMigration = !reg.KeyExistsRoot(LinkOnDropRevertedKey);
-        bool needsFolderOpenMigration = !reg.KeyExistsRoot(FolderOpenInsideFrameDefaultFlippedKey);
+        var markers = Racks.Infrastructure.Registry.MigrationMarkers.Default;
+        bool needsRevertMigration = !markers.IsSet(LinkOnDropRevertedKey);
+        bool needsFolderOpenMigration = !markers.IsSet(FolderOpenInsideFrameDefaultFlippedKey);
         try
         {
             using (RegistryKey instancesKey = Registry.CurrentUser.OpenSubKey(@$"SOFTWARE\{appName}\Instances")!)
@@ -967,13 +968,11 @@ public class InstanceController
             // LinkOnDrop=true toggle isn't undone next launch.
             if (needsRevertMigration)
             {
-                try { reg.WriteToRegistryRoot(LinkOnDropRevertedKey, true); }
-                catch (Exception ex) { Debug.WriteLine($"Marking LinkOnDrop revert failed: {ex.Message}"); }
+                markers.Set(LinkOnDropRevertedKey);   // a failed write is audited by MigrationMarkers
             }
             if (needsFolderOpenMigration)
             {
-                try { reg.WriteToRegistryRoot(FolderOpenInsideFrameDefaultFlippedKey, true); }
-                catch (Exception ex) { Debug.WriteLine($"Marking FolderOpen flip failed: {ex.Message}"); }
+                markers.Set(FolderOpenInsideFrameDefaultFlippedKey);
             }
             Debug.WriteLine("Showing windows DONE");
         }

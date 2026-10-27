@@ -147,31 +147,6 @@ public class RegistryHelper
         }
     }
 
-    public bool KeyExistsRoot(string keyName)
-    {
-        try
-        {
-            using (RegistryKey key = Registry.CurrentUser.OpenSubKey($"SOFTWARE\\{regKeyName}")!)
-            {
-                if (key != null)
-                {
-                    if (key.GetValue(keyName) != null)
-                    {
-                        Debug.WriteLine($"exists: {keyName},{key.GetValue(keyName)}");
-
-                        return true;
-                    }
-                }
-            }
-            Debug.WriteLine($"doesnt exist: {keyName}");
-            return false;
-        }
-        catch
-        {
-            Debug.WriteLine($"error opening HKCU\\SOFTWARE\\{regKeyName}, {keyName}");
-            return false;
-        }
-    }
     public object? ReadKeyValueRoot(string keyName)
     {
         try
@@ -230,37 +205,6 @@ public class RegistryHelper
         {
             Debug.WriteLine("Error ReadKeyValueRootInt: " + ex.Message);
             return null;
-        }
-    }
-
-    public void AddToAutoRun(string appName, string appPath)
-    {
-        try
-        {
-            using (RegistryKey key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true)!)
-            {
-                key.SetValue(appName, appPath);
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine("Error adding to autorun: " + ex.Message);
-        }
-    }
-
-    public void RemoveFromAutoRun(string appName)
-    {
-        try
-        {
-            using (RegistryKey key = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true)!)
-            {
-                key.DeleteValue(appName, false);
-            }
-
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine("Error removing from autorun: " + ex.Message);
         }
     }
 

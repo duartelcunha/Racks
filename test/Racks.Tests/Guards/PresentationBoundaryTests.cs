@@ -106,7 +106,7 @@ public class PresentationBoundaryTests
 
     private static List<(string Path, string Code)>? _files;
 
-    private static List<(string Path, string Code)> PresentationFiles() => _files ??= ReadFiles().ToList();
+    internal static List<(string Path, string Code)> PresentationFiles() => _files ??= ReadFiles().ToList();
 
     private static IEnumerable<(string Path, string Code)> ReadFiles()
     {

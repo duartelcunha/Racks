@@ -22,5 +22,6 @@
   <ItemGroup>
     <Content Include="Guards\baseline.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Guards\fs-allowlist.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Guards\registry-presentation-allowlist.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

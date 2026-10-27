@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Policy;
 using System.Windows;
 using Microsoft.Win32;
+using Racks.Infrastructure.Registry;
 using Racks.Util;
 using Wpf.Ui.Controls;
 using Application = System.Windows.Application;
@@ -114,30 +115,29 @@ namespace Racks
                 _desktopRouter = new DesktopRouter(_autoRouteService);
             }
             catch (System.Exception ex) { Debug.WriteLine($"DesktopRouter init failed: {ex.Message}"); }
-            if (_controller.reg.KeyExistsRoot("startOnLogin")) startOnLogin = _controller.reg.ReadKeyValueRoot("startOnLogin") as bool? ?? false;
+            var settings = AppSettings.Default;
+            startOnLogin = settings.StartOnLogin;
             AutorunToggle.IsChecked = startOnLogin;
-            // if (_controller.reg.KeyExistsRoot("blurBackground")) BlurToggle.IsChecked = (bool)_controller.reg.ReadKeyValueRoot("blurBackground");
-            if (_controller.reg.KeyExistsRoot("DoubleClickToHide")) DoubleClickToHide = _controller.reg.ReadKeyValueRoot("DoubleClickToHide") as bool? ?? false;
+            DoubleClickToHide = settings.DoubleClickToHide;
             // Ice-rink physics default on; only off if the user turned it off before.
-            if (_controller.reg.KeyExistsRoot("IcePhysics")) Util.RackPhysics.Enabled = _controller.reg.ReadKeyValueRoot("IcePhysics") as bool? ?? true;
+            Util.RackPhysics.Enabled = settings.IcePhysics;
             IcePhysicsToggle.IsChecked = Util.RackPhysics.Enabled;
-            if (_controller.reg.KeyExistsRoot("HideDesktopIcons"))
+            // Only touch the toggle when a value was saved (a fresh install has none).
+            if (settings.HideDesktopIcons is bool hide)
             {
-                bool hide = _controller.reg.ReadKeyValueRoot("HideDesktopIcons") as bool? ?? false;
                 HideDesktopIconsToggle.IsChecked = hide;
                 if (hide) Racks.Infrastructure.Shell.ShellOperationGateway.Default.SetDesktopIconsHidden(true);
             }
             // A previous version (or one that was killed) may have left the whole desktop hidden.
             Racks.Infrastructure.Shell.ShellOperationGateway.Default.EnsureDesktopVisible();
-            if (_controller.reg.KeyExistsRoot("HotCornerHide")
-                && _controller.reg.ReadKeyValueRoot("HotCornerHide") as bool? == true)
+            if (settings.HotCornerHide)
             {
                 HotCornerHideToggle.IsChecked = true;
                 StartHotCornerWatch();
             }
             SyncLockAllToggle();
             // Opt-in: check GitHub for a newer release a little after startup (Settings > Auto update).
-            if (_controller.reg.KeyExistsRoot("AutoUpdate") && _controller.reg.ReadKeyValueRoot("AutoUpdate") as bool? == true)
+            if (settings.AutoUpdate)
             {
                 _ = CheckForUpdatesInBackgroundAsync();
             }
@@ -467,7 +467,7 @@ namespace Racks
             var hwnd = new WindowInteropHelper(this).Handle;
             _mainHwnd = hwnd;
             this.Title = "RacksMainHost";
-            try { new RegistryHelper(InstanceController.appName).WriteToRegistryRoot("MainHwnd", (long)hwnd); } catch { }
+            AppSettings.Default.TryPublishMainHwnd((long)hwnd);
             int exStyle = (int)GetWindowLong(hwnd, GWL_EXSTYLE);
             exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
             SetWindowLong(hwnd, GWL_EXSTYLE, (IntPtr)exStyle);
@@ -517,7 +517,7 @@ namespace Racks
             // center of the screen into the system tray and a toast follows
             // pointing the user at where the app now lives. Gated by a
             // registry marker so it runs at most once per machine.
-            try { Racks.Util.FirstRunWelcome.ShowIfFirstRun(_controller.reg); }
+            try { Racks.Util.FirstRunWelcome.ShowIfFirstRun(MigrationMarkers.Default); }
             catch (Exception ex) { Debug.WriteLine($"FirstRunWelcome failed: {ex.Message}"); }
         }
 
@@ -609,7 +609,7 @@ namespace Racks
         private void IcePhysicsToggle_CheckChanged(object sender, RoutedEventArgs e)
         {
             bool on = IcePhysicsToggle.IsChecked == true;
-            _controller.reg.WriteToRegistryRoot("IcePhysics", on);
+            AppSettings.Default.TrySetIcePhysics(on);
             Util.RackPhysics.Enabled = on;
         }
 
@@ -640,7 +640,7 @@ namespace Racks
         private void HotCornerHideToggle_CheckChanged(object sender, RoutedEventArgs e)
         {
             bool on = HotCornerHideToggle.IsChecked == true;
-            _controller.reg.WriteToRegistryRoot("HotCornerHide", on);
+            AppSettings.Default.TrySetHotCornerHide(on);
             if (on) StartHotCornerWatch(); else StopHotCornerWatch();
         }
 
@@ -697,22 +697,14 @@ namespace Racks
         private void HideDesktopIconsToggle_CheckChanged(object sender, RoutedEventArgs e)
         {
             bool hide = HideDesktopIconsToggle.IsChecked == true;
-            _controller.reg.WriteToRegistryRoot("HideDesktopIcons", hide);
+            AppSettings.Default.TrySetHideDesktopIcons(hide);
             Racks.Infrastructure.Shell.ShellOperationGateway.Default.SetDesktopIconsHidden(hide);
         }
         private void AutorunToggle_CheckChanged(object sender, RoutedEventArgs e)
         {
-            if ((bool)AutorunToggle.IsChecked!)
-            {
-
-                _controller.reg.AddToAutoRun(InstanceController.appName, Process.GetCurrentProcess().MainModule!.FileName);
-            }
-            else
-            {
-                _controller.reg.RemoveFromAutoRun(InstanceController.appName);
-                _controller.reg.RemoveFromAutoRun(InstanceController.LegacyAppName);
-            }
-            _controller.reg.WriteToRegistryRoot("startOnLogin", AutorunToggle.IsChecked);
+            bool on = (bool)AutorunToggle.IsChecked!;
+            // Adds or removes the Run entry (off also removes the legacy DeskFrame one), then saves the switch.
+            AppSettings.Default.TrySetStartOnLogin(on, on ? Process.GetCurrentProcess().MainModule!.FileName : null);
         }
         private void visitGithub_Buton_Click(object sender, RoutedEventArgs e)
         {

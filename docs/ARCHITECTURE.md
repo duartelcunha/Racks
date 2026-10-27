@@ -29,8 +29,10 @@ There is no DI container. `App.OnStartup` wires services by hand; the legacy sta
    canonicalizes, rejects protected roots, never follows reparse points blindly and writes one audit record per
    call (`%AppData%\Racks\audit.log`). `Guards/FileMutationGuardTests` fails on raw `File`/`Directory` mutations
    outside it, except those listed in `Guards/fs-allowlist.json` (the list only shrinks; after P2 it holds only Racks-owned state).
-2. **The registry is read and written through a typed schema + repository** (phase P6). A bad value is rejected,
-   logged with field, raw value, reason and fallback, and never applied.
+2. **The registry is read and written through typed access.** App-wide switches and one-shot markers (loose values under
+   `HKCU\SOFTWARE\Racks`) go through `Infrastructure/Registry/AppSettings` and `MigrationMarkers` (P5); the per-rack
+   schema + repository is P6. A bad value is never applied: the documented default is used and the field, raw value,
+   reason and fallback are written to `audit.log` once per name.
 3. **Presentation does not touch the registry, mutate files, call shell notifications or the updater.** Shell
    change notifications, desktop-icon hiding/arranging and the workspace folder go through
    `Infrastructure/Shell/ShellOperationGateway.Default`; `Guards/PresentationBoundaryTests` allows zero direct
@@ -41,7 +43,7 @@ There is no DI container. `App.OnStartup` wires services by hand; the legacy sta
    allowlist, the size and the SHA-256 all check out. See `docs/SECURITY-INVARIANTS.md` (INV-UPDATE-1).
 5. **Imports are validated before any state is written** and a bad file leaves the current layout untouched.
 
-Rules 1, 3 (shell part; registry and updater come later) and parts of 5 are enforced by tests in `test/Racks.Tests/Guards/`, which work as ratchets: the
+Rules 1, 2 (app-wide values), 3 (shell and registry parts; updater comes later) and parts of 5 are enforced by tests in `test/Racks.Tests/Guards/`, which work as ratchets: the
 numbers in `Guards/baseline.json` may only go down.
 
 ## Where things live today
@@ -51,7 +53,17 @@ numbers in `Guards/baseline.json` may only go down.
   are being split (phases P7, P8).
 - **Persistence.** `Core/InstanceController` loads/saves racks under `HKCU\SOFTWARE\Racks\Instances\<name>`;
   `Core/Instance` writes through on every property change; global switches and migration markers live under
-  `HKCU\SOFTWARE\Racks`. Layout export/import is `Util/RackLayoutIO`.
+  `HKCU\SOFTWARE\Racks` and are read and written only through `Infrastructure/Registry` (below). Layout export/import is
+  `Util/RackLayoutIO`.
+- **App-wide registry values.** `Infrastructure/Registry/` (namespace `Racks.Infrastructure.Registry`): `IRegistryRoot` (read /
+  write / delete values under one key; `HkcuRegistryRoot` is the real one and follows `InstanceController.appName`, tests
+  use a throwaway `Software\RacksTests-<guid>` key or a failing root), `AppSettings` (`Default`: start on login incl.
+  the Run entry and the legacy `DeskFrame` one, double-click to hide, ice physics (default ON), hide desktop icons, hot
+  corner, auto update, read-only blur background, `MainHwnd`) and `MigrationMarkers` (`Default`: the six one-shot
+  markers). Stored forms are unchanged (REG_SZ `True`/`False`; `MainHwnd` is REG_SZ decimal; marker `_MigratedFromDeskFrame`
+  is REG_SZ `1`). `Guards/RegistryAccessGuardTests` ratchets direct registry access in presentation files
+  (`Guards/registry-presentation-allowlist.json`; what is left is per-rack and belongs to P6/P8). Do not name a test
+  namespace `Racks.Tests.Registry`: it would shadow `Microsoft.Win32.Registry` in sibling test namespaces.
 - **Moving files.** `Infrastructure/FileSystem/FileOperationBroker` over the internal primitives `Util/SafeMove`
   (canonicalization, protected roots, cross-volume copy-then-delete) and `Util/SafeDelete` (reparse-point-aware
   tree delete, Recycle Bin), `Rack/WorkspaceReturn` (back to Desktop),
@@ -70,14 +82,14 @@ numbers in `Guards/baseline.json` may only go down.
 - **Updates.** `Util/Updater` (flow), `Util/UpdateManifest` (pure signature/hash/size checks), `Util/UpdateTrust`
   (embedded public key). `tools/RacksSigner` links the last two by path.
 - **Diagnostics.** `Util/CrashLog` (`%AppData%\Racks\crash.log`, rotated), `Infrastructure/Logging` (`audit.log`: one
-  JSON line per file operation, same rotation, local only), `Services/DiagnosticCounters`.
+  JSON line per file operation or rejected settings value, same rotation, local only), `Services/DiagnosticCounters`.
 
 ## Paths that must not move
 
 - `Racks/Util/UpdateManifest.cs`, `Racks/Util/UpdateTrust.cs`: `tools/RacksSigner/RacksSigner.csproj` and
   `tools/install-signer.ps1` / `tools/release-sign.ps1` reference them by path.
-- `HKCU\SOFTWARE\Racks\MainHwnd` and the `WM_RACKS_*` window messages: used by `tools/*E2ERunner.ps1`.
-- `Guards/baseline.json` and `Guards/fs-allowlist.json` are copied to the test output; keep their keys stable (add, don't rename).
+- `HKCU\SOFTWARE\Racks\MainHwnd` (REG_SZ, decimal; written by `AppSettings.TryPublishMainHwnd`) and the `WM_RACKS_*` window messages: used by `tools/*E2ERunner.ps1`.
+- `Guards/baseline.json`, `Guards/fs-allowlist.json` and `Guards/registry-presentation-allowlist.json` are copied to the test output; keep their keys stable (add, don't rename).
 - The `OnStartup` order in `App.xaml.cs`: `SafeSvg.Apply()` before `StartupUri`; `DesktopIconManager.Initialize()`
   before any `RackWindow` exists.
 

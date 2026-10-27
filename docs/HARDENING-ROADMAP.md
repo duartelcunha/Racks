@@ -7,8 +7,9 @@ which tests were added.
 
 ## Where we are
 
-- **Current phase:** P4 (`AutoRouteService` + `RoutingPolicy`), in review; P3 (`ShellOperationGateway`) is its base.
-- **Next step:** P5, typed `AppSettings` and `MigrationMarkers` for the root registry values. The file allowlist
+- **Current phase:** P5 (typed `AppSettings` and `MigrationMarkers`), in review; P4 (`AutoRouteService`) is its base.
+- **Next step:** P6, `RackSettingsSchema` + validator + repository for `Instances\*` and the global style defaults
+  (golden fixtures first); it then lowers `Guards/registry-presentation-allowlist.json` to zero. The file allowlist
   (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned state; its numbers only go down.
 - **Base branch:** `feature/scandi-branding-and-stability` (4 commits not yet on `main`). Phase branches are
   `hardening/pN-<name>`; each PR targets the previous phase's branch until the base lands on `main`.
@@ -26,7 +27,7 @@ which tests were added.
 | P2 | Route the remaining raw file mutations through the broker; shrink the allowlist; refuse ancestors of protected folders | in review |
 | P3 | `ShellOperationGateway` (shell change notifications, desktop icons) | in review |
 | P4 | `AutoRouteService` + `RoutingPolicy`, testable `DesktopRouter`, watcher hardening | in review |
-| P5 | Typed `AppSettings` and `MigrationMarkers` for root registry values | todo |
+| P5 | Typed `AppSettings` and `MigrationMarkers` for root registry values | in review |
 | P6 | `RackSettingsSchema` + validator + repository (golden fixtures first) | todo |
 | P7 | Decompose `MainWindow` | todo |
 | P8 | Decompose `App` (bootstrap, migrations, crash reporting, uninstall mode) | todo |
@@ -144,6 +145,33 @@ which tests were added.
   stays on the Desktop with an audit record), no user-facing message when the rule dialog rejects a pattern (the
   previous rule just stays, like the font and color settings).
 
+### P5 in short (what changed)
+
+- New `Racks/Infrastructure/Registry/`: `IRegistryRoot` (read/write/delete values under one key; `HkcuRegistryRoot` is the
+  real one and still follows `InstanceController.appName`), `AppSettings` (`Default`) and `MigrationMarkers`
+  (`Default`). Registry-using call sites moved off `RegistryHelper.*Root`: `MainWindow` (startup reads, five toggle
+  handlers, `MainHwnd`, first-run welcome), `SettingsWindow` (auto update, double-click to hide), `App` (two markers;
+  its unused `reg` field is gone), `FirstRunWelcome` (takes `MigrationMarkers`), `InstanceController` (blur read, two
+  markers, `_MigratedFromDeskFrame`). `RegistryHelper` lost `KeyExistsRoot`, `AddToAutoRun` and `RemoveFromAutoRun`;
+  the per-rack methods, `ReadKeyValueRoot` and `WriteToRegistryRoot` stay for `Instance` (P6).
+- Stored forms are byte-compatible with what the old code wrote and read (tests compare against the old helper): switches
+  are REG_SZ `True`/`False`; **`MainHwnd` is REG_SZ with the decimal handle, not a QWORD** (`SetValue(name, (long)x)`
+  stores text; the E2E runner parses it); `_MigratedFromDeskFrame` is REG_SZ `1`; the other markers REG_SZ `True`.
+  A marker counts as set when any value of that name exists.
+- Read rules: missing = default, silently; a DWORD/QWORD/binary/garbage/empty value or an unreadable registry = default plus
+  one `SettingFallback` audit record per name (field, raw value, reason, fallback) in the existing `audit.log` line
+  format (no new fields). Writes return `bool`; a failure is a `SettingWriteFailed` record each time. The UI still
+  carries on as before (for example the start-on-login switch is saved even if the Run entry failed). IcePhysics defaults ON.
+- Behavior kept on purpose: the constructor-time `IsChecked` assignments in `MainWindow` still fire their handlers and
+  re-write values at startup; `HideDesktopIcons` and `blurBackground` are nullable (null = never saved, the caller skips,
+  as `KeyExistsRoot` did).
+- Guard: `RegistryAccessGuardTests` ratchets registry references in presentation files with exact per-file counts in
+  `Guards/registry-presentation-allowlist.json` (4 files, 5 references; all per-rack or reg.exe, P6/P8). One unused
+  `RegistryHelper` local in `RackWindow` was deleted (`rackWindowTotalLines` 5935 to 5934).
+- Not done on purpose: `Instance`'s global style defaults (`ReadKeyValueRoot` list and the `WriteToRegistryRoot` for
+  default-mode racks) and all `Instances\*` code are P6; `Test-Racks.ps1` and the dev-tools e2e were not run. The
+  autorun test uses a throwaway Run key (the real one is never touched by tests).
+
 ### Follow-ups recorded by the P2 review (not implemented)
 
 - **Deliberate change to revisit:** in a virtual rack a file that is the only name of its data is no longer
@@ -186,7 +214,7 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
 - Replace source-text-reading tests with behavior tests **before** moving the code they watch: `InstanceKeyTests`, `RackLayoutImportValidationTests` (switch vs allow-list), `SafeWpfValuesTests`, `UpdaterConfigTests`/`UpdaterMessageTests`/`UpdaterReleaseScanTests`, `SafeSvgTests` (startup order).
 - `UpdateManifest.cs` and `UpdateTrust.cs` keep their paths (`tools/RacksSigner`, release scripts).
 - `release.yml` expects exactly one `Category=ReleaseGate` test.
-- `MainHwnd` registry value and `WM_RACKS_*` messages are used by `tools/*E2ERunner.ps1`.
+- `MainHwnd` registry value (REG_SZ, decimal) and `WM_RACKS_*` messages are used by `tools/*E2ERunner.ps1`.
 - Saved racks must load identically after the registry refactor (golden fixtures written by the old code).
 - Do not mass-convert `Debug.WriteLine` or `catch {}`; audit only the broker, registry, import and updater paths.
 

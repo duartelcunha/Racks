@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using Racks.Infrastructure.Registry;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,9 +27,8 @@ namespace Racks
             this.MinWidth = 200;
             _window = window;
             _controller = controller;
-            // if (_controller.reg.KeyExistsRoot("blurBackground")) blurToggle.IsChecked = (bool)_controller.reg.ReadKeyValueRoot("blurBackground");
-            if (_controller.reg.KeyExistsRoot("AutoUpdate")) AutoUpdateToggleSwitch.IsChecked = _controller.reg.ReadKeyValueRoot("AutoUpdate") as bool? ?? false;
-            if (_controller.reg.KeyExistsRoot("DoubleClickToHide")) DoubleClickToHideSwitch.IsChecked = _controller.reg.ReadKeyValueRoot("DoubleClickToHide") as bool? ?? false;
+            AutoUpdateToggleSwitch.IsChecked = AppSettings.Default.AutoUpdate;
+            DoubleClickToHideSwitch.IsChecked = AppSettings.Default.DoubleClickToHide;
 
             // Open on the monitor the user is actually on (where they clicked the tray),
             // not always the primary. Centre this window in that monitor's working area.
@@ -75,7 +75,8 @@ namespace Racks
         // which is the tray menu's "Start on login" job.
         private void AutoUpdateToggleSwitch_Click(object sender, RoutedEventArgs e)
         {
-            _controller.reg.WriteToRegistryRoot("AutoUpdate", AutoUpdateToggleSwitch.IsChecked == true);
+            // Stores only the "AutoUpdate" preference (never the Windows startup entry).
+            AppSettings.Default.TrySetAutoUpdate(AutoUpdateToggleSwitch.IsChecked == true);
         }
 
         private void ManageFrameButton_Click(object sender, RoutedEventArgs e)
@@ -193,7 +194,7 @@ namespace Racks
         }
         private void DoubleClickToHideSwitch_Click(object sender, RoutedEventArgs e)
         {
-            _controller.reg.WriteToRegistryRoot("DoubleClickToHide", DoubleClickToHideSwitch.IsChecked!);
+            AppSettings.Default.TrySetDoubleClickToHide(DoubleClickToHideSwitch.IsChecked == true);
             _window.DoubleClickToHide = (bool)DoubleClickToHideSwitch.IsChecked!;
         }
         private void ReloadAllFramesButton_Click(object sender, RoutedEventArgs e)
