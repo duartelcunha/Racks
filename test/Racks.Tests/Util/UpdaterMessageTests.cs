@@ -1,3 +1,4 @@
+using Racks.UseCases.Updates;
 using Racks.Util;
 
 namespace Racks.Tests.Util;
@@ -10,7 +11,7 @@ public class UpdaterMessageTests
 {
     public static TheoryData<string> Messages() => new()
     {
-        Updater.NotVerifiedHeader, Updater.NotVerifiedBody, Updater.NoKeyHeader, Updater.NoKeyBody,
+        UpdateMessages.NotVerifiedHeader, UpdateMessages.NotVerifiedBody, UpdateMessages.NoKeyHeader, UpdateMessages.NoKeyBody,
     };
 
     [Theory]
@@ -25,8 +26,8 @@ public class UpdaterMessageTests
     [Fact]
     public void The_not_verified_message_says_to_install_only_verified_updates()
     {
-        Assert.Contains("can't verify it", Updater.NotVerifiedBody);
-        Assert.Contains("Only install updates that Racks verifies", Updater.NotVerifiedBody);
+        Assert.Contains("can't verify it", UpdateMessages.NotVerifiedBody);
+        Assert.Contains("Only install updates that Racks verifies", UpdateMessages.NotVerifiedBody);
     }
 
     [Fact]

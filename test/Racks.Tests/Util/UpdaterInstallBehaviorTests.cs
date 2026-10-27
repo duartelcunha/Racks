@@ -1,3 +1,5 @@
+using Racks.UseCases.Updates;
+using Racks.Infrastructure.Update;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -50,7 +52,7 @@ public class UpdaterInstallBehaviorTests
         using var rig = new UpdateRig();
         rig.Build();
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         Assert.Equal(("Update blocked", Blocked + "Check for updates again."), Assert.Single(rig.Notifier.Plain));
         Assert.Empty(rig.Http.Requests);
@@ -80,7 +82,7 @@ public class UpdaterInstallBehaviorTests
             }
         };
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         string installer = Assert.Single(rig.Launcher.Started);
         string dir = Assert.Single(rig.Downloads());
@@ -91,7 +93,7 @@ public class UpdaterInstallBehaviorTests
         Assert.True(readable);
         Assert.Equal(rig.Manifest.Sha256, hashAtLaunch);
         Assert.Equal(1, rig.Shutdown.Count);
-        Assert.Equal(new[] { Updater.ReleasesApi, rig.ManifestAsset, rig.SignatureAsset, rig.InstallerAsset }, rig.Http.Requests);
+        Assert.Equal(new[] { ReleaseCatalogClient.ReleasesApi, rig.ManifestAsset, rig.SignatureAsset, rig.InstallerAsset }, rig.Http.Requests);
         // The launcher is the only thing that used the file; afterwards the handle is gone (the installer owns it).
         File.Delete(installer);
         Assert.Equal(100, rig.Notifier.ProgressValues.Last());
@@ -105,7 +107,7 @@ public class UpdaterInstallBehaviorTests
         string? dir = null;
         rig.Launcher.OnStart = path => dir = Path.GetDirectoryName(path);
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         var acl = new DirectoryInfo(dir!).GetAccessControl();
         Assert.True(acl.AreAccessRulesProtected);
@@ -116,12 +118,11 @@ public class UpdaterInstallBehaviorTests
     }
 
     [Fact]
-    public async Task The_install_download_identifies_itself_with_the_release_tag()
+    public async Task The_install_download_identifies_itself_with_the_running_version_like_the_check()
     {
-        // Characterization of today's behavior (the tag, not the running version): P10b changes it.
         using var rig = await Offered();
-        await rig.Updater.InstallAsync();
-        Assert.Equal("Racks/v1.5.0", rig.Http.UserAgents.Last());
+        await rig.Service.InstallAsync();
+        Assert.Equal("Racks/" + UpdateRig.Running, rig.Http.UserAgents.Last());
     }
 
     // ---- integrity: size and SHA-256 -------------------------------------------------------
@@ -132,7 +133,7 @@ public class UpdaterInstallBehaviorTests
         using var rig = await Offered();
         rig.Http.Route(rig.InstallerAsset, Tampered(rig.SignedInstaller));
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         AssertRefused(rig, "Update blocked", Blocked + UpdateVerifier.Describe(UpdateCheck.HashMismatch));
     }
@@ -143,7 +144,7 @@ public class UpdaterInstallBehaviorTests
         using var rig = await Offered();
         rig.Http.Route(rig.InstallerAsset, rig.SignedInstaller.Take(rig.SignedInstaller.Length - 1).ToArray());
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         AssertRefused(rig, "Update blocked", Blocked + UpdateVerifier.Describe(UpdateCheck.SizeMismatch));
     }
@@ -154,7 +155,7 @@ public class UpdaterInstallBehaviorTests
         using var rig = await Offered();
         rig.Http.Route(rig.InstallerAsset, rig.SignedInstaller.Append((byte)0).ToArray());
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         AssertRefused(rig, "Update blocked", Blocked + UpdateVerifier.Describe(UpdateCheck.SizeMismatch));
     }
@@ -166,7 +167,7 @@ public class UpdaterInstallBehaviorTests
         var endless = new EndlessContent();
         rig.Http.Route(rig.InstallerAsset, _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = endless });
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         AssertRefused(rig, "Update blocked", Blocked + UpdateVerifier.Describe(UpdateCheck.SizeMismatch));
         // Never more than one read buffer past the signed size is requested from the server.
@@ -179,7 +180,7 @@ public class UpdaterInstallBehaviorTests
         using var rig = await Offered();
         rig.Http.Route(rig.InstallerAsset, Array.Empty<byte>());
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         AssertRefused(rig, "Update blocked", Blocked + UpdateVerifier.Describe(UpdateCheck.SizeMismatch));
     }
@@ -192,7 +193,7 @@ public class UpdaterInstallBehaviorTests
         using var rig = await Offered();
         rig.Http.Route(rig.InstallerAsset, _ => new HttpResponseMessage(HttpStatusCode.NotFound));
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         var last = rig.Notifier.Plain.Last();
         Assert.Equal("Update failed", last.Header);
@@ -208,7 +209,7 @@ public class UpdaterInstallBehaviorTests
         using var rig = await Offered();
         rig.Http.Route(rig.InstallerAsset, _ => throw new HttpRequestException("connection reset"));
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         Assert.Equal(("Update failed", "connection reset"), rig.Notifier.Plain.Last());
         Assert.Empty(rig.Launcher.Started);
@@ -221,7 +222,7 @@ public class UpdaterInstallBehaviorTests
         using var rig = await Offered();
         rig.Launcher.Throws = new IOException("blocked by policy");
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         Assert.Equal(("Update failed to start", "blocked by policy"), rig.Notifier.Plain.Last());
         Assert.Single(rig.Launcher.Started);
@@ -242,7 +243,7 @@ public class UpdaterInstallBehaviorTests
         rig.Http.Route(rig.InstallerAsset, _ => Redirect(CdnUrl));
         rig.Http.Route(CdnUrl, Tampered(rig.SignedInstaller));
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         Assert.Contains(CdnUrl, rig.Http.Requests);
         AssertRefused(rig, "Update blocked", Blocked + UpdateVerifier.Describe(UpdateCheck.HashMismatch));
@@ -255,7 +256,7 @@ public class UpdaterInstallBehaviorTests
         rig.Http.Route(rig.InstallerAsset, _ => Redirect(CdnUrl));
         rig.Http.Route(CdnUrl, rig.SignedInstaller);
 
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         Assert.Contains(CdnUrl, rig.Http.Requests);
         Assert.Single(rig.Launcher.Started);

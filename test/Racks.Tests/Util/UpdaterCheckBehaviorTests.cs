@@ -1,3 +1,5 @@
+using Racks.UseCases.Updates;
+using Racks.Infrastructure.Update;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -25,7 +27,7 @@ public class UpdaterCheckBehaviorTests
     private static void AssertNotVerifiedMessage(UpdateRig rig)
     {
         var plain = Assert.Single(rig.Notifier.Plain);
-        Assert.Equal((Updater.NotVerifiedHeader, Updater.NotVerifiedBody), plain);
+        Assert.Equal((UpdateMessages.NotVerifiedHeader, UpdateMessages.NotVerifiedBody), plain);
         Assert.DoesNotMatch(@"\d", rig.Notifier.AllText);
         foreach (var banned in new[] { "http", "github", "releases page", "download", "www." })
             Assert.DoesNotContain(banned, rig.Notifier.AllText, StringComparison.OrdinalIgnoreCase);
@@ -33,7 +35,7 @@ public class UpdaterCheckBehaviorTests
 
     private static async Task AssertInstallRefusedAfterAsync(UpdateRig rig)
     {
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
         Assert.Contains(("Update blocked", "This update can't be verified, so Racks won't install it. Check for updates again."), rig.Notifier.Plain);
         Assert.Empty(rig.Launcher.Started);
         Assert.Empty(rig.Downloads());
@@ -51,10 +53,10 @@ public class UpdaterCheckBehaviorTests
         rig.Build(publicKey: key);
         rig.Serve();
 
-        await rig.Updater.CheckAsync(Updater.ReleasesApi, showToastIfNoUpdate: true);
+        await rig.Service.CheckAsync(ReleaseCatalogClient.ReleasesApi, showToastIfNoUpdate: true);
 
         Assert.Empty(rig.Http.Requests);
-        Assert.Equal((Updater.NoKeyHeader, Updater.NoKeyBody), Assert.Single(rig.Notifier.Plain));
+        Assert.Equal((UpdateMessages.NoKeyHeader, UpdateMessages.NoKeyBody), Assert.Single(rig.Notifier.Plain));
         Assert.Empty(rig.Notifier.Offers);
     }
 
@@ -64,7 +66,7 @@ public class UpdaterCheckBehaviorTests
         using var rig = new UpdateRig();
         rig.Build(publicKey: UpdateTrust.Placeholder);
 
-        await rig.Updater.CheckAsync(Updater.ReleasesApi, showToastIfNoUpdate: false);
+        await rig.Service.CheckAsync(ReleaseCatalogClient.ReleasesApi, showToastIfNoUpdate: false);
 
         Assert.Empty(rig.Http.Requests);
         Assert.Empty(rig.Notifier.Messages);
@@ -80,7 +82,7 @@ public class UpdaterCheckBehaviorTests
 
         await rig.CheckAsync();
 
-        Assert.Equal(new[] { Updater.ReleasesApi, rig.ManifestAsset, rig.SignatureAsset }, rig.Http.Requests);
+        Assert.Equal(new[] { ReleaseCatalogClient.ReleasesApi, rig.ManifestAsset, rig.SignatureAsset }, rig.Http.Requests);
         Assert.All(rig.Http.UserAgents, ua => Assert.Equal("Racks/" + UpdateRig.Running, ua));
         Assert.Empty(rig.Downloads());
     }
@@ -145,7 +147,7 @@ public class UpdaterCheckBehaviorTests
         await rig.CheckAsync();
 
         Assert.Equal(("You are up to date!", "There is no available update."), Assert.Single(rig.Notifier.Plain));
-        Assert.Equal(new[] { Updater.ReleasesApi }, rig.Http.Requests);
+        Assert.Equal(new[] { ReleaseCatalogClient.ReleasesApi }, rig.Http.Requests);
         AssertNotOffered(rig);
     }
 
@@ -240,7 +242,7 @@ public class UpdaterCheckBehaviorTests
 
         rig.SigningKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);   // the same release now carries a bad signature
         await rig.CheckAsync();
-        await rig.Updater.InstallAsync();
+        await rig.Service.InstallAsync();
 
         Assert.Empty(rig.Launcher.Started);
         Assert.Empty(rig.Downloads());
@@ -290,7 +292,7 @@ public class UpdaterCheckBehaviorTests
         await rig.CheckAsync();
 
         // Only the release feed was read: no URL taken from the JSON was fetched.
-        Assert.Equal(new[] { Updater.ReleasesApi }, rig.Http.Requests);
+        Assert.Equal(new[] { ReleaseCatalogClient.ReleasesApi }, rig.Http.Requests);
         AssertNotVerifiedMessage(rig);
         AssertNotOffered(rig);
         await AssertInstallRefusedAfterAsync(rig);
@@ -344,9 +346,9 @@ public class UpdaterCheckBehaviorTests
         {
             using var rig = new UpdateRig();
             rig.Build();
-            rig.Http.Route(Updater.ReleasesApi, _ => throw new HttpRequestException("offline"));
+            rig.Http.Route(ReleaseCatalogClient.ReleasesApi, _ => throw new HttpRequestException("offline"));
 
-            await rig.Updater.CheckAsync(Updater.ReleasesApi, asked);
+            await rig.Service.CheckAsync(ReleaseCatalogClient.ReleasesApi, asked);
 
             if (asked) Assert.Equal(("Failed to check for updates.", "offline"), Assert.Single(rig.Notifier.Plain));
             else Assert.Empty(rig.Notifier.Messages);
@@ -359,9 +361,9 @@ public class UpdaterCheckBehaviorTests
     {
         using var rig = new UpdateRig();
         rig.Build();
-        rig.Http.Route(Updater.ReleasesApi, Encoding.UTF8.GetBytes("<html>rate limited</html>"));
+        rig.Http.Route(ReleaseCatalogClient.ReleasesApi, Encoding.UTF8.GetBytes("<html>rate limited</html>"));
 
-        await rig.Updater.CheckAsync(Updater.ReleasesApi, true);
+        await rig.Service.CheckAsync(ReleaseCatalogClient.ReleasesApi, true);
 
         Assert.Equal("Failed to check for updates.", Assert.Single(rig.Notifier.Plain).Header);
         AssertNotOffered(rig);
@@ -372,9 +374,9 @@ public class UpdaterCheckBehaviorTests
     {
         using var rig = new UpdateRig();
         rig.Build();
-        rig.Http.Route(Updater.ReleasesApi, Encoding.UTF8.GetBytes("{\"message\":\"API rate limit exceeded\"}"));
+        rig.Http.Route(ReleaseCatalogClient.ReleasesApi, Encoding.UTF8.GetBytes("{\"message\":\"API rate limit exceeded\"}"));
 
-        await rig.Updater.CheckAsync(Updater.ReleasesApi, true);
+        await rig.Service.CheckAsync(ReleaseCatalogClient.ReleasesApi, true);
 
         Assert.Equal(("You are up to date!", "There is no available update."), Assert.Single(rig.Notifier.Plain));
         AssertNotOffered(rig);

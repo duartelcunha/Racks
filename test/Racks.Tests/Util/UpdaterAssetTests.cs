@@ -1,3 +1,4 @@
+using Racks.UseCases.Updates;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Racks.Util;
@@ -30,7 +31,7 @@ public class UpdaterAssetTests
     [Fact]
     public void Picks_the_installer_manifest_and_signature_by_exact_name()
     {
-        Assert.True(Updater.TrySelectSignedRelease(Release(SignedSet()), "v9.9.9", out var a));
+        Assert.True(ReleaseManifestValidator.TrySelectSignedRelease(Release(SignedSet()), "v9.9.9", out var a));
         Assert.Equal("9.9.9", a.Version);
         Assert.Equal(Good, a.InstallerUrl);
         Assert.Equal(Base + "Racks-Setup-9.9.9.manifest.json", a.ManifestUrl);
@@ -44,14 +45,14 @@ public class UpdaterAssetTests
     public void A_release_missing_any_signed_asset_is_not_offered(string missing)
     {
         var set = SignedSet().Where(a => a.Item1 != missing).ToArray();
-        Assert.False(Updater.TrySelectSignedRelease(Release(set), "v9.9.9", out _));
+        Assert.False(ReleaseManifestValidator.TrySelectSignedRelease(Release(set), "v9.9.9", out _));
     }
 
     [Fact]
     public void Assets_of_another_version_do_not_count()
     {
         // The 1.0.0 installer and its manifest sit in the v9.9.9 release: not this release's assets.
-        Assert.False(Updater.TrySelectSignedRelease(Release(SignedSet("1.0.0")), "v9.9.9", out _));
+        Assert.False(ReleaseManifestValidator.TrySelectSignedRelease(Release(SignedSet("1.0.0")), "v9.9.9", out _));
     }
 
     [Theory]
@@ -61,7 +62,7 @@ public class UpdaterAssetTests
     [InlineData("v9.9.9/../x")]
     [InlineData("")]
     public void A_tag_that_is_not_a_plain_version_is_not_offered(string tag)
-        => Assert.False(Updater.TrySelectSignedRelease(Release(SignedSet()), tag, out _));
+        => Assert.False(ReleaseManifestValidator.TrySelectSignedRelease(Release(SignedSet()), tag, out _));
 
     [Theory]
     [InlineData("http://github.com/duartelcunha/Racks/releases/download/v1/Racks-Setup-1.exe")]       // not HTTPS
@@ -71,8 +72,8 @@ public class UpdaterAssetTests
     [InlineData("not a url")]
     public void Rejects_untrusted_download_urls(string url)
     {
-        Assert.False(Updater.IsTrustedDownloadUrl(url));
-        Assert.False(Updater.TryFindAsset(Release(("Racks-Setup-1.exe", url, 10)), "Racks-Setup-1.exe", out _));
+        Assert.False(ReleaseManifestValidator.IsTrustedDownloadUrl(url));
+        Assert.False(ReleaseManifestValidator.TryFindAsset(Release(("Racks-Setup-1.exe", url, 10)), "Racks-Setup-1.exe", out _));
     }
 
     [Fact]
@@ -80,7 +81,7 @@ public class UpdaterAssetTests
     {
         // Name says installer, URL points at another file of the release.
         var root = Release(("Racks-Setup-9.9.9.exe", Base + "Racks-portable-9.9.9.zip", 10));
-        Assert.False(Updater.TryFindAsset(root, "Racks-Setup-9.9.9.exe", out _));
+        Assert.False(ReleaseManifestValidator.TryFindAsset(root, "Racks-Setup-9.9.9.exe", out _));
     }
 
     [Fact]
@@ -88,20 +89,20 @@ public class UpdaterAssetTests
     {
         var root = Release(("racks-setup-9.9.9.exe", Base + "racks-setup-9.9.9.exe", 10),
                            ("setup.exe", Good, 10));
-        Assert.False(Updater.TryFindAsset(root, "Racks-Setup-9.9.9.exe", out _));
+        Assert.False(ReleaseManifestValidator.TryFindAsset(root, "Racks-Setup-9.9.9.exe", out _));
     }
 
     [Fact]
     public void A_bad_first_asset_does_not_hide_a_good_later_one()
     {
         var root = Release(("Racks-Setup-9.9.9.exe", "https://evil.example/x.exe", 1), ("Racks-Setup-9.9.9.exe", Good, 2));
-        Assert.True(Updater.TryFindAsset(root, "Racks-Setup-9.9.9.exe", out var url));
+        Assert.True(ReleaseManifestValidator.TryFindAsset(root, "Racks-Setup-9.9.9.exe", out var url));
         Assert.Equal(Good, url);
     }
 
     [Fact]
     public void No_assets_property_means_no_update()
-        => Assert.False(Updater.TrySelectSignedRelease(JsonSerializer.SerializeToElement(new { tag_name = "v1" }), "v9.9.9", out _));
+        => Assert.False(ReleaseManifestValidator.TrySelectSignedRelease(JsonSerializer.SerializeToElement(new { tag_name = "v1" }), "v9.9.9", out _));
 
     [Fact]
     public void With_the_placeholder_key_no_update_is_ever_applied()
@@ -113,7 +114,7 @@ public class UpdaterAssetTests
         var manifest = UpdateManifest.ForInstaller("9.9.9", SHA256.HashData(installer), installer.Length).ToCanonicalBytes();
         string sig = UpdateSignature.Sign(manifest, key);
 
-        var result = Updater.VerifyReleaseManifest(manifest, sig, "v9.9.9", "1.0.0.0", out var verified);
+        var result = ReleaseManifestValidator.VerifyReleaseManifest(manifest, sig, "v9.9.9", "1.0.0.0", out var verified);
 
         Assert.Null(verified);
         if (!UpdateTrust.IsConfigured(UpdateTrust.PublicKeySpkiBase64))

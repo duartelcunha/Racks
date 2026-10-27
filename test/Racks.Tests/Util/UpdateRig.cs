@@ -4,6 +4,9 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Racks.Infrastructure.Update;
+using Racks.Tests.Fakes;
+using Racks.UseCases.Updates;
 using Racks.Util;
 
 namespace Racks.Tests.Util;
@@ -16,6 +19,8 @@ internal sealed class FakeNotifier : IUpdateNotifier
     private readonly List<(string Kind, string Header, string Body)> _messages = new();
     public int ProgressStarted;
     public int ProgressHidden;
+    public System.Collections.Concurrent.ConcurrentQueue<int> Threads { get; } = new();
+    public Exception? Throws;                // every call throws this (a toast that fails)
     public List<int> ProgressValues { get; } = new();
 
     public IReadOnlyList<(string Kind, string Header, string Body)> Messages { get { lock (_messages) return _messages.ToList(); } }
@@ -23,11 +28,13 @@ internal sealed class FakeNotifier : IUpdateNotifier
     public IReadOnlyList<(string Header, string Body)> Offers => Messages.Where(m => m.Kind == "offer").Select(m => (m.Header, m.Body)).ToList();
     public string AllText => string.Join("\n", Messages.Select(m => m.Header + "\n" + m.Body));
 
-    public void Show(string header, string body) { lock (_messages) _messages.Add(("toast", header, body)); }
-    public void ShowOffer(string header, string body) { lock (_messages) _messages.Add(("offer", header, body)); }
+    public void Show(string header, string body) { Threads.Enqueue(Environment.CurrentManagedThreadId); lock (_messages) _messages.Add(("toast", header, body)); if (Throws != null) throw Throws; }
+    public void ShowOffer(string header, string body) { Threads.Enqueue(Environment.CurrentManagedThreadId); lock (_messages) _messages.Add(("offer", header, body)); if (Throws != null) throw Throws; }
 
     public IUpdateProgress StartProgress(string header)
     {
+        Threads.Enqueue(Environment.CurrentManagedThreadId);
+        if (Throws != null) throw Throws;
         Interlocked.Increment(ref ProgressStarted);
         lock (_messages) _messages.Add(("progress", header, ""));
         return new Progress(this);
@@ -35,8 +42,8 @@ internal sealed class FakeNotifier : IUpdateNotifier
 
     private sealed class Progress(FakeNotifier owner) : IUpdateProgress
     {
-        public void Report(int percent) { lock (owner.ProgressValues) owner.ProgressValues.Add(percent); }
-        public void Hide() => Interlocked.Increment(ref owner.ProgressHidden);
+        public void Report(int percent) { owner.Threads.Enqueue(Environment.CurrentManagedThreadId); lock (owner.ProgressValues) owner.ProgressValues.Add(percent); }
+        public void Hide() { owner.Threads.Enqueue(Environment.CurrentManagedThreadId); Interlocked.Increment(ref owner.ProgressHidden); }
     }
 }
 
@@ -45,9 +52,11 @@ internal sealed class FakeLauncher : IInstallerLauncher
     public List<string> Started { get; } = new();
     public Action<string>? OnStart;
     public Exception? Throws;
+    public System.Collections.Concurrent.ConcurrentQueue<int> Threads { get; } = new();
 
     public void Start(string installerPath)
     {
+        Threads.Enqueue(Environment.CurrentManagedThreadId);
         lock (Started) Started.Add(installerPath);
         OnStart?.Invoke(installerPath);
         if (Throws != null) throw Throws;
@@ -57,7 +66,8 @@ internal sealed class FakeLauncher : IInstallerLauncher
 internal sealed class FakeShutdown : IAppShutdown
 {
     public int Count;
-    public void Shutdown() => Interlocked.Increment(ref Count);
+    public System.Collections.Concurrent.ConcurrentQueue<int> Threads { get; } = new();
+    public void Shutdown() { Threads.Enqueue(Environment.CurrentManagedThreadId); Interlocked.Increment(ref Count); }
 }
 
 // Answers by exact URL. Anything not registered is a 404 that is also recorded, so a test can assert
@@ -73,20 +83,26 @@ internal sealed class FakeHttp : HttpMessageHandler
     public IReadOnlyList<string> UserAgents { get { lock (_gate) return _userAgents.ToList(); } }
 
     public void Route(string url, Func<HttpRequestMessage, HttpResponseMessage> respond) { lock (_gate) _routes[url] = respond; }
+    private readonly HashSet<string> _hang = new(StringComparer.Ordinal);
+    // Requests for this URL never answer until cancelled.
+    public void Hang(string url) { lock (_gate) _hang.Add(url); }
     public void Route(string url, byte[] body) => Route(url, _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body) });
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         string url = request.RequestUri!.AbsoluteUri;
         Func<HttpRequestMessage, HttpResponseMessage>? route;
+        bool hang;
         lock (_gate)
         {
             _requests.Add(url);
             _userAgents.Add(request.Headers.UserAgent.ToString());
             _routes.TryGetValue(url, out route);
+            hang = _hang.Contains(url);
         }
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(route != null ? route(request) : new HttpResponseMessage(HttpStatusCode.NotFound));
+        if (hang) await Task.Delay(Timeout.Infinite, cancellationToken);
+        return route != null ? route(request) : new HttpResponseMessage(HttpStatusCode.NotFound);
     }
 }
 
@@ -165,9 +181,8 @@ internal sealed class UpdateRig : IDisposable
     public string? ManifestUrl;
     public string? SignatureUrl;
 
-    // The bytes: what the manifest was made from, and what the "server" serves.
+    // The bytes: what the manifest was made from, and what the "server" serves (tests re-route the installer URL on rig.Http).
     public byte[] SignedInstaller = Enumerable.Range(0, 5000).Select(i => (byte)(i * 31 + 7)).ToArray();
-    public byte[]? ServedInstaller;    // default: SignedInstaller
     public UpdateManifest? ManifestOverride;
     public byte[]? ManifestBytesOverride;   // served and signed exactly as given
     public byte[]? SignatureBytesOverride;  // served exactly as given
@@ -182,7 +197,11 @@ internal sealed class UpdateRig : IDisposable
         Directory.CreateDirectory(TempRoot);
     }
 
-    public Updater Updater { get; private set; } = null!;
+    public UpdateService Service { get; private set; } = null!;
+    public ReleaseCatalogClient Catalog { get; private set; } = null!;
+    public InstallerExecutor Executor { get; private set; } = null!;
+    public readonly RecordingAuditSink Audit = new();
+    public TimeSpan? CatalogTimeout, AssetTimeout;
     public string Base => Repo + Tag + "/";
     public string InstallerAsset => InstallerUrl ?? Base + UpdateManifest.InstallerName(ManifestVersion);
     public string ManifestAsset => ManifestUrl ?? Base + UpdateManifest.ManifestName(ManifestVersion);
@@ -191,11 +210,13 @@ internal sealed class UpdateRig : IDisposable
     public UpdateManifest Manifest => ManifestOverride
         ?? UpdateManifest.ForInstaller(ManifestVersion, SHA256.HashData(SignedInstaller), SignedInstaller.Length);
 
-    public Updater Build(string? runningVersion = null, string? publicKey = null)
+    public UpdateService Build(string? runningVersion = null, string? publicKey = null, Func<string>? versionSource = null)
     {
-        Updater = new Updater(Notifier, Launcher, Shutdown, TempRoot, HandlerOverride ?? Http, publicKey ?? PublicKey,
-            () => runningVersion ?? Running);
-        return Updater;
+        var factory = new UpdateHttpClientFactory(HandlerOverride ?? Http);
+        Catalog = new ReleaseCatalogClient(factory, CatalogTimeout, AssetTimeout);
+        Executor = new InstallerExecutor(factory, Launcher, Shutdown, TempRoot);
+        Service = new UpdateService(Notifier, Catalog, Executor, Audit, publicKey ?? PublicKey, versionSource ?? (() => runningVersion ?? Running));
+        return Service;
     }
 
     public string CatalogJson()
@@ -220,20 +241,17 @@ internal sealed class UpdateRig : IDisposable
         byte[] sig = SignatureBytesOverride ?? Encoding.ASCII.GetBytes(UpdateSignature.Sign(manifestBytes, SigningKey ?? Key));
         Http.Route(ManifestAsset, manifestBytes);
         Http.Route(SignatureAsset, sig);
-        Http.Route(InstallerAsset, ServedInstaller ?? SignedInstaller);
+        Http.Route(InstallerAsset, SignedInstaller);
     }
 
-    public Func<HttpRequestMessage, HttpResponseMessage>? InstallerAssetRoute;
-
-    public const string Updater_ReleasesApi = Racks.Updater.ReleasesApi;
+    public const string Updater_ReleasesApi = ReleaseCatalogClient.ReleasesApi;
 
     // Check (with toasts, as the user's own click) and, when it offered, the pending update is ready to install.
     public async Task CheckAsync(bool showToastIfNoUpdate = true)
     {
         Serve();
-        if (InstallerAssetRoute != null) Http.Route(InstallerAsset, InstallerAssetRoute);
         foreach (var (url, route) in RouteOverrides) Http.Route(url, route);
-        await Updater.CheckAsync(Updater_ReleasesApi, showToastIfNoUpdate);
+        await Service.CheckAsync(Updater_ReleasesApi, showToastIfNoUpdate);
     }
 
     public string[] Downloads() => Directory.Exists(TempRoot)
@@ -245,5 +263,46 @@ internal sealed class UpdateRig : IDisposable
         Key.Dispose();
         SigningKey?.Dispose();
         try { if (Directory.Exists(TempRoot)) Directory.Delete(TempRoot, recursive: true); } catch { }
+    }
+}
+
+// Never answers until the request is cancelled (a server that accepted the connection and went silent).
+internal sealed class HangingHandler : HttpMessageHandler
+{
+    public int Requests;
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref Requests);
+        await Task.Delay(Timeout.Infinite, cancellationToken);
+        throw new InvalidOperationException("unreachable");
+    }
+}
+
+// Sends the given bytes and then goes silent until the read is cancelled (a download that stalls).
+internal sealed class StallingContent(byte[] firstBytes) : HttpContent
+{
+    protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context) => throw new NotSupportedException();
+    protected override bool TryComputeLength(out long length) { length = 0; return false; }
+    protected override Task<Stream> CreateContentReadStreamAsync() => Task.FromResult<Stream>(new Slow(firstBytes));
+
+    private sealed class Slow(byte[] first) : Stream
+    {
+        private bool _sent;
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (!_sent) { _sent = true; first.CopyTo(buffer); return first.Length; }
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

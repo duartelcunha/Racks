@@ -1,3 +1,4 @@
+using Racks.Infrastructure.Update;
 using System.IO;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -9,7 +10,7 @@ public class UpdaterTempDirTests
     [Fact]
     public void Update_download_folder_is_fresh_and_owner_only()
     {
-        string dir = Updater.CreatePrivateTempDir();
+        string dir = InstallerExecutor.CreatePrivateTempDir();
         try
         {
             Assert.StartsWith(Path.Combine(Path.GetTempPath(), "Racks-update-"), dir);
@@ -22,15 +23,15 @@ public class UpdaterTempDirTests
             Assert.NotEmpty(rules);
             Assert.All(rules, r => Assert.Equal(me, r.IdentityReference));
 
-            string other = Updater.CreatePrivateTempDir();
-            Updater.TryDeleteDir(other);
+            string other = InstallerExecutor.CreatePrivateTempDir();
+            UpdateCleanupService.TryDeleteDir(other);
             Assert.NotEqual(dir, other);
 
             File.WriteAllBytes(Path.Combine(dir, "Racks-Setup-9.9.9.exe"), new byte[] { 1 });
         }
         finally
         {
-            Updater.TryDeleteDir(dir);
+            UpdateCleanupService.TryDeleteDir(dir);
         }
         Assert.False(Directory.Exists(dir));
     }
@@ -61,7 +62,7 @@ public class UpdaterTempDirTests
             string junction = Path.Combine(root, "Racks-update-" + Guid.NewGuid().ToString("N"));
             Assert.True(Racks.Util.JunctionHelper.TryCreate(target, junction), "test setup: junction");
 
-            int removed = Updater.CleanupOldUpdateDirs(root);
+            int removed = UpdateCleanupService.CleanupOldUpdateDirs(root, minAge: TimeSpan.Zero);
 
             Assert.Equal(2, removed);
             Assert.False(Directory.Exists(old1));
@@ -84,5 +85,68 @@ public class UpdaterTempDirTests
 
     [Fact]
     public void Cleanup_of_a_missing_temp_folder_does_nothing()
-        => Assert.Equal(0, Updater.CleanupOldUpdateDirs(Path.Combine(Path.GetTempPath(), "racks-missing-" + Guid.NewGuid().ToString("N"))));
+        => Assert.Equal(0, UpdateCleanupService.CleanupOldUpdateDirs(Path.Combine(Path.GetTempPath(), "racks-missing-" + Guid.NewGuid().ToString("N"))));
+
+    private static string NewRoot()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "racks-cleanup-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        return root;
+    }
+
+    [Fact]
+    public void A_download_folder_that_was_just_created_is_not_cleaned_up_from_under_the_download()
+    {
+        string root = NewRoot();
+        try
+        {
+            // The window the ledger found: the folder exists (empty) before the installer file is created in it.
+            string dir = InstallerExecutor.CreatePrivateTempDir(root);
+
+            Assert.Equal(0, UpdateCleanupService.CleanupOldUpdateDirs(root));   // default minimum age
+
+            Assert.True(Directory.Exists(dir));
+            using var file = new FileStream(Path.Combine(dir, "Racks-Setup-9.9.9.exe"), FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            file.WriteByte(1);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void A_folder_is_cleaned_up_once_it_is_older_than_the_minimum_age()
+    {
+        string root = NewRoot();
+        try
+        {
+            string young = InstallerExecutor.CreatePrivateTempDir(root);
+            File.WriteAllBytes(Path.Combine(young, "Racks-Setup-9.9.9.exe"), new byte[] { 1 });
+
+            Assert.Equal(0, UpdateCleanupService.CleanupOldUpdateDirs(root, nowUtc: DateTime.UtcNow.AddMinutes(9)));
+            Assert.True(Directory.Exists(young));
+
+            Assert.Equal(1, UpdateCleanupService.CleanupOldUpdateDirs(root, nowUtc: DateTime.UtcNow.AddMinutes(11)));
+            Assert.False(Directory.Exists(young));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void A_folder_whose_installer_is_still_open_is_left_alone_however_old()
+    {
+        string root = NewRoot();
+        try
+        {
+            string dir = InstallerExecutor.CreatePrivateTempDir(root);
+            string exe = Path.Combine(dir, "Racks-Setup-9.9.9.exe");
+            using (var running = new FileStream(exe, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                running.WriteByte(1);
+                Assert.Equal(0, UpdateCleanupService.CleanupOldUpdateDirs(root, TimeSpan.Zero));
+                Assert.True(File.Exists(exe));
+            }
+            Assert.Equal(1, UpdateCleanupService.CleanupOldUpdateDirs(root, TimeSpan.Zero));   // once it is closed it goes
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
 }
+

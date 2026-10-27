@@ -7,9 +7,9 @@ which tests were added.
 
 ## Where we are
 
-- **Current phase:** P9 (layout import/export: parser, validator, policy, executor, exporter, dialogs), in review; P8 (`App`)
-  is its base.
-- **Next step:** P10, `UpdateService` split (behavior tests first; the update path stays fail-closed).
+- **Current phase:** P10 (update path split: catalog client, manifest validator, installer executor, cleanup, service), in
+  review; P9 (layout import/export) is its base.
+- **Next step:** P11, adversarial test gaps and the Windows regression pass.
   `MainWindow._controller` is still a public static (20 uses, of which `InstanceController.RefreshMirror` is the only
   one outside presentation). The file allowlist (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned
   state; its numbers only go down.
@@ -34,7 +34,7 @@ which tests were added.
 | P7 | Decompose `MainWindow` (Magic Organize, hot corner, double-click hide, hotkeys, tray switches, update glue, display debounce) | in review |
 | P8 | Decompose `App` (bootstrap, migrations, crash reporting, uninstall mode) | in review |
 | P9 | Layout import/export: parser, validator, policy, executor | in review |
-| P10 | `UpdateService` split (behavior tests first; stays fail-closed) | todo |
+| P10 | `UpdateService` split (behavior tests first; stays fail-closed) | in review |
 | P11 | Adversarial test gaps and Windows regression pass | todo |
 | P12 | Dependency notes/updates and dead code | todo |
 | P13 | Final docs: `SECURITY-INVARIANTS.md`, `ARCHITECTURE.md`, README, CHANGELOG | todo |
@@ -370,6 +370,36 @@ which tests were added.
 
 Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (done).
 
+
+### P10 in short (what changed)
+
+- `Util/Updater.cs` (a static class with the toasts, the HTTP calls, the selection rules, the download and the process start in one
+  file, with `InstallUpdate` untested) is gone. In its place: `UseCases/Updates/` (`UpdateService`, `ReleaseManifestValidator`,
+  `UpdateMessages`, `UpdateAudit`, the four ports) and `Infrastructure/Update/` (`ReleaseCatalogClient`, `InstallerExecutor`,
+  `UpdateCleanupService`, `UpdateHttpClientFactory`, `ToastUpdateNotifier`, `ShellInstallerLauncher`, `WpfAppShutdown`,
+  `UpdateComposition`). `UpdateManifest.cs` and `UpdateTrust.cs` are untouched (RacksSigner links them by path); tools and
+  workflows are untouched; the `ReleaseGate` test is untouched.
+- Two commits: (a) seams (the notifier, launcher, shutdown, temp root, HTTP handler, key and version injected, production wiring
+  the same) plus behavior tests for the whole check/download/verify/launch path, which replace the three tests that grepped
+  `Updater.cs`; (b) the split. The behavior tests ran green on both sides of the split.
+- Risk down: the release feed is now read with a 2 MiB cap, a 30 s timeout and a cancellation token, from this repository's URL only;
+  every installer read has a 30 s timeout; the cleanup no longer deletes the empty folder of a download that is just starting (it skips
+  folders younger than 10 minutes and ones with an open file); two installs cannot run at once; the pending offer is read and
+  written under a lock and is used up when the installer starts; a toast that throws can no longer crash the dispatcher or stop
+  an update; the running-version read is inside the try; the install download sends the running version as User-Agent (it sent the
+  release tag); every check/install failure or refusal is an audit record (`UpdateCheckFailed`, `UpdateInstallRefused`,
+  `UpdateInstallFailed`, `UpdateInstallStarted`) with URLs stripped of query strings.
+- Unchanged on purpose: every user-visible text, the order of the checks, the redirect behavior (documented in INV-UPDATE-1),
+  the hashing on the calling thread, and the toast arguments (`action=install_update`).
+- Namespaces: `Racks.UseCases.Updates` (the existing folder name) and `Racks.Infrastructure.Update` (the name already in
+  `ARCHITECTURE.md`).
+- Tests: 1536 to 1651 passed (4 skipped): a fake HTTP handler, notifier, launcher and shutdown run the whole check/download/verify/launch path
+  (`UpdateRig`); new files `UpdaterCheckBehaviorTests`, `UpdaterInstallBehaviorTests`, `ReleaseCatalogClientTests`, `InstallerExecutorTests`,
+  `UpdateServiceTests`, plus cleanup tests in `UpdaterTempDirTests`. `Guards/fs-allowlist.json`: `Util/Updater.cs` 3 became
+  `Infrastructure/Update/InstallerExecutor.cs` 1 and `UpdateCleanupService.cs` 2.
+- Not done on purpose: no real download, no real installer and no real GitHub call were made (the tests use a fake handler, a temp
+  folder and a fake launcher); `Test-Racks.ps1` and the dev-tools e2e were not run.
+
 ## Findings that drive the order
 
 1. Inline rename (`RackWindow.Items.cs`) builds the target with `Path.Combine(dir, typedText)` and no validation: a name with `\` or a rooted path moves the file elsewhere.
@@ -377,7 +407,7 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
 3. Registry load (`InstanceController.InitInstances`) uses one `try` for all racks, accepts NaN/Infinity and undefined enum values, writes doubles with the user's culture, and writes back while reading.
 4. `DesktopRouter` has no watcher `Error` handling, uses `Regex` directly, ignores partial downloads and reparse points, and `Flush` is untested.
 5. `RackLayoutIO.Import()` is untested; failures only reach `Debug.WriteLine`; no size or range limits. (Fixed in P9.)
-6. `Updater` mixes toasts with logic, has no response size cap on the catalog and `InstallUpdate` is untested.
+6. `Updater` mixes toasts with logic, has no response size cap on the catalog and `InstallUpdate` is untested. (Fixed in P10.)
 7. 185 `Debug.WriteLine` calls, none persisted.
 
 ## Constraints to respect

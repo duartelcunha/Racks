@@ -90,7 +90,7 @@ public class PresentationBoundaryTests
         ("raw file or folder access", new Regex(@"\b(File|Directory|FileInfo|DirectoryInfo)\s*\.", RegexOptions.Compiled)),
         ("file broker (Magic Organize owns it)", new Regex(@"\b(FileOperationBroker|SafeMove|SafeDelete)\b", RegexOptions.Compiled)),
         ("registry", new Regex(@"\b(RegistryKey|RegistryHelper)\b|\bRegistry\s*\.\s*(CurrentUser|LocalMachine)", RegexOptions.Compiled)),
-        ("updater internals", new Regex(@"\bUpdater\s*\.|\b(UpdateManifest|UpdateTrust)\b", RegexOptions.Compiled)),
+        ("updater internals", new Regex(@"\bUpdater\s*\.|\b(UpdateManifest|UpdateTrust|UpdateService|UpdateComposition|ReleaseCatalogClient|ReleaseManifestValidator|InstallerExecutor|UpdateCleanupService)\b", RegexOptions.Compiled)),
         ("mouse hook / UI Automation / hit testing", new Regex(@"\bH\.Hooks\b|\b(LowLevelMouseHook|AutomationElement|WindowFromPoint)\b", RegexOptions.Compiled)),
         ("hotkey Win32 calls", new Regex(@"\b(Un)?[Rr]egisterHotKey\b", RegexOptions.Compiled)),
         ("polling the pointer or the screens", new Regex(@"\bCursor\s*\.\s*Position\b|\bScreen\s*\.\s*PrimaryScreen\b|\bGetCursorPos\b", RegexOptions.Compiled)),
@@ -120,6 +120,8 @@ public class PresentationBoundaryTests
         Assert.Contains("raw file", Hit("File.Exists(p);"));
         Assert.Contains("registry", Hit("Registry.CurrentUser.OpenSubKey(k);"));
         Assert.Contains("updater", Hit("await Updater.CheckUpdateAsync(u, true);"));
+        Assert.Contains("updater", Hit("await UpdateComposition.Service.InstallAsync();"));
+        Assert.Contains("updater", Hit("new InstallerExecutor(f, l, s);"));
         Assert.Contains("mouse hook", Hit("new LowLevelMouseHook();"));
         Assert.Contains("hotkey", Hit("Interop.RegisterHotKey(h, 1, 2, 3);"));
         Assert.Contains("polling", Hit("var p = System.Windows.Forms.Cursor.Position;"));

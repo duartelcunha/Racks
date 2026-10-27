@@ -1,3 +1,4 @@
+using Racks.UseCases.Updates;
 using System.Text.Json;
 using Racks.Util;
 
@@ -25,7 +26,7 @@ public class UpdaterVersionTests
     [InlineData("v10.0.0", "10.0.0")]
     public void A_plain_version_tag_is_read(string tag, string expected)
     {
-        Assert.True(Updater.TryGetTagVersion(JsonSerializer.SerializeToElement(new { tag_name = tag }), out var t, out var v));
+        Assert.True(ReleaseManifestValidator.TryGetTagVersion(JsonSerializer.SerializeToElement(new { tag_name = tag }), out var t, out var v));
         Assert.Equal(tag, t);
         Assert.Equal(expected, v);
     }
@@ -40,12 +41,12 @@ public class UpdaterVersionTests
     [InlineData("vv1.2.3")]
     [InlineData("")]
     public void Any_other_tag_is_ignored(string tag)
-        => Assert.False(Updater.TryGetTagVersion(JsonSerializer.SerializeToElement(new { tag_name = tag }), out _, out _));
+        => Assert.False(ReleaseManifestValidator.TryGetTagVersion(JsonSerializer.SerializeToElement(new { tag_name = tag }), out _, out _));
 
     [Fact]
     public void A_release_without_a_string_tag_is_ignored()
     {
-        Assert.False(Updater.TryGetTagVersion(JsonSerializer.SerializeToElement(new { name = "v1.2.3" }), out _, out _));
-        Assert.False(Updater.TryGetTagVersion(JsonSerializer.SerializeToElement(new { tag_name = 5 }), out _, out _));
+        Assert.False(ReleaseManifestValidator.TryGetTagVersion(JsonSerializer.SerializeToElement(new { name = "v1.2.3" }), out _, out _));
+        Assert.False(ReleaseManifestValidator.TryGetTagVersion(JsonSerializer.SerializeToElement(new { tag_name = 5 }), out _, out _));
     }
 }
