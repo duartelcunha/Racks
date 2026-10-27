@@ -233,26 +233,30 @@ public class RackLayoutImportValidationTests
     }
 
     [Fact]
-    public void The_allow_list_is_exactly_what_the_app_reads_back()
+    public void The_allow_list_is_exactly_the_names_the_loader_applies()
     {
-        // Every value InstanceController.InitInstances reads must be importable, and nothing else:
-        // a new setting has to be added (with its type) to RackLayoutIO's allow-list on purpose.
-        string src = File.ReadAllText(Racks.Tests.Guards.RepoPaths.App("Core", "InstanceController.cs"));
-        int sw = src.IndexOf("switch (valueName)", StringComparison.Ordinal);
-        Assert.True(sw >= 0, "InitInstances no longer has 'switch (valueName)'");
-        int open = src.IndexOf('{', sw), depth = 0, end = open;
-        for (; end < src.Length; end++)
-        {
-            if (src[end] == '{') depth++;
-            else if (src[end] == '}' && --depth == 0) break;
-        }
-        var read = System.Text.RegularExpressions.Regex.Matches(src.Substring(open, end - open), "case \"([A-Za-z_]+)\":")
-            .Select(m => m.Groups[1].Value)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
+        // The golden table lists every value a rack persists (RackSettingsGoldenTests proves the loader applies each one,
+        // alone and together). Import may accept those and the discarded legacy name, and nothing else.
+        var expected = Racks.Tests.Persistence.GoldenRack.Names.Concat(Racks.Tests.Persistence.GoldenRack.Legacy)
+            .Order(StringComparer.Ordinal).ToArray();
+        Assert.Equal(expected, RackLayoutIO.AllowedValueNames.Order(StringComparer.Ordinal).ToArray());
+    }
 
-        Assert.NotEmpty(read);
-        Assert.Equal(read, RackLayoutIO.AllowedValueNames.Order(StringComparer.Ordinal).ToArray());
+    [Fact]
+    public void Every_name_the_loader_applies_is_accepted_by_import_with_its_stored_form()
+    {
+        var multi = new[] { "LastAccessedFiles", "CustomOrderFiles" };
+        var values = new Dictionary<string, object>();
+        var multiValues = new Dictionary<string, string[]>();
+        foreach (var name in Racks.Tests.Persistence.GoldenRack.Names)
+        {
+            var (data, _) = Racks.Tests.Persistence.GoldenRack.Raw(name, Racks.Tests.Persistence.GoldenRack.RawStyle.Invariant);
+            if (multi.Contains(name)) multiValues[name] = (string[])data;
+            else values[name] = data is int i ? i : data;
+        }
+        var rack = Assert.Single(RackLayoutIO.ParseAndValidate(Layout(values, multiValues)));
+        Assert.Equal(values.Count, rack.Values.Count);
+        Assert.Equal(multiValues.Count, rack.MultiStringValues.Count);
     }
 
     [Fact]
