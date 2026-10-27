@@ -228,11 +228,13 @@ jobs:
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
           # Nothing unsigned or signed by someone else gets past this point: the zip, SHA256SUMS.txt and
-          # the draft are built after it from these two files.
+          # the draft are built after it from these two files. This checks WHO signed (a valid signature
+          # whose subject is exactly the SignPath Foundation CN), not that the content equals what was
+          # uploaded: that rests on SignPath and the owner's approval (docs/RELEASING.md).
           $ErrorActionPreference = 'Stop'
           foreach ($file in @('publish/Racks.exe', "installer/Output/Racks-Setup-$env:VERSION.exe")) {
             $sig = Get-AuthenticodeSignature -LiteralPath $file
-            if ($sig.Status -ne 'Valid' -or $null -eq $sig.SignerCertificate -or $sig.SignerCertificate.Subject -notmatch 'SignPath Foundation') {
+            if ($sig.Status -ne 'Valid' -or $null -eq $sig.SignerCertificate -or $sig.SignerCertificate.Subject -notmatch '^CN=SignPath Foundation(,|$)') {
               throw "$file is not validly signed by SignPath Foundation: $($sig.Status) / $($sig.SignerCertificate.Subject)"
             }
             Write-Host "$file : $($sig.Status), $($sig.SignerCertificate.Subject)"

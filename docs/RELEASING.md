@@ -301,12 +301,29 @@ steps it ran before.
 Push the signed tag as in "Every release". The workflow publishes `Racks.exe`, submits it, and waits.
 Open the request link from the log (or SignPath's Signing requests list), check that the repository,
 tag and commit are the ones you tagged, and approve. Do it again for the installer. Then the workflow
-verifies both with `Get-AuthenticodeSignature` (status `Valid`, signer contains "SignPath Foundation"),
+verifies both with `Get-AuthenticodeSignature` (status `Valid`, subject starts with `CN=SignPath Foundation`),
 builds the zip and checksums from the signed files, and creates the draft. Then run `release-sign.ps1`
 as always.
 
 If a request is not approved within 2 hours, the step times out and the build fails: nothing is
 published. Re-run the failed run (re-runs of the same tag are allowed by the policy) or push a new tag.
+SignPath evaluates at most 3 re-runs of a build; after that, signing fails and you push a new tag. If
+the artifact upload returns 409 on a re-run, do the same: push a new tag.
+
+### Where the API token lives
+
+Today `SIGNPATH_API_TOKEN` is a repository secret, readable by every job of `release.yml`; only the two
+SignPath steps reference it. It would be better in a GitHub **Environment** named `signpath`, restricted
+to the tags `v*` (Settings, Environments, Deployment branches and tags), because an environment secret
+reaches only a job that names the environment. The workflow does **not** name it yet. The job needs
+`environment:` only when the switch is on, which can only be written as an expression such as
+`environment: ${{ vars.SIGNPATH_ENABLED == 'true' && 'signpath' || '' }}`. I could not confirm from the
+GitHub documentation that an empty name means "no environment", and getting it wrong would break
+every release made with the switch off. Putting the signing in its own job would be the other way, but
+that restructures the build. Until one of these is done, the token stays a repository secret. To do it:
+test the expression in a throwaway workflow; if an empty name is accepted, add that one line to the
+`build` job, create the `signpath` environment restricted to `v*`, move the secret there and delete the
+repository one.
 
 ### What I could not confirm from the SignPath documentation (check when you do the steps)
 
@@ -321,9 +338,11 @@ published. Re-run the failed run (re-runs of the same tag are allowed by the pol
   describes branch rulesets, and says nothing about tags. The workflow only runs on `v*` tag pushes,
   but whether SignPath accepts `refs/tags/v*` as an allowed ref is to be confirmed on the signing
   policy screen. If it does not, release builds from a tag would be refused: ask SignPath support.
-- **Signer name.** The workflow requires the certificate subject to contain "SignPath Foundation". After
-  the first signing, look at the real subject in the log and tighten the match (for example to the
-  exact `CN=`) in the "Verify the Authenticode signatures" step and in `ReleaseWorkflowSigningTests`.
+- **Signer name.** The workflow requires the certificate subject to start with
+  `CN=SignPath Foundation` (the wording of the subject is assumed, not confirmed; if the first release
+  fails the check, read the real subject in the log). After the first signing, tighten it further with
+  the certificate's issuer and thumbprint in the "Verify the Authenticode signatures" step and in
+  `ReleaseWorkflowSigningTests`.
 - **Plan limits.** Whether the OSS plan limits the number or size of signing requests, and the
   validity of the approval, is not in the pages I read.
 - **Branch ruleset (optional hardening).** SignPath can also check GitHub rulesets
@@ -331,5 +350,6 @@ published. Re-run the failed run (re-runs of the same tag are allowed by the pol
   Beware of "require code owner review" while you are the only committer: GitHub does not let you
   approve your own pull request. `.github/CODEOWNERS` names you for `.signpath/` and
   `.github/workflows/` as SignPath asks, but only a ruleset makes it binding.
-- **Not signed:** the .NET DLLs in the folder and the uninstaller that Inno Setup embeds in the
-  installer. Only `Racks.exe` and the installer are.
+- **Not signed by SignPath:** the loose files beside `Racks.exe` (native runtime DLLs, signed by
+  Microsoft, plus `Racks.pdb`; the app's own code is inside the signed single-file `Racks.exe`) and the
+  uninstaller that Inno Setup embeds in the installer. Only `Racks.exe` and the installer are.

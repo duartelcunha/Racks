@@ -71,7 +71,12 @@ public class ReleaseWorkflowSigningTests
         var submits = signing.Where(s => s.Contains("signpath/github-action-submit-signing-request@")).ToList();
         Assert.Equal(2, submits.Count);   // Racks.exe and the installer
 
-        foreach (var step in signing.Where(s => !s.Contains(Disabled)))
+        // Exactly one step may carry the negated switch: the original "Build installer" (checked below).
+        // Every other SignPath step must carry the positive one; none is skipped from the check.
+        var negated = signing.Where(s => s.Contains(Disabled)).ToList();
+        Assert.Single(negated);
+        Assert.StartsWith("- name: Build installer\n", negated[0], StringComparison.Ordinal);
+        foreach (var step in signing.Where(s => !ReferenceEquals(s, negated[0])))
             Assert.True(Regex.IsMatch(step, @"(?m)^        if: \$\{\{ " + Regex.Escape(Enabled) + @" \}\}\s*$", RegexOptions.None, TimeSpan.FromSeconds(1)),
                 "A SignPath step without the switch condition: " + step.Split('\n')[0]);
 
@@ -111,6 +116,7 @@ public class ReleaseWorkflowSigningTests
         int verify = StepIndex(steps, s => s.Contains("Get-AuthenticodeSignature") && s.Contains("SignPath Foundation"));
         string v = steps[verify];
         Assert.Contains("-ne 'Valid'", v);
+        Assert.Contains("-notmatch '^CN=SignPath Foundation(,|$)'", v);
         Assert.Contains("throw", v);
         Assert.Contains("publish/Racks.exe", v);
         Assert.Contains("Racks-Setup-$env:VERSION.exe", v);
@@ -140,6 +146,16 @@ public class ReleaseWorkflowSigningTests
         // Ids and slugs come from variables, not from literals in the workflow.
         foreach (var name in new[] { "SIGNPATH_ORGANIZATION_ID", "SIGNPATH_PROJECT_SLUG", "SIGNPATH_POLICY_SLUG" })
             Assert.Contains("${{ vars." + name + " }}", w);
+        // One artifact configuration per file, each used by its own signing request.
+        foreach (var name in new[] { "SIGNPATH_EXE_ARTIFACT_CONFIG_SLUG", "SIGNPATH_SETUP_ARTIFACT_CONFIG_SLUG" })
+            Assert.Contains("artifact-configuration-slug: ${{ vars." + name + " }}", w);
+    }
+
+    [Fact]
+    public void No_step_or_job_can_fail_open_with_continue_on_error()
+    {
+        // A failed signing, download or verification must fail the build, never be swallowed.
+        Assert.DoesNotContain("continue-on-error", Workflow(), StringComparison.Ordinal);
     }
 
     [Fact]
