@@ -38,7 +38,7 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   de valor, tipos/ranges validados, `Folder`/`BackgroundImagePath` canonicalizados e a rejeitar
   UNC/sistema/traversal, e `rack.Name` só um segmento de chave seguro. A allowlist deriva de
   `RackSettingsSchema` (INV-REG-2), a mesma tabela que o leitor usa. *(teste)* ✅ Aplicado
-  (2026-10, `RackLayoutIO.ParseAndValidate`): allowlist de nomes+tipos comparada sem distinguir
+  (2026-10; desde a P9 em `UseCases/Layout/LayoutValidator` + `LayoutSecurityPolicy`, com `Util/RackLayoutIO` só como fachada fina): allowlist de nomes+tipos comparada sem distinguir
   maiúsculas (o registo também não distingue), nomes reescritos na grafia canónica, duas grafias do
   mesmo nome rejeitadas, nomes desconhecidos descartados, `MultiString` só para `LastAccessedFiles`/
   `CustomOrderFiles`; `Folder`/`BackgroundImagePath` só aceitam caminhos locais totalmente
@@ -72,7 +72,60 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   desenhada só com a resolução ligada, guarda contra `SvgDocument.Open` fora do `SafeSvg`; sem rede)*
 - **INV-IMPORT-2** Um replace destrutivo é atómico ou tem backup: validar e preparar tudo primeiro,
   só apagar quando o novo estado escreve limpo, e fazer rollback do snapshot em falha. *(teste)*
-  ✅ Aplicado (Lote A #5).
+  ✅ Aplicado (Lote A #5) e, na P9, **testado de facto** (antes estava marcado como testado sem nenhum teste do
+  `Import()`): `UseCases/Layout/LayoutImportExecutor` trabalha só sobre `IRackRegistry` (já não há `Registry.CurrentUser`
+  no import). Ordem: snapshot das chaves que vão mudar (modo replace: todas; modo merge: as do ficheiro), com o tipo e os
+  bytes exatos de cada valor (`ReadValuesExact`: REG_EXPAND_SZ não expandido); replace apaga cada chave; escreve cada rack;
+  **verifica** lendo de volta o que escreveu. Qualquer falha em apagar/escrever/verificar (qualquer tipo de exceção:
+  `IOException`, `UnauthorizedAccessException`, `SecurityException`...) faz rollback **preciso**: cada chave é registada
+  *antes* de se tentar apagá-la ou escrevê-la e só essas são tocadas, por isso uma falha no primeiro `DeleteKey` não toca em
+  nenhuma outra rack; uma chave alcançada que já é igual ao snapshot fica como está, as outras são apagadas e reescritas com
+  os valores antigos e o mesmo tipo. O restauro é depois **conferido** (as chaves alcançadas, presentes ou ausentes como antes,
+  mesmos valores, mesmos tipos). Um restauro que não completa **nunca é engolido** e o snapshot em memória, que passa a ser a
+  única cópia das racks do utilizador, **é sempre gravado** como ficheiro de recuperação (`%AppData%\Racks\recovery\
+  layout-<data>.json`, o mesmo formato de um export, atómico, as 5 mais recentes ficam; `UseCases/Layout/LayoutRecovery` +
+  `Infrastructure/Layout/RecoveryFolder`): o resultado traz `RollbackFailed`, os detalhes e o caminho do ficheiro (ou porque
+  não foi possível gravá-lo), escreve-se um registo `LayoutImportRollbackFailed` no `audit.log` com esse caminho e a interface
+  diz ao utilizador onde está a cópia ("importe esse ficheiro para as ter de volta"). Importar o ficheiro de recuperação repõe
+  as racks (só o que um layout pode ter: sem valores binários nem nomes que o Racks não conhece). Nada toca no registo antes de
+  a validação terminar. Limite assumido: o snapshot e a conferência cobrem os **valores** das chaves de rack; subchaves
+  aninhadas dentro de uma rack não são copiadas nem comparadas (a app não escreve nenhuma). *(teste:
+  `LayoutImportExecutorTests` e `LayoutReviewFixTests` com um registo em memória que falha por ordem: sucesso em replace e em
+  merge, falha no primeiro e no segundo delete, a meio da escrita de uma chave com cada tipo de exceção, na verificação, em
+  merge, restauro que falha + ficheiro de recuperação que reimporta para o estado original, recuperação que também falha,
+  ficheiro inválido deixa o registo intocado e nem o lê; `LayoutRegistryImportTests` sobre o registo descartável real:
+  `Import()` completo, falha com rollback de todos os tipos REG_, round trip export→import byte a byte)*
+- **INV-IMPORT-5** Um ficheiro de layout vem de fora (backup, partilhado por outra pessoa): tamanho e forma são limitados
+  e o ficheiro é recusado inteiro ao primeiro problema de **segurança** (`UseCases/Layout/`: `LayoutParser` forma,
+  `LayoutValidator` significado, `LayoutSecurityPolicy` política, `LayoutLimits` os números). Limites (`LayoutLimits`):
+  ficheiro até **2 MiB** (o comprimento é verificado antes quando o ficheiro o diz, e a leitura pára assim que passa o limite,
+  no máximo um bloco de 80 KB a mais: nunca `File.ReadAllText`); JSON até **8** níveis (um layout real tem 5; a varredura por
+  tokens recusa antes de desserializar, por isso `[[[[...` não esgota a pilha); até **500** racks e **256** entradas em
+  `Values` e em `MultiStringValues` de cada rack (contados logo a seguir ao parse, a memória fica limitada pelo teto de
+  2 MiB do ficheiro); regex (`AutoRouteRegex`, `FileFilterRegex`, `FileFilterHideRegex`) até **1024** caracteres (o texto não
+  é compilado no import: `SafeRegex` compila-o com timeout onde é usado, INV-REGEX-1); texto com NUL recusado (o registo
+  cortava-o); uma propriedade repetida no mesmo objeto JSON (`"Folder"` duas vezes) recusa o ficheiro, em vez de a última
+  ganhar em silêncio. `Version`: em falta lê-se como a atual, mais antiga lê-se, **mais nova é recusada** com mensagem
+  ("atualize o Racks"), `< 1` é inválida. Nomes de racks **duplicados** comparam-se sem distinguir maiúsculas (as chaves do
+  registo também não distinguem) e o valor `Name`, quando existe, tem de ser igual ao nome da rack (diferença só de maiúsculas
+  é aceite). **Compatibilidade, decisão do lead:** os backups antigos têm de continuar a importar-se. Por isso, para os valores
+  numéricos, interruptores, enums e **listas** (`AssignedFiles`, `LastAccessedFiles`, `CustomOrderFiles`,
+  `ShowOnVirtualDesktops`) o que o `RackSettingsValidator` (o parser do load) não usaria **não recusa o ficheiro**: esse valor
+  é largado como o load o largaria (aplica-se o valor por omissão; um número que o load corta, `IconSize`/`GridSize`, fica
+  cortado; de uma lista ficam os itens bons), é escrito um registo `LayoutValueDropped` por valor (rack e campo; até 50, depois
+  um resumo) e a mensagem final diz quais foram. Listas: até **10 000** itens, **1024** caracteres por item e **262 144** no
+  total, senão a lista inteira é largada. Mantêm a **recusa do ficheiro inteiro** as regras de segurança: nomes/chaves, caminhos
+  (UNC/dispositivo/ADS/traversal), fontes, cores, NUL e caracteres de controlo, tamanho, profundidade, nº de racks e de
+  entradas, versão, duplicados, `Name` diferente da chave, formas JSON erradas (objeto onde devia haver escalar), regex acima do
+  limite. Nenhuma entrada do registo é escrita até a validação inteira acabar. O **export** escreve em passo único
+  (`Infrastructure/Layout/LayoutFileWriter`: ficheiro temporário oculto de nome curto e aleatório na mesma pasta, `Flush` a
+  disco, um único `File.Move(..., overwrite: true)` por cima do destino; **não** se usa `File.Replace`, que pode falhar a meio
+  com o destino já apagado; o temporário só é apagado se o destino estiver confirmadamente como estava, senão fica e o erro
+  diz onde; o destino passa por `PathPolicy.ValidateFullPath`), por isso uma falha deixa o ficheiro anterior intacto, e antes
+  de escrever o exporter corre os bytes pelo parser e pelo validador: um ficheiro que o próprio Racks recusaria (ou largaria
+  valores) não é gravado, e a falha diz a rack e o campo. *(teste: `LayoutParserTests`, `LayoutValidatorTests`,
+  `LayoutExportTests`, `LayoutReviewFixTests`, `RackLayoutImportValidationTests` — as regras de segurança antigas continuam as
+  mesmas)*
 - **INV-REGEX-1** Todo o regex compilado de input persistido/importado tem `MatchTimeout` (e degrada
   em vez de crashar/congelar). *(mecânica: existe um scanner grep "new Regex(" sem timeout; teste)*
   ✅ Aplicado (Lote A #3, `Util.SafeRegex` + belt global).
@@ -157,10 +210,15 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   virtual, a pasta de rack esvaziada no Desktop, o nome de hardlink do workspace (`WorkspaceReturn`), as
   pastas vazias do desfazer do Magic Organize, as junções do `RackMirror` e, no `UninstallCleanup`, os
   renames (`MoveSameVolume`), os desligamentos de junções/hardlinks (`Unlink`) e a remoção de pastas vazias
-  (`DeleteEmptyDirectory`). A allowlist tem agora 9 ficheiros (32 chamadas, antes 12 ficheiros e 45), todos
+  (`DeleteEmptyDirectory`). A allowlist tem agora 10 ficheiros (36 chamadas; era 32 em 9 ficheiros até à P9, antes 12 ficheiros e 45), todos
   estado do próprio Racks (logs, pasta `RacksWorkspace` e `desktop.ini`, pasta-raiz das junções, sandboxes
   vazias em `VirtualFrames`, relatório/nota do uninstall, ficheiro temporário do updater, export do
-  layout) ou uma cópia sem apagar (o `.url` do `ShortcutFactory`); só pode descer. Limites conhecidos do guard (não
+  layout e pasta de recuperação) ou uma cópia sem apagar (o `.url` do `ShortcutFactory`); só pode descer. Única subida,
+  justificada: na P9 o export do layout deixou de ser um `File.WriteAllText` (1 chamada, em `RackLayoutIO`) e passou a
+  escrita atómica em `Infrastructure/Layout/LayoutFileWriter` (3 chamadas, cada uma explicada no `why` da allowlist: criar o
+  temporário com `CreateNew`, um só `File.Move(..., overwrite: true)` para o destino que o utilizador escolheu, e apagar o
+  próprio temporário) mais `Infrastructure/Layout/RecoveryFolder` (2: criar a pasta de recuperação e apagar as cópias de
+  recuperação antigas do mesmo padrão). Limites conhecidos do guard (não
   vê chamadas por variável como `info.Delete()`, `File.Create`/`FileStream`, chamadas Win32/shell,
   `Process.Start`, nem código em `tools/`) estão no cabeçalho do teste; o guard impede o desvio fácil,
   não substitui a revisão. O guard exige contagem *igual* à da allowlist (a mais ou a menos falha).
@@ -239,7 +297,7 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   globais por omissão (raiz `HKCU\SOFTWARE\Racks`) só se leem e escrevem por
   `Infrastructure/Registry/RackSettingsRepository`, a partir de **uma só tabela**, `RackSettingsSchema`
   (nome, tipo, limites, valor por omissão, se o import o aceita, se é estilo global). Essa tabela deriva a lista
-  de importação (`RackLayoutIO`), o leitor, os escritores e a leitura dos estilos globais. No load cada valor
+  de importação (`LayoutSecurityPolicy`), o leitor, os escritores e a leitura dos estilos globais. No load cada valor
   passa por `RackSettingsValidator` **antes** de chegar ao modelo e um valor inválido **nunca é aplicado**: números
   em texto invariante primeiro e depois na cultura atual (o texto invariante, `0.5`, lê-se bem em qualquer cultura; o texto antigo de cultura, `0,5`, só se lê bem na cultura que o escreveu: em en-US `0,5` lê-se como 5, como no leitor antigo), NaN/Infinity/
   overflow recusados, limites por campo (`IconSize` 16-256 e `GridSize` 2-256 são cortados como os setters; os
@@ -267,7 +325,7 @@ Gravidade / estado. `file:line` do sweep (podem ter drift de 1-2 linhas).
 **H1 — Updater executa `assets[0]` do release sem verificação** `Racks/Util/Updater.cs` · ✅ CORRIGIDO PARCIAL (Lote B)
 Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), URL validada (HTTPS + host `github.com` + path `/duartelcunha/Racks/releases/download/`), tamanho verificado vs a API, e re-validação antes de descarregar. ~~Resíduo aceite: compromisso genuíno do repo/conta GitHub~~. Em 2026-10-09 isso aconteceu (token roubado substituiu assets de releases por malware). ✅ CORRIGIDO (2026-10): assinatura ECDSA P-256 de um manifesto canónico, com a chave privada fora do GitHub; ver INV-UPDATE-1 e `docs/RELEASING.md`. Resíduo: instalações ≤ 1.4.0 têm o updater antigo até atualizarem; a chave no Credential Manager é legível por qualquer processo do mesmo utilizador na máquina que assina; a assinatura só vale o que vale a revisão do dono (assinar sem rever um commit malicioso produz um instalador assinado), daí a tag assinada, o signer fixado e a confirmação depois da lista de alterações (QA 2026-10, F2/F3). → INV-UPDATE-1, INV-RELEASE-1.
 
-**H2 — Import de layout JSON sem validação, persistido no registo** `Racks/Util/RackLayoutIO.cs` · ✅ CORRIGIDO (Lote A nome; Lote C valida `Folder`/`BackgroundImagePath`: rejeita traversal `..` e paths não-rooted, na passagem atómica antes de apagar). Regex do import já limitado por SafeRegex (#3). ~~Resíduo: sem allowlist total de nomes de valor~~ e ~~UNC permitido~~: um audit independente (2026-10) mostrou que um layout com `Folder` UNC (ou `folder` em minúsculas, que escapava ao check sensível a maiúsculas) fazia o `DesktopRouter`/`SafeMove` mover novos ficheiros do Desktop para uma share remota e vazava o hash NTLM. ✅ CORRIGIDO (2026-10): allowlist de nomes+tipos sem distinguir maiúsculas e só caminhos locais `X:\...`. → INV-IMPORT-1. A revisão QA seguinte mostrou o mesmo vazamento por `TitleFontFamily`/`ItemFontFamily` (`\\host\share\#Fonte`) e pelas cores (`ContextColor <uri>`), que eram escalares livres: ✅ CORRIGIDO → INV-IMPORT-3.
+**H2 — Import de layout JSON sem validação, persistido no registo** `Racks/Util/RackLayoutIO.cs` (hoje `UseCases/Layout/*`, P9) · ✅ CORRIGIDO (Lote A nome; Lote C valida `Folder`/`BackgroundImagePath`: rejeita traversal `..` e paths não-rooted, na passagem atómica antes de apagar). Regex do import já limitado por SafeRegex (#3). ~~Resíduo: sem allowlist total de nomes de valor~~ e ~~UNC permitido~~: um audit independente (2026-10) mostrou que um layout com `Folder` UNC (ou `folder` em minúsculas, que escapava ao check sensível a maiúsculas) fazia o `DesktopRouter`/`SafeMove` mover novos ficheiros do Desktop para uma share remota e vazava o hash NTLM. ✅ CORRIGIDO (2026-10): allowlist de nomes+tipos sem distinguir maiúsculas e só caminhos locais `X:\...`. → INV-IMPORT-1. A revisão QA seguinte mostrou o mesmo vazamento por `TitleFontFamily`/`ItemFontFamily` (`\\host\share\#Fonte`) e pelas cores (`ContextColor <uri>`), que eram escalares livres: ✅ CORRIGIDO → INV-IMPORT-3.
 
 **H3 — Regex do utilizador sem `MatchTimeout` no UI thread (ReDoS)** `DesktopRouter.cs:73`, `RackWindow.xaml.cs`, `RackViewModel.cs` · ✅ CORRIGIDO (Lote A #3) → INV-REGEX-1.
 
@@ -275,7 +333,7 @@ Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), UR
 
 ### MEDIUM
 
-**M1 — Import com `replaceExisting` apaga todas as racks antes de escrever, sem rollback** `RackLayoutIO.cs` · ✅ CORRIGIDO (Lote A #5, atómico + rollback) → INV-IMPORT-2.
+**M1 — Import com `replaceExisting` apaga todas as racks antes de escrever, sem rollback** `RackLayoutIO.cs` (hoje `LayoutImportExecutor`) · ✅ CORRIGIDO (Lote A #5, atómico + rollback) → INV-IMPORT-2.
 
 **M2 — `SafeMove` compara paths como strings; contornável por 8.3, `\\?\`, UNC, junctions** `SafeMove.cs` · ✅ CORRIGIDO (Lote C). `Canonicalize` via `GetFinalPathNameByHandle` resolve 8.3/junctions/subst/`\\?\` antes de comparar, em `IsProtectedPath` e `IsAncestorOrEqual`. Testado: nome 8.3 canonicaliza para o mesmo path (bypass fechado), sem falso-positivo em paths normais. → INV-PATH-1.
 
@@ -308,7 +366,7 @@ contactar esse host. → INV-IMPORT-4.
 Métodos de segurança exercitados contra o **`Racks.dll` real** (não mirrors), 12/12 pass:
 SafeRegex (ReDoS limitado a ~250ms), SafeMove (recusa Desktop + o seu alias 8.3 canonicalizado;
 move ficheiro normal), SafeDelete (apaga árvore com junction, alvo do junction sobrevive),
-SafeDelete.ToRecycleBin (envia para a Reciclagem), RackLayoutIO.Import (rejeita nome/Folder com
+SafeDelete.ToRecycleBin (envia para a Reciclagem), o import de layouts (`RackLayoutIO.Import` na altura; hoje `LayoutService.ImportFile`) (rejeita nome/Folder com
 traversal antes de escrever). Falta apenas verificação GUI-only (gesto de drag-out real,
 delete-protection num menu de shell real), que exige conduzir a app à mão.
 

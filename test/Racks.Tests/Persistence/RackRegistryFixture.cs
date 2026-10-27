@@ -177,7 +177,7 @@ public static class GoldenRack
         Invariant,
         /// <summary>Doubles in the CURRENT culture's text, ints as REG_SZ text: what the incremental write-through wrote.</summary>
         CultureText,
-        /// <summary>Numbers as REG_QWORD: what RackLayoutIO.Import writes for a JSON number.</summary>
+        /// <summary>Numbers as REG_QWORD: what the layout import of builds before P9 wrote for a JSON number (it writes REG_DWORD now).</summary>
         Qword,
     }
 

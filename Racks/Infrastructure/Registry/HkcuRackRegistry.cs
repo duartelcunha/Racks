@@ -22,14 +22,18 @@ public sealed class HkcuRackRegistry : IRackRegistry
         return key == null ? Array.Empty<string>() : key.GetSubKeyNames();
     }
 
-    public IReadOnlyDictionary<string, RegistryValue> ReadValues(string keyName)
+    public IReadOnlyDictionary<string, RegistryValue> ReadValues(string keyName) => Read(keyName, RegistryValueOptions.None);
+
+    public IReadOnlyDictionary<string, RegistryValue> ReadValuesExact(string keyName) => Read(keyName, RegistryValueOptions.DoNotExpandEnvironmentNames);
+
+    private Dictionary<string, RegistryValue> Read(string keyName, RegistryValueOptions options)
     {
         var values = new Dictionary<string, RegistryValue>(StringComparer.OrdinalIgnoreCase);
         using var key = global::Microsoft.Win32.Registry.CurrentUser.OpenSubKey(_instancesKey() + @"\" + keyName);
         if (key == null) return values;
         foreach (var name in key.GetValueNames())
         {
-            object? data = key.GetValue(name);
+            object? data = key.GetValue(name, null, options);
             if (data != null) values[name] = new RegistryValue(data, key.GetValueKind(name));
         }
         return values;

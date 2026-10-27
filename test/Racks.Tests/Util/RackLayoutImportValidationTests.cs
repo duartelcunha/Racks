@@ -254,7 +254,8 @@ public class RackLayoutImportValidationTests
             if (multi.Contains(name)) multiValues[name] = (string[])data;
             else values[name] = data is int i ? i : data;
         }
-        var rack = Assert.Single(RackLayoutIO.ParseAndValidate(Layout(values, multiValues)));
+        // The golden Name value is "Golden": since P9 a Name value must match the rack name of the entry (INV-IMPORT-5).
+        var rack = Assert.Single(RackLayoutIO.ParseAndValidate(Layout(values, multiValues, name: Racks.Tests.Persistence.GoldenRack.Name)));
         Assert.Equal(values.Count, rack.Values.Count);
         Assert.Equal(multiValues.Count, rack.MultiStringValues.Count);
     }

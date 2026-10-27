@@ -26,6 +26,13 @@ public interface IRackRegistry
     /// <summary>Every value of one rack key, by name (case-insensitive); empty when the key does not exist.</summary>
     IReadOnlyDictionary<string, RegistryValue> ReadValues(string keyName);
 
+    /// <summary>
+    /// Every value of one rack key exactly as stored: a REG_EXPAND_SZ keeps its <c>%VARIABLES%</c> (<see cref="ReadValues"/> expands
+    /// them, as the loader has always read them). Used to snapshot a key so it can be put back byte for byte (layout import,
+    /// P9). An implementation that does not expand anything need not override it.
+    /// </summary>
+    IReadOnlyDictionary<string, RegistryValue> ReadValuesExact(string keyName) => ReadValues(keyName);
+
     /// <summary>Creates the key when needed and applies the changes in order.</summary>
     void Apply(string keyName, IReadOnlyList<RegistryWrite> writes);
 

@@ -44,7 +44,7 @@ public enum RangePolicy
     Clamp,
 }
 
-/// <summary>Which section of a layout file (<c>RackLayoutIO</c>) holds a value, and which extra check import applies to it.</summary>
+/// <summary>Which section of a layout file (<c>LayoutValidator</c>) holds a value, and which extra check import applies to it.</summary>
 public enum ImportSection
 {
     Scalar,
@@ -82,7 +82,7 @@ public sealed record SettingDescriptor(
     /// <summary>False only for the legacy name, which is read and discarded.</summary>
     public bool IsPersisted => Kind != SettingKind.Legacy;
 
-    /// <summary>The layout-file section for this value (what <c>RackLayoutIO</c> used to keep in its own list).</summary>
+    /// <summary>The layout-file section for this value (the layout import allow-list derives from this table).</summary>
     public ImportSection ImportSection => Kind switch
     {
         SettingKind.Path => ImportSection.Path,
@@ -135,7 +135,7 @@ public static class RackSettingsSchema
 
     /// <summary>
     /// A rack name is used verbatim as a registry subkey, so it must be one safe segment: not blank, no '\' or '/',
-    /// not "." or "..", at most 255 characters. (The rule <c>RackLayoutIO</c> applies to imported names.)
+    /// not "." or "..", at most 255 characters. (The rule the layout import applies to imported names; it also refuses control characters.)
     /// </summary>
     public static bool IsValidRackName(string? name)
         => !string.IsNullOrWhiteSpace(name)

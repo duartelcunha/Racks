@@ -21,7 +21,7 @@ namespace Racks.Tests.Guards;
 ///
 /// What it cannot see (a reviewer must read new presentation code): <c>reg.exe</c> and PowerShell run as processes
 /// (SettingsWindow's "export settings" does this on purpose), reflection, other helpers that open the registry for
-/// presentation (for example <c>RackLayoutIO</c>, which is not a presentation file), XAML-only references, code in
+/// presentation (for example the layout executor, which is not a presentation file and uses <c>IRackRegistry</c>), XAML-only references, code in
 /// other projects, and presentation-like code outside the file list of <see cref="PresentationBoundaryTests"/>.
 /// </summary>
 public class RegistryAccessGuardTests
