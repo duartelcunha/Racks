@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "racks-exe": the GitHub artifact is a ZIP (actions/upload-artifact)
+  that holds only Racks.exe. Reviewed copy; the owner pastes it into SignPath (docs/RELEASING.md).
+  Syntax: https://docs.signpath.io/artifact-configuration/syntax
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="Racks.exe">
+      <authenticode-sign/>
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

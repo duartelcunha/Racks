@@ -39,7 +39,9 @@ What that buys, honestly:
 - Installs of 1.4.0 and earlier cannot check signatures at all (see "The first signed release").
 
 CI only builds: it uploads the installer, the portable zip and `SHA256SUMS.txt` to a **draft**
-release. It never signs and never publishes.
+release. It never signs updates and never publishes. With the optional SignPath switch on, it also
+gets an Authenticode signature for `Racks.exe` and the installer (see "Authenticode signing
+(SignPath)" below); that signature is for Windows and is not what the updater trusts.
 
 ## One-time setup (owner)
 
@@ -186,7 +188,11 @@ it is there before signing).
 
 3. Wait for the **release** workflow. It builds and tests, runs the release gate test (the update
    key must be a real P-256 key), installs the pinned Inno Setup, builds the installer and creates a
-   **draft** release with the installer, the portable zip and `SHA256SUMS.txt`.
+   **draft** release with the installer, the portable zip and `SHA256SUMS.txt`. If Authenticode
+   signing is on (below), the workflow stops twice to wait for you: **approve both signing requests
+   in SignPath** (the first for `Racks.exe`, the second for the installer; the workflow log prints
+   each request's link) within 2 hours each, then it carries on and the draft already holds the
+   signed files.
 4. Sign and publish with the **installed** script (never `tools\release-sign.ps1` from the clone):
 
    ```powershell
@@ -230,6 +236,120 @@ To check a release by hand:
   "Pyrsys B.V." (the publisher since Inno Setup 6.4.2). To upgrade, take the new version's SHA-256
   from the vendor's `.issig` file or Chocolatey's moderated `VERIFICATION.txt`, and change
   `INNO_VERSION` and `INNO_SHA256` together.
-- Job permissions: `build` has `contents: read`; only `draft` has `contents: write`, and it receives
-  the build output by artifact id and checks the installer digest the build job reported. The
-  checkout does not persist the token, and the tag name reaches scripts only through `env`.
+- The SignPath action (`signpath/github-action-submit-signing-request`) is pinned by full commit SHA
+  like the others. Its input names change between major versions: when Dependabot proposes a new
+  one, read the diff and the inputs on <https://docs.signpath.io/trusted-build-systems/github>
+  before merging.
+- Job permissions: `build` has `contents: read` and `actions: read` (read-only; the SignPath action
+  downloads the unsigned artifact with the job token); only `draft` has `contents: write`, and it
+  receives the build output by artifact id and checks the installer digest the build job reported.
+  The checkout does not persist the token, and the tag name reaches scripts only through `env`.
+
+## Authenticode signing (SignPath)
+
+Racks is applying for free code signing from the [SignPath Foundation](https://signpath.org). When it
+is on, Windows sees `Racks.exe` and `Racks-Setup-<v>.exe` signed with a SignPath Foundation
+certificate (publisher "SignPath Foundation"), which is what reduces the SmartScreen warning over
+time. Policy page: [`CODE-SIGNING-POLICY.md`](CODE-SIGNING-POLICY.md).
+
+This does **not** change the update trust model above. The updater does not check Authenticode. You
+still sign the update manifest and publish with `release-sign.ps1`, on your machine, over the
+installer that CI built (now already Authenticode-signed). The manifest's SHA-256 and the
+`SHA256SUMS.txt` line are of the signed file, because CI signs before it zips and checksums.
+
+**Decision (owner): 1.5.0 is held until SignPath approves the project, so it is the first release with
+Authenticode.** Do not create the tag `v1.5.0` before that. The code is ready and the switch is off, so
+nothing changes for a release made without it.
+
+### The switch and the settings
+
+Everything is off unless the repository **variable** `SIGNPATH_ENABLED` is `true` (GitHub, Settings,
+Secrets and variables, Actions, Variables). With it off or missing, `release.yml` runs exactly the
+steps it ran before.
+
+| Kind | Name | What it is |
+| --- | --- | --- |
+| Secret | `SIGNPATH_API_TOKEN` | API token of a SignPath user with submitter rights on the project and policy. Only the SignPath steps of `release.yml` read it; it is never in a file, a log or the chat. Keep a copy in your password manager. |
+| Variable | `SIGNPATH_ORGANIZATION_ID` | the organization id shown in SignPath |
+| Variable | `SIGNPATH_PROJECT_SLUG` | `racks` |
+| Variable | `SIGNPATH_POLICY_SLUG` | `release-signing` |
+| Variable | `SIGNPATH_EXE_ARTIFACT_CONFIG_SLUG` | slug of the artifact configuration for `Racks.exe` (copy: `.signpath/artifact-configurations/racks-exe.xml`) |
+| Variable | `SIGNPATH_SETUP_ARTIFACT_CONFIG_SLUG` | slug of the artifact configuration for the installer (copy: `.signpath/artifact-configurations/racks-setup.xml`) |
+| Variable | `SIGNPATH_ENABLED` | `true` turns signing on. Set it last. |
+
+### One-time steps (owner; I cannot do these)
+
+1. **Apply** at <https://signpath.org> (the Apply form). The project is MIT and public, its release
+   builds come from GitHub Actions on GitHub-hosted runners, and `docs/CODE-SIGNING-POLICY.md`
+   is the code signing policy page the Foundation asks for. Turn on multi-factor authentication on
+   your GitHub and SignPath accounts. Wait for the acceptance mail.
+2. **In SignPath:** add the predefined trusted build system "GitHub.com" to the organization and link
+   it to the project; create the project `racks` (repository `https://github.com/duartelcunha/Racks`);
+   create the two artifact configurations by pasting the XML from `.signpath/artifact-configurations/`
+   and note their slugs; create the signing policy `release-signing` (release certificate, origin
+   verification on, **manual approval by you**, allowed branch names limited to the release tags
+   `refs/tags/v*`; see the TODO below); add the pipeline policy from
+   `.signpath/policies/racks/release-signing.yml` (pasted, or as an external definition from the repo);
+   create a user with submitter rights and an API token for it.
+3. **In GitHub:** add the secret and the variables from the table (`gh secret set SIGNPATH_API_TOKEN`
+   reads the value from the prompt; do not put it on a command line). Set `SIGNPATH_ENABLED=true` last.
+4. **Check without a release:** nothing runs on a push to a branch, so the first real proof is the first
+   tag. It is still only a draft; you publish it with `release-sign.ps1`.
+
+### Every release with signing on
+
+Push the signed tag as in "Every release". The workflow publishes `Racks.exe`, submits it, and waits.
+Open the request link from the log (or SignPath's Signing requests list), check that the repository,
+tag and commit are the ones you tagged, and approve. Do it again for the installer. Then the workflow
+verifies both with `Get-AuthenticodeSignature` (status `Valid`, subject starts with `CN=SignPath Foundation`),
+builds the zip and checksums from the signed files, and creates the draft. Then run `release-sign.ps1`
+as always.
+
+If a request is not approved within 2 hours, the step times out and the build fails: nothing is
+published. Re-run the failed run (re-runs of the same tag are allowed by the policy) or push a new tag.
+SignPath evaluates at most 3 re-runs of a build; after that, signing fails and you push a new tag. If
+the artifact upload returns 409 on a re-run, do the same: push a new tag.
+
+### Where the API token lives
+
+Today `SIGNPATH_API_TOKEN` is a repository secret, readable by every job of `release.yml`; only the two
+SignPath steps reference it. It would be better in a GitHub **Environment** named `signpath`, restricted
+to the tags `v*` (Settings, Environments, Deployment branches and tags), because an environment secret
+reaches only a job that names the environment. The workflow does **not** name it yet. The job needs
+`environment:` only when the switch is on, which can only be written as an expression such as
+`environment: ${{ vars.SIGNPATH_ENABLED == 'true' && 'signpath' || '' }}`. I could not confirm from the
+GitHub documentation that an empty name means "no environment", and getting it wrong would break
+every release made with the switch off. Putting the signing in its own job would be the other way, but
+that restructures the build. Until one of these is done, the token stays a repository secret. To do it:
+test the expression in a throwaway workflow; if an empty name is accepted, add that one line to the
+`build` job, create the `signpath` environment restricted to `v*`, move the secret there and delete the
+repository one.
+
+### What I could not confirm from the SignPath documentation (check when you do the steps)
+
+- **Policy file path.** The old documentation named `.signpath/policies/<project-slug>/<policy-slug>.yml`
+  (used here: `.signpath/policies/racks/release-signing.yml`) and the use of code owners to protect it.
+  The current page describes pipeline policies as either pasted in SignPath or an "external definition
+  stored in a source code repository", without giving the path. Use the SignPath screen as the
+  authority.
+- **Runner key spelling.** The current page writes `require_github_hosted` in its example and
+  `required_github_hosted` in its table. The file uses the example's spelling.
+- **Tag-only signing.** The documentation shows "Allowed branch names" for the signing policy and
+  describes branch rulesets, and says nothing about tags. The workflow only runs on `v*` tag pushes,
+  but whether SignPath accepts `refs/tags/v*` as an allowed ref is to be confirmed on the signing
+  policy screen. If it does not, release builds from a tag would be refused: ask SignPath support.
+- **Signer name.** The workflow requires the certificate subject to start with
+  `CN=SignPath Foundation` (the wording of the subject is assumed, not confirmed; if the first release
+  fails the check, read the real subject in the log). After the first signing, tighten it further with
+  the certificate's issuer and thumbprint in the "Verify the Authenticode signatures" step and in
+  `ReleaseWorkflowSigningTests`.
+- **Plan limits.** Whether the OSS plan limits the number or size of signing requests, and the
+  validity of the approval, is not in the pages I read.
+- **Branch ruleset (optional hardening).** SignPath can also check GitHub rulesets
+  (`github-scm-policies`). Not enabled here: it would deny signing until you have rulesets that match.
+  Beware of "require code owner review" while you are the only committer: GitHub does not let you
+  approve your own pull request. `.github/CODEOWNERS` names you for `.signpath/` and
+  `.github/workflows/` as SignPath asks, but only a ruleset makes it binding.
+- **Not signed by SignPath:** the loose files beside `Racks.exe` (native runtime DLLs, signed by
+  Microsoft, plus `Racks.pdb`; the app's own code is inside the signed single-file `Racks.exe`) and the
+  uninstaller that Inno Setup embeds in the installer. Only `Racks.exe` and the installer are.
