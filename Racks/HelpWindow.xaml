@@ -81,7 +81,7 @@
                 <TextBlock TextWrapping="Wrap" Opacity="0.85">
                     <Run Text="• Ctrl + Shift + Space: open the cross-rack quick finder. Type to filter, ↑↓ to navigate, Enter opens, Esc dismisses."/>
                     <LineBreak/>
-                    <Run Text="• Ctrl + Shift + N: instantly create a new virtual rack."/>
+                    <Run Text="• Ctrl + Shift + N: create a new virtual rack. Ctrl + Shift + D: toggle developer diagnostics HUD."/>
                 </TextBlock>
 
                 <TextBlock Text="Per-rack settings (right-click title)" FontWeight="Bold" FontSize="14" Margin="0,16,0,4"/>

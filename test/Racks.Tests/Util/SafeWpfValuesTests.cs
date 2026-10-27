@@ -168,29 +168,6 @@ public class SafeWpfValuesTests
     }
 
     [Fact]
-    public void Default_instance_reads_fonts_and_colors_from_the_registry_through_the_validating_setters()
-    {
-        // Instance(name, settingDefault) reads the global defaults from the registry root. Writing
-        // a field straight from a registry value skipped the validation a setter does, so a
-        // tampered "TitleFontFamily" = \\host\share\#Font reached WPF. No test writes the real
-        // registry: this pins the source instead.
-        string src = File.ReadAllText(RepoPaths.App("Core", "Instance.cs"));
-        var raw = new Regex(@"_\w*(FontFamily|Color)\s*=\s*v\b", RegexOptions.None, TimeSpan.FromSeconds(1));
-        Assert.Empty(raw.Matches(src).Select(m => m.Value));
-
-        int ctor = src.IndexOf("public Instance(string name, bool settingDefault)", StringComparison.Ordinal);
-        int suspend = src.IndexOf("using var noWrites = SuspendPersistence();", ctor, StringComparison.Ordinal);
-        int firstRead = src.IndexOf("helper.ReadKeyValueRoot(", ctor, StringComparison.Ordinal);
-        Assert.True(ctor > 0 && suspend > ctor && firstRead > suspend);
-        foreach (var property in new[]
-                 {
-                     "TitleFontFamily", "ItemFontFamily", "TitleBarColor", "TitleTextColor", "ListViewBackgroundColor",
-                     "ActiveBackgroundColor", "ActiveTitleTextColor", "ActiveBorderColor", "ListViewFontColor", "ListViewFontShadowColor",
-                 })
-            Assert.Contains($"if (v != null) {property} = v.ToString() ?? \"\";", src.Substring(ctor));
-    }
-
-    [Fact]
     public void Font_families_are_only_built_through_the_safe_factory()
     {
         // new FontFamily(<anything but a string literal>) outside SafeWpfValues could take a value

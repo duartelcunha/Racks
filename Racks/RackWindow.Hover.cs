@@ -327,7 +327,7 @@ namespace Racks
                 });
             }
 
-            if (Instance.ActiveBackgroundEnabled)
+            if (Instance.ActiveBackgroundEnabled && WindowBackground.Background is SolidColorBrush)
             {
                 var borderColorAnimation = new ColorAnimation
                 {
@@ -340,7 +340,7 @@ namespace Racks
                 };
                 WindowBackground.Background.BeginAnimation(SolidColorBrush.ColorProperty, borderColorAnimation);
             }
-            if (Instance.ActiveTitleTextEnabled)
+            if (Instance.ActiveTitleTextEnabled && title.Foreground is SolidColorBrush)
             {
                 var titleBarItemsColorAnimation = new ColorAnimation
                 {

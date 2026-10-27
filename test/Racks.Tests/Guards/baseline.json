@@ -1,7 +1,10 @@
 {
-  "rackWindowLines": 577,
-  "rackWindowPartMaxLines": 957,
-  "rackWindowTotalLines": 6000,
-  "controllerUsages": 30,
+  "rackWindowLines": 561,
+  "rackWindowPartMaxLines": 911,
+  "rackWindowTotalLines": 5925,
+  "controllerUsages": 20,
+  "mainWindowLines": 404,
+  "mainWindowMethodMaxLines": 59,
+  "appLines": 38,
   "xamlLiterals": 119
 }

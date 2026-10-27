@@ -45,18 +45,22 @@ namespace Racks.Util
         // (sandbox-backed) racks. Folder-backed racks are excluded because
         // the user already has a real path for them.
         public static void Rebuild(IEnumerable<(string Title, string SandboxPath)> racks)
+            => Rebuild(racks, MirrorRoot);
+
+        // The same, over a mirror folder the caller names (tests use a temp folder instead of %USERPROFILE%\Racks).
+        internal static void Rebuild(IEnumerable<(string Title, string SandboxPath)> racks, string mirrorRoot)
         {
             try
             {
-                Directory.CreateDirectory(MirrorRoot);
+                Directory.CreateDirectory(mirrorRoot);
 
                 // 1. Remove existing reparse-point children (leave anything
                 //    the user manually dropped in there).
-                RemoveJunctions(MirrorRoot);
+                RemoveJunctions(mirrorRoot);
 
                 // 2. Materialize a junction per rack with collision resolution.
                 var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var existing in Directory.EnumerateFileSystemEntries(MirrorRoot))
+                foreach (var existing in Directory.EnumerateFileSystemEntries(mirrorRoot))
                     used.Add(Path.GetFileName(existing));
 
                 foreach (var (title, sandbox) in racks)
@@ -72,7 +76,7 @@ namespace Racks.Util
                         name = $"{baseName} ({i++})";
                         if (i > 999) break; // give up rather than loop forever
                     }
-                    string junctionPath = Path.Combine(MirrorRoot, name);
+                    string junctionPath = Path.Combine(mirrorRoot, name);
                     if (JunctionHelper.TryCreate(sandbox, junctionPath))
                         used.Add(name);
                 }
@@ -93,10 +97,10 @@ namespace Racks.Util
             {
                 try
                 {
-                    if (!JunctionHelper.IsReparsePoint(existing)) continue;
-                    if (Directory.Exists(existing)) Directory.Delete(existing, recursive: false);
-                    else File.Delete(existing);
-                    removed++;
+                    if (!JunctionHelper.IsLink(existing)) continue;
+                    if (Racks.Infrastructure.FileSystem.FileOperationBroker.Default
+                            .Unlink(existing, "rack mirror: remove a junction Racks created").Succeeded)
+                        removed++;
                 }
                 catch { /* best-effort */ }
             }

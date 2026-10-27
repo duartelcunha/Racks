@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -599,6 +599,12 @@
   <data name="Tray.Help.ToolTip" xml:space="preserve">
     <value>Keybindings, gestures, and feature overview.</value>
   </data>
+  <data name="Tray.DevDiagnostics" xml:space="preserve">
+    <value>Diagnostics HUD</value>
+  </data>
+  <data name="Tray.DevDiagnostics.ToolTip" xml:space="preserve">
+    <value>Open live developer diagnostics HUD</value>
+  </data>
   <data name="Hotkey.Conflict.Title" xml:space="preserve">
     <value>Some Racks shortcuts are unavailable</value>
   </data>
@@ -611,7 +617,81 @@
   <data name="Crash.Toast.Title" xml:space="preserve">
     <value>Racks hit an unexpected error</value>
   </data>
+  <data name="Rename.Failed.Title" xml:space="preserve">
+    <value>Rename failed</value>
+  </data>
+  <data name="Rename.Failed.Message" xml:space="preserve">
+    <value>Couldn't rename to "{0}":
+{1}</value>
+  </data>
   <data name="Crash.Toast.Body" xml:space="preserve">
     <value>Racks kept running. Details were saved to crash.log in %AppData%\Racks. Please include it if you report a bug.</value>
+  </data>
+  <data name="AutoRoute.Invalid.Title" xml:space="preserve">
+    <value>Auto-route rule not saved</value>
+  </data>
+  <data name="AutoRoute.Invalid.Message" xml:space="preserve">
+    <value>That pattern can't be used: it is not a valid regular expression, or it takes too long to check a file name. The previous rule was kept. Try a simpler pattern.</value>
+  </data>
+  <data name="Layout.Import.Title" xml:space="preserve">
+    <value>Import racks</value>
+  </data>
+  <data name="Layout.Import.Confirm" xml:space="preserve">
+    <value>Importing will REPLACE all your current racks with the layout in the file. Continue?</value>
+  </data>
+  <data name="Layout.Import.Replace" xml:space="preserve">
+    <value>Replace</value>
+  </data>
+  <data name="Layout.Import.Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Layout.Import.Empty" xml:space="preserve">
+    <value>The file has no racks. Nothing was changed.</value>
+  </data>
+  <data name="Layout.Import.Rejected" xml:space="preserve">
+    <value>Import cancelled: {0}
+
+Your existing racks are unchanged.</value>
+  </data>
+  <data name="Layout.Import.Failed" xml:space="preserve">
+    <value>The import failed: {0}
+
+Your previous racks were restored.</value>
+  </data>
+  <data name="Layout.Import.RollbackFailed" xml:space="preserve">
+    <value>The import failed: {0}
+
+Your previous racks could not be fully restored, so some racks may be missing or changed. Details were saved to audit.log in %AppData%\Racks.
+
+{1}</value>
+  </data>
+  <data name="Layout.Import.Unexpected" xml:space="preserve">
+    <value>The import could not be completed: {0}</value>
+  </data>
+  <data name="Layout.Export.Title" xml:space="preserve">
+    <value>Export racks</value>
+  </data>
+  <data name="Layout.Export.Failed" xml:space="preserve">
+    <value>Couldn't export your racks: {0}
+
+An existing file at that location was not changed.</value>
+  </data>
+  <data name="Layout.Import.RecoverySaved" xml:space="preserve">
+    <value>A copy of your previous racks was saved to:
+{0}
+Import that file to get them back.</value>
+  </data>
+  <data name="Layout.Import.RecoveryFailed" xml:space="preserve">
+    <value>A copy of your previous racks could not be saved either ({0}).</value>
+  </data>
+  <data name="Layout.Import.Dropped" xml:space="preserve">
+    <value>Imported {0} rack(s). Some values in the file could not be used and were left at their defaults:
+{1}</value>
+  </data>
+  <data name="Layout.Import.DroppedMore" xml:space="preserve">
+    <value>...and {0} more (see audit.log in %AppData%\Racks).</value>
+  </data>
+  <data name="RemoveRack.FolderKept" xml:space="preserve">
+    <value>The rack was removed, but its folder "{0}" is still on your Desktop because something in it could not be moved back (for example a file is open). Nothing was deleted. You can delete the folder yourself once it is empty.</value>
   </data>
 </root>

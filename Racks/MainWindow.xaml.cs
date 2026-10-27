@@ -3,69 +3,79 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
-using System.Security.Policy;
 using System.Windows;
-using Microsoft.Win32;
+using System.Windows.Interop;
+using Racks.Core.Abstractions;
+using Racks.Infrastructure.Registry;
+using Racks.Infrastructure.Shell;
+using Racks.UseCases.AutoRoute;
+using Racks.UseCases.Display;
+using Racks.UseCases.DoubleClickHide;
+using Racks.UseCases.HotCorner;
+using Racks.UseCases.Hotkeys;
+using Racks.UseCases.MagicOrganize;
+using Racks.UseCases.Tray;
+using Racks.UseCases.Updates;
 using Racks.Util;
+using Racks.Views;
 using Wpf.Ui.Controls;
 using Application = System.Windows.Application;
 using static Racks.Util.Interop;
-using System.Windows.Interop;
-using H.Hooks;
-using MouseEventArgs = H.Hooks.MouseEventArgs;
-using System.Windows.Automation;
+
 namespace Racks
 {
+    /// <summary>
+    /// The hidden host window: tray icon and its menu, hotkeys, the <c>WM_RACKS_*</c> IPC messages, and the owner of the
+    /// services that do the work (see <c>Racks/UseCases</c>). It builds them by hand in the constructor, forwards events to
+    /// them and shows the windows and dialogs; it holds no business rules of its own (P7).
+    /// </summary>
     public partial class MainWindow : Window
     {
-        bool startOnLogin;
-        bool reseted = false;
-        private bool _dummyWindowPending = false;
-        private uint _taskbarRestartMessage;
         public static InstanceController _controller = null!;
-        public static MainWindow _mainWindow = null!;
-        private LowLevelMouseHook? _lowLevelMouseHook;
-        private QuickFinderWindow? _quickFinder;
-        private DesktopRouter _desktopRouter = null!;
-        private System.Windows.Threading.DispatcherTimer? _hotCornerTimer;
-        private bool _hotCornerHidden; // tracks whether racks are currently hidden by hot-corner
-        private const int QUICK_FINDER_HOTKEY_ID = 0xB0CC;
-        private const int NEW_RACK_HOTKEY_ID = 0xB0CD;
-        private IntPtr _mainHwnd = IntPtr.Zero;
-        private static bool _doubleClickToHide;
-        private DateTime _lastDoubleClickTime = DateTime.MinValue;
+        public const int WM_RACKS_OPEN_SETTINGS = 0x0400 + 100;
+        public const int WM_RACKS_OPEN_HELP = 0x0400 + 101;
+        public const int WM_RACKS_TOGGLE_LOCK_ALL = 0x0400 + 102;
+        public const int WM_RACKS_TOGGLE_ICE_PHYSICS = 0x0400 + 103;
+        public const int WM_RACKS_TOGGLE_DESKTOP_ICONS = 0x0400 + 104;
+        public const int WM_RACKS_TOGGLE_HOT_CORNER = 0x0400 + 105;
+        public const int WM_RACKS_OPEN_ABOUT = 0x0400 + 106;
+        public const int WM_RACKS_TOGGLE_DEV_DIAGNOSTICS = 0x0400 + 107;
 
+        private uint _taskbarRestartMessage;
+        private IntPtr _mainHwnd = IntPtr.Zero;
+        // The switch in the tray menu is moved by code (startup, "sync") without applying the change to the racks.
+        private bool _syncingLockAllToggle;
+        private QuickFinderWindow? _quickFinder;
+        private SingleInstanceWindow<Views.DevDiagnosticsOverlay> _devDiagnostics = null!;
+        private SingleInstanceWindow<SettingsWindow> _settings = null!;
+        private SingleInstanceWindow<HelpWindow> _help = null!;
+        private Dictionary<int, Action> _ipcCommands = null!;
+
+        private DesktopRouter _desktopRouter = null!;
+        private AutoRouteService _autoRouteService = null!;
+        private MagicOrganizeService _magicOrganize = null!;
+        private HotCornerService _hotCorner = null!;
+        private DoubleClickHideService _doubleClickHide = null!;
+        private HotkeyController _hotkeys = null!;
+        private TrayToggleService _toggles = null!;
+        private UpdateCheckService _updates = null!;
+        private DisplayChangeDebouncer _display = null!;
+
+        /// <summary>"Double-click the empty desktop hides the racks" (set by the settings window).</summary>
         public bool DoubleClickToHide
         {
-            get => _doubleClickToHide;
-            set
-            {
-                if (_doubleClickToHide != value)
-                {
-                    _doubleClickToHide = value;
-                    OnDoubleToClickHideChanged();
-                }
-            }
-        }
-        private void OnDoubleToClickHideChanged()
-        {
-            if (_doubleClickToHide)
-            {
-                _lowLevelMouseHook?.Dispose();
-                _lowLevelMouseHook = new LowLevelMouseHook { AddKeyboardKeys = true };
-                _lowLevelMouseHook.DoubleClick += HandleGlobalDoubleClick;
-                _lowLevelMouseHook.Start();
-            }
-            else
-            {
-                _lowLevelMouseHook?.Stop();
-            }
+            get => _doubleClickHide.Enabled;
+            set => _doubleClickHide.Enabled = value;
         }
 
         public MainWindow()
         {
+            Application.Current.MainWindow = this;
             InitializeComponent();
-            _mainWindow = this;
+            // EnsureHandle raises SourceInitialized (OnSourceInitialized) right here, inside the constructor: the hotkeys
+            // and the message table must exist by then. They only read _controller when they run, never when built.
+            ComposeHostServices();
+            new WindowInteropHelper(this).EnsureHandle();
 
             // App.OnStartup shows StartupAnimationWindow before WPF's own StartupUri
             // logic constructs and shows this window, so WPF's "first window shown
@@ -82,337 +92,192 @@ namespace Racks
             try { versionHeader.ToolTip = $"Racks {Process.GetCurrentProcess().MainModule?.FileVersionInfo.FileVersion}"; }
             catch { versionHeader.ToolTip = "Racks"; }
             _controller = new InstanceController();
-            _controller.InitInstances();
+            _controller.InitInstances(); // must not pump messages: rack services are null until ComposeRackServices
 
-            // Auto-routing: any file landing on the user's Desktop that matches a
-            // rack's AutoRouteRegex is moved into that rack.
-            try
-            {
-                _desktopRouter = new DesktopRouter(
-                    () => _controller.Instances,
-                    (sourcePath, routedRack, destFolder) =>
-                    {
-                        // Auto-route MOVES matching files into the rack (no duplicate on Desktop).
-                        // Routed through SafeMove so a too-greedy regex (e.g., ".*") can't
-                        // vacuum shell-special folders into the rack, name collisions are
-                        // skipped cleanly, and cross-volume moves fall back to copy+delete.
-                        // Failures are silent here (auto-route is background, not user-
-                        // initiated) — logged to Debug only.
-                        try
-                        {
-                            string dest = System.IO.Path.Combine(destFolder, System.IO.Path.GetFileName(sourcePath));
-                            bool isDir = System.IO.Directory.Exists(sourcePath);
-                            var result = Racks.Util.SafeMove.TryMove(sourcePath, dest, out string reason);
-                            if (result != Racks.Util.SafeMove.Result.Moved)
-                            {
-                                Debug.WriteLine($"Auto-route {result}: {reason}");
-                                return;
-                            }
-                            Util.Interop.NotifyShellMove(sourcePath, dest, isDir);
-                            Util.Interop.NotifyShellUpdateDir(System.IO.Path.GetDirectoryName(sourcePath)!);
-                            if (routedRack.IsDesktopFilterRack)
-                            {
-                                // A desktop rack lists the files it claims by name: claim it (the rack refreshes itself, it watches the workspace).
-                                foreach (var lost in Racks.Rack.DesktopRackClaims.Claim(_controller.Instances, routedRack, System.IO.Path.GetFileName(sourcePath)))
-                                    _controller.WriteInstanceToKey(lost);
-                                _controller.WriteInstanceToKey(routedRack);
-                            }
-                        }
-                        catch (System.Exception ex) { Debug.WriteLine($"Auto-route move failed: {ex.Message}"); }
-                    });
-            }
-            catch (System.Exception ex) { Debug.WriteLine($"DesktopRouter init failed: {ex.Message}"); }
-            if (_controller.reg.KeyExistsRoot("startOnLogin")) startOnLogin = _controller.reg.ReadKeyValueRoot("startOnLogin") as bool? ?? false;
-            AutorunToggle.IsChecked = startOnLogin;
-            // if (_controller.reg.KeyExistsRoot("blurBackground")) BlurToggle.IsChecked = (bool)_controller.reg.ReadKeyValueRoot("blurBackground");
-            if (_controller.reg.KeyExistsRoot("DoubleClickToHide")) DoubleClickToHide = _controller.reg.ReadKeyValueRoot("DoubleClickToHide") as bool? ?? false;
+            ComposeRackServices();
+            StartAutoRouting();
+
+            var settings = AppSettings.Default;
+            AutorunToggle.IsChecked = settings.StartOnLogin;
+            DoubleClickToHide = settings.DoubleClickToHide;
             // Ice-rink physics default on; only off if the user turned it off before.
-            if (_controller.reg.KeyExistsRoot("IcePhysics")) Util.RackPhysics.Enabled = _controller.reg.ReadKeyValueRoot("IcePhysics") as bool? ?? true;
-            IcePhysicsToggle.IsChecked = Util.RackPhysics.Enabled;
-            if (_controller.reg.KeyExistsRoot("HideDesktopIcons"))
+            RackPhysics.Enabled = settings.IcePhysics;
+            // These IsChecked assignments fire the switches' handlers, so each one runs once at startup and re-writes
+            // the value it just read (today's behavior, characterized in TrayToggleServiceTests; do not "fix").
+            IcePhysicsToggle.IsChecked = RackPhysics.Enabled;
+            // Only touch the toggle when a value was saved (a fresh install has none).
+            if (settings.HideDesktopIcons is bool hide)
             {
-                bool hide = _controller.reg.ReadKeyValueRoot("HideDesktopIcons") as bool? ?? false;
                 HideDesktopIconsToggle.IsChecked = hide;
-                if (hide) DesktopIcons.SetHidden(true);
+                if (hide) ShellOperationGateway.Default.SetDesktopIconsHidden(true);
             }
             // A previous version (or one that was killed) may have left the whole desktop hidden.
-            DesktopIcons.EnsureDefViewVisible();
-            if (_controller.reg.KeyExistsRoot("HotCornerHide")
-                && _controller.reg.ReadKeyValueRoot("HotCornerHide") as bool? == true)
+            ShellOperationGateway.Default.EnsureDesktopVisible();
+            if (settings.HotCornerHide)
             {
                 HotCornerHideToggle.IsChecked = true;
-                StartHotCornerWatch();
+                _hotCorner.Start();
             }
             SyncLockAllToggle();
             // Opt-in: check GitHub for a newer release a little after startup (Settings > Auto update).
-            if (_controller.reg.KeyExistsRoot("AutoUpdate") && _controller.reg.ReadKeyValueRoot("AutoUpdate") as bool? == true)
+            if (settings.AutoUpdate)
             {
-                _ = CheckForUpdatesInBackgroundAsync();
+                _ = _updates.CheckInBackgroundAsync();
             }
-            // Download folders of earlier updates (the installer ran from there, so they could not
-            // be deleted at the time). A minute in, so a just-finished installer has exited.
-            _ = System.Threading.Tasks.Task.Run(async () =>
-            {
-                await System.Threading.Tasks.Task.Delay(TimeSpan.FromMinutes(1));
-                Updater.CleanupOldUpdateDirs();
-            });
+            // Download folders of earlier updates (the installer ran from there, so they could not be deleted at the time).
+            _ = _updates.ScheduleCleanup();
         }
-        private void HandleGlobalDoubleClick(object? sender, MouseEventArgs e)
+
+        // Composition by hand, no container. Two steps because OnSourceInitialized runs during EnsureHandle, before the
+        // controller exists: this one needs nothing but the controller's static name, read when a service runs.
+        private void ComposeHostServices()
         {
-            if (e.Keys.ToString() != "MouseLeft") return;
-            if ((DateTime.Now - _lastDoubleClickTime).TotalSeconds < 0.3) return;
-            _lastDoubleClickTime = DateTime.Now;
-
-            POINT pt = new POINT { X = e.Position.X, Y = e.Position.Y };
-            IntPtr hwndUnderCursor = WindowFromPoint(pt);
-            IntPtr desktopListView = DesktopIcons.FindIconList();
-
-            if (hwndUnderCursor == desktopListView && !IsDesktopIconHit(pt))
+            _help = new SingleInstanceWindow<HelpWindow>("HelpWindow", () => new HelpWindow());
+            _settings = new SingleInstanceWindow<SettingsWindow>("SettingsWindow", () => new SettingsWindow(_controller, this));
+            _devDiagnostics = new SingleInstanceWindow<Views.DevDiagnosticsOverlay>("DevDiagnostics", () => new Views.DevDiagnosticsOverlay(_controller));
+            _hotkeys = new HotkeyController(new Win32HotkeyApi(), new HotkeyActions(OpenQuickFinder, () => _controller.AddVirtualInstance(), _devDiagnostics.Toggle));
+            _updates = new UpdateCheckService();
+            _display = new DisplayChangeDebouncer(
+                () => _controller.isInitializingInstances,
+                action => Application.Current.Dispatcher.InvokeAsync(action),
+                () => _controller.CheckFrameWindowsLive());
+            // Commands other processes send to the hidden host (tools/*E2ERunner.ps1); the numbers are part of the contract.
+            _ipcCommands = new Dictionary<int, Action>
             {
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    _controller.ChangeVisibility();
-                });
-            }
+                [WM_RACKS_OPEN_SETTINGS] = _settings.ShowOrActivate,
+                [WM_RACKS_OPEN_HELP] = _help.ShowOrActivate,
+                [WM_RACKS_TOGGLE_LOCK_ALL] = () => FlipAndRun(LockAllToggle, LockAllToggle_CheckChanged),
+                [WM_RACKS_TOGGLE_ICE_PHYSICS] = () => FlipAndRun(IcePhysicsToggle, IcePhysicsToggle_CheckChanged),
+                [WM_RACKS_TOGGLE_DESKTOP_ICONS] = () => FlipAndRun(HideDesktopIconsToggle, HideDesktopIconsToggle_CheckChanged),
+                [WM_RACKS_TOGGLE_HOT_CORNER] = () => FlipAndRun(HotCornerHideToggle, HotCornerHideToggle_CheckChanged),
+                [WM_RACKS_OPEN_ABOUT] = () => { try { new AboutWindow(150, 150, 320, 280).Show(); } catch { } },
+                [WM_RACKS_TOGGLE_DEV_DIAGNOSTICS] = _devDiagnostics.Toggle,
+            };
         }
 
-        private static bool IsDesktopIconHit(POINT screenPt)
+        // The services that hold the controller itself.
+        private void ComposeRackServices()
         {
-            var element = AutomationElement.FromPoint(new System.Windows.Point(screenPt.X, screenPt.Y));
-            if (element.Current.ControlType == ControlType.ListItem)
-            {
-                return true;
-            }
-            return false;
+            var racks = new ControllerRackWindows(_controller);
+            _hotCorner = new HotCornerService(new DispatcherRepeatingScheduler(), new ScreenHotCornerProbe(), racks.HideAll, racks.ShowAll);
+            _doubleClickHide = new DoubleClickHideService(
+                () => new GlobalMouseHook(),
+                new DesktopHitTest(),
+                () => Application.Current.Dispatcher.Invoke(() => _controller.ChangeVisibility()));
+            _toggles = new TrayToggleService(
+                AppSettings.Default,
+                ShellOperationGateway.Default,
+                _hotCorner,
+                racks,
+                on => RackPhysics.Enabled = on,
+                () => Process.GetCurrentProcess().MainModule!.FileName);
+            _magicOrganize = new MagicOrganizeService(new MagicOrganizeHost(_controller));
         }
+
+        // Auto-routing: any file landing on the user's Desktop that matches a rack's AutoRouteRegex is
+        // moved into that rack. The decisions, the move and the claims live in AutoRouteService; this
+        // only hands it the racks, a way to save one, and the workspace folder.
+        private void StartAutoRouting()
+        {
+            try
+            {
+                _autoRouteService = new AutoRouteService(
+                    new AutoRouteHost(
+                        () => _controller.Instances.ToArray(),
+                        rack => _controller.WriteInstanceToKey(rack),
+                        () => ShellOperationGateway.Default.WorkspacePath),
+                    new DispatcherDelayScheduler());
+                _desktopRouter = new DesktopRouter(_autoRouteService);
+            }
+            catch (System.Exception ex) { Debug.WriteLine($"DesktopRouter init failed: {ex.Message}"); }
+        }
+
+        // ---- tray menu --------------------------------------------------------------------------
+
         private void addDesktopFrame_Click(object sender, RoutedEventArgs e)
         {
             // New default: virtual rack. User can drop a shortcut/file/folder in and
-            // a .lnk is created in the sandbox — the source is never touched.
+            // a .lnk is created in the sandbox - the source is never touched.
             _controller.AddVirtualInstance();
         }
 
-        private void addFolderFrame_Click(object sender, RoutedEventArgs e)
+        private void addFolderFrame_Click(object sender, RoutedEventArgs e) => _controller.AddInstance();
+
+        private async void magicOrganizeDesktop_Click(object sender, RoutedEventArgs e) => await _magicOrganize.RunAsync();
+
+        // Layout export/import: dialogs, messages and audit are LayoutDialogs / LayoutService (P9); every failure is shown.
+        private void ExportLayout_Click(object sender, RoutedEventArgs e) => LayoutDialogs.Export();
+
+        private void ImportLayout_Click(object sender, RoutedEventArgs e)
         {
-            _controller.AddInstance();
+            if (LayoutDialogs.Import(replaceExisting: true) > 0) _controller.CheckFrameWindowsLive(true);
         }
 
-        private async void magicOrganizeDesktop_Click(object sender, RoutedEventArgs e)
+        private async void CheckUpdates_Click(object sender, RoutedEventArgs e) => await _updates.CheckNowAsync();
+
+        private void HelpMenuItem_Click(object sender, RoutedEventArgs e) => _help.ShowOrActivate();
+
+        private void Settings_Button_Click(object sender, RoutedEventArgs e) => _settings.ShowOrActivate();
+
+        private void DevDiagnosticsMenuItem_Click(object sender, RoutedEventArgs e) => _devDiagnostics.Toggle();
+
+        private void OpenQuickFinder()
+        {
+            _quickFinder?.Close();
+            _quickFinder = new QuickFinderWindow(_controller);
+            _quickFinder.Show();
+            _quickFinder.Activate();
+        }
+
+        private void visitGithub_Buton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                var clusters = Racks.Core.AutoOrganizer.AnalyzeDesktop(desktopPath);
-
-                if (clusters.Count == 0)
-                {
-                    Racks.Views.RacksMessageBox.Show("Your desktop is already empty or too clean to organize!", "Magic Organizer");
-                    return;
-                }
-
-                var dialog = new Racks.Views.AutoOrganizePreviewDialog(clusters);
-                if (dialog.ShowDialog() == true && dialog.Result != Racks.Views.OrganizeChoice.Cancel)
-                {
-                    if (dialog.Result == Racks.Views.OrganizeChoice.Racks)
-                    {
-                        var undo = Racks.Core.MagicOrganizeUndo.Begin(Racks.Core.MagicOrganizeUndo.Mode.Racks);
-                        // User approved, create racks and move files!
-                        var workingArea = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
-                        // Screen sizes are physical pixels; PosX/PosY/Width/Height are WPF units.
-                        double dpiScale = System.Drawing.Graphics.FromHwnd(IntPtr.Zero).DpiX / 96f;
-                        var slots = Racks.Core.MagicOrganizeLayout.Grid(clusters.Count,
-                            workingArea.Left, workingArea.Top, workingArea.Width, workingArea.Height, dpiScale);
-                        double rackWidth = Racks.Core.MagicOrganizeLayout.RackWidth;
-                        double rackHeight = Racks.Core.MagicOrganizeLayout.RackHeight;
-
-                        int movedFilesCount = 0;
-
-                        for (int i = 0; i < clusters.Count; i++)
-                        {
-                            var cluster = clusters[i];
-                            if (cluster.FilePaths.Count == 0) continue;
-
-                            string safeName = string.Join("_", cluster.Name.Split(System.IO.Path.GetInvalidFileNameChars()));
-                            if (string.IsNullOrWhiteSpace(safeName)) safeName = "Cluster_" + Guid.NewGuid().ToString().Substring(0, 4);
-
-                            // The name is the registry key: a second run must not reuse (and overwrite) the first run's racks.
-                            safeName = Racks.Rack.RackNames.Unique(safeName, _controller.Instances.Select(r => r.Name));
-                            var inst = new Instance(safeName, false);
-                            inst.TitleText = safeName;
-                            inst.Folder = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                            inst.IsDesktopFilterRack = true;
-                            inst.PosX = slots[i].X;
-                            inst.PosY = slots[i].Y;
-                            inst.Width = rackWidth;
-                            inst.Height = rackHeight;
-
-                            inst.AssignedFiles = new List<string>();
-
-                            _controller.Instances.Add(inst);
-
-                            // Ensure workspace exists before moving
-                            Racks.Core.DesktopIconManager.Initialize();
-
-                            // 2. Move files to RacksWorkspace and assign them
-                            foreach (var fp in cluster.FilePaths)
-                            {
-                                string fileName = System.IO.Path.GetFileName(fp);
-                                string destPath = System.IO.Path.Combine(Racks.Core.DesktopIconManager.RacksWorkspacePath, fileName);
-
-                                var moveResult = Racks.Util.SafeMove.TryMove(fp, destPath, out string reason);
-                                if (moveResult == Racks.Util.SafeMove.Result.Moved)
-                                {
-                                    Racks.Util.Interop.NotifyShellMove(fp, destPath, System.IO.Directory.Exists(fp));
-                                    // One rack owns the name: take it from any other rack that still claims it.
-                                    foreach (var lost in Racks.Rack.DesktopRackClaims.Claim(_controller.Instances, inst, fileName))
-                                        _controller.WriteInstanceToKey(lost);
-                                    undo.RecordMove(fp, destPath); // fp = original desktop path
-                                    movedFilesCount++;
-                                }
-                            }
-                            undo.CreatedRackNames.Add(inst.Name);
-
-                            try
-                            {
-                                _controller.WriteInstanceToKey(inst);
-                            }
-                            catch (Exception ex)
-                            {
-                                Racks.Views.RacksMessageBox.Show($"Failed to save Rack '{safeName}' to registry: {ex.Message}", "Error");
-                            }
-
-                            var subWindow = new RackWindow(inst);
-                            subWindow.ChangeBackgroundOpacity(inst.Opacity);
-                            _controller._subWindows.Add(subWindow);
-
-                            await System.Threading.Tasks.Task.Delay(100); // Staggered entry animation
-
-                            subWindow.Show();
-                            subWindow.Topmost = true; // Ensure it is visible to the user immediately
-                            _controller._subWindowsPtr.Add(new System.Windows.Interop.WindowInteropHelper(subWindow).Handle);
-                        }
-
-                        bool undoRacks = Racks.Views.RacksMessageBox.Confirm(
-                            $"Moved {movedFilesCount} item(s) into {clusters.Count} rack(s).\n\nKeep this, or undo and send everything back to your desktop?",
-                            "Magic Organize complete", "Keep", "Undo");
-                        if (!undoRacks) UndoMagicOrganize();
-                    }
-                    else if (dialog.Result == Racks.Views.OrganizeChoice.Folders)
-                    {
-                        var undo = Racks.Core.MagicOrganizeUndo.Begin(Racks.Core.MagicOrganizeUndo.Mode.Folders);
-                        // Just move them to physical folders on the Desktop
-                        int movedFilesCount = 0;
-                        foreach (var cluster in clusters)
-                        {
-                            if (cluster.FilePaths.Count == 0) continue;
-
-                            string folderPath = System.IO.Path.Combine(desktopPath, cluster.Name);
-                            if (!System.IO.Directory.Exists(folderPath))
-                            {
-                                System.IO.Directory.CreateDirectory(folderPath);
-                                undo.CreatedFolders.Add(folderPath);
-                            }
-
-                            foreach (var fp in cluster.FilePaths)
-                            {
-                                string fileName = System.IO.Path.GetFileName(fp);
-                                string destPath = System.IO.Path.Combine(folderPath, fileName);
-
-                                var moveResult = Racks.Util.SafeMove.TryMove(fp, destPath, out string reason);
-                                if (moveResult == Racks.Util.SafeMove.Result.Moved)
-                                {
-                                    Racks.Util.Interop.NotifyShellMove(fp, destPath, System.IO.Directory.Exists(fp));
-                                    undo.RecordMove(fp, destPath);
-                                    movedFilesCount++;
-                                }
-                            }
-                        }
-                        bool undoFolders = Racks.Views.RacksMessageBox.Confirm(
-                            $"Moved {movedFilesCount} item(s) into {clusters.Count} folder(s) on your desktop.\n\nKeep this, or undo and send everything back?",
-                            "Magic Organize complete", "Keep", "Undo");
-                        if (!undoFolders) UndoMagicOrganize();
-                    }
-                }
+                ProcessStartInfo sInfo = new ProcessStartInfo($"https://github.com/duartelcunha/Racks") { UseShellExecute = true };
+                _ = Process.Start(sInfo);
             }
             catch (Exception ex)
             {
-                Racks.Views.RacksMessageBox.Show($"An error occurred during Magic Organize:\n{ex.Message}\n{ex.StackTrace}", "Fatal Error");
+                Debug.WriteLine($"visitGithub failed: {ex.Message}");
             }
         }
 
-        // Undo the last Magic Organize: tear down the racks/folders it created and move every
-        // file back to its original desktop spot, then tidy the desktop into a grid.
-        private void UndoMagicOrganize()
+        private void ExitApp(object sender, RoutedEventArgs e)
         {
-            var undo = Racks.Core.MagicOrganizeUndo.Last;
-            if (undo == null || !undo.HasAnything) return;
-            try
-            {
-                if (undo.OrganizeMode == Racks.Core.MagicOrganizeUndo.Mode.Racks)
-                {
-                    // Close and delete the racks this run created (before moving files back, so
-                    // their file-watchers/claims are gone).
-                    foreach (var name in undo.CreatedRackNames)
-                    {
-                        var inst = _controller.Instances.FirstOrDefault(i => i.Name == name);
-                        if (inst == null) continue;
-                        inst.isWindowClosing = true;
-                        var win = _controller._subWindows.FirstOrDefault(w => w.Instance == inst);
-                        try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(inst.GetKeyLocation(), false); } catch { }
-                        if (win != null) { try { win.Close(); } catch { } _controller.RemoveInstance(inst, win); }
-                        else _controller.Instances.Remove(inst);
-                    }
-                }
-
-                int restored = undo.RestoreFiles();
-                undo.RemoveCreatedFolders();
-
-                // Lay the returned files out in a clean grid on the desktop.
-                var back = new List<string>();
-                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                foreach (var m in undo.Moved)
-                    if (System.IO.File.Exists(m.OriginalPath) || System.IO.Directory.Exists(m.OriginalPath))
-                        back.Add(m.OriginalPath);
-                if (back.Count > 0) Racks.Util.DesktopIconPositioner.ArrangeInGrid(back);
-
-                Racks.Core.MagicOrganizeUndo.Clear();
-                Racks.Views.RacksMessageBox.Show($"Undone. {restored} item(s) are back on your desktop.", "Magic Organize");
-            }
-            catch (Exception ex)
-            {
-                Racks.Views.RacksMessageBox.Show($"Couldn't fully undo:\n{ex.Message}", "Magic Organize");
-            }
+            TrayIcon.Visibility = Visibility.Hidden;
+            LifecycleAnimations.RunQuitAnimation(() => Application.Current.Shutdown());
         }
 
-        private void ExportLayout_Click(object sender, RoutedEventArgs e)
+        // ---- tray switches (the effect lives in TrayToggleService) -------------------------------
+
+        // The switch reflects reality: on only when there is at least one rack and every rack is
+        // locked. Called at startup and each time the tray menu opens (racks can be locked one by
+        // one from their own menu), without re-applying the change to the racks.
+        private void SyncLockAllToggle()
         {
-            try { Racks.Util.RackLayoutIO.PromptExport(); }
-            catch (System.Exception ex) { System.Diagnostics.Debug.WriteLine($"Export failed: {ex.Message}"); }
+            _syncingLockAllToggle = true;
+            try { LockAllToggle.IsChecked = _toggles.AllRacksLocked(); }
+            finally { _syncingLockAllToggle = false; }
         }
 
-        private void HelpMenuItem_Click(object sender, RoutedEventArgs e)
+        private void TrayMenu_Opened(object sender, RoutedEventArgs e) => SyncLockAllToggle();
+
+        private void LockAllToggle_CheckChanged(object sender, RoutedEventArgs e)
         {
-            try { new HelpWindow().Show(); }
-            catch (Exception ex) { Debug.WriteLine($"HelpWindow open failed: {ex.Message}"); }
+            if (_syncingLockAllToggle) return;
+            _toggles.SetLockAll(LockAllToggle.IsChecked == true);
         }
 
-        private async void ImportLayout_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (!Racks.Views.RacksMessageBox.Confirm(
-                        "Importing will REPLACE all your current racks with the layout in the file. Continue?",
-                        "Import racks", "Replace", "Cancel")) return;
-                int count = Racks.Util.RackLayoutIO.PromptImport(replaceExisting: true);
-                if (count > 0) _controller.CheckFrameWindowsLive(true);
-            }
-            catch (System.IO.InvalidDataException ex)
-            {
-                // Bad/hostile layout file: existing racks were left intact (or rolled back).
-                Racks.Views.RacksMessageBox.Show($"Import cancelled: {ex.Message}\n\nYour existing racks are unchanged.", "Import racks");
-            }
-            catch (System.Exception ex) { System.Diagnostics.Debug.WriteLine($"Import failed: {ex.Message}"); }
-        }
+        private void IcePhysicsToggle_CheckChanged(object sender, RoutedEventArgs e) => _toggles.SetIcePhysics(IcePhysicsToggle.IsChecked == true);
+
+        private void HotCornerHideToggle_CheckChanged(object sender, RoutedEventArgs e) => _toggles.SetHotCorner(HotCornerHideToggle.IsChecked == true);
+
+        private void HideDesktopIconsToggle_CheckChanged(object sender, RoutedEventArgs e) => _toggles.SetHideDesktopIcons(HideDesktopIconsToggle.IsChecked == true);
+
+        private void AutorunToggle_CheckChanged(object sender, RoutedEventArgs e) => _toggles.SetStartOnLogin((bool)AutorunToggle.IsChecked!);
+
+        // ---- window lifetime ---------------------------------------------------------------------
+
         private void Window_Initialized(object sender, EventArgs e)
         {
             this.ShowInTaskbar = false;
@@ -426,10 +291,14 @@ namespace Racks
 
             CloseHide();
         }
+
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
             var hwnd = new WindowInteropHelper(this).Handle;
+            _mainHwnd = hwnd;
+            this.Title = "RacksMainHost";
+            AppSettings.Default.TryPublishMainHwnd((long)hwnd);
             int exStyle = (int)GetWindowLong(hwnd, GWL_EXSTYLE);
             exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
             SetWindowLong(hwnd, GWL_EXSTYLE, (IntPtr)exStyle);
@@ -453,47 +322,19 @@ namespace Racks
             trayRetry.Tick += (_, _) => { trayRetry.Stop(); RegisterTrayIcon(); };
             trayRetry.Start();
 
-            // Ctrl+Shift+Space opens the cross-rack quick finder; Ctrl+Shift+N spawns a new virtual
-            // rack. RegisterHotKey returns false (it does not throw) when another app already owns
-            // the combination, so check the result and tell the user instead of failing silently.
-            bool quickFinderOk = false, newRackOk = false;
-            try { quickFinderOk = Interop.RegisterHotKey(_mainHwnd, QUICK_FINDER_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x20); }
-            catch (Exception ex) { Debug.WriteLine($"RegisterHotKey QuickFinder failed: {ex.Message}"); }
-            try { newRackOk = Interop.RegisterHotKey(_mainHwnd, NEW_RACK_HOTKEY_ID, Interop.MOD_CONTROL | Interop.MOD_SHIFT, 0x4E /* VK_N */); }
-            catch (Exception ex) { Debug.WriteLine($"RegisterHotKey NewRack failed: {ex.Message}"); }
-            if (!quickFinderOk || !newRackOk)
-            {
-                try
-                {
-                    var toast = new Microsoft.Toolkit.Uwp.Notifications.ToastContentBuilder()
-                        .AddText(Racks.Properties.Lang.Hotkey_Conflict_Title);
-                    if (!quickFinderOk) toast.AddText(Racks.Properties.Lang.Hotkey_Conflict_QuickFinder);
-                    if (!newRackOk) toast.AddText(Racks.Properties.Lang.Hotkey_Conflict_NewRack);
-                    toast.Show();
-                }
-                catch (Exception ex) { Debug.WriteLine($"Hotkey conflict toast failed: {ex.Message}"); }
-            }
+            // Ctrl+Shift+Space opens the cross-rack quick finder; Ctrl+Shift+N spawns a new virtual rack;
+            // Ctrl+Shift+D toggles the dev diagnostics. A hotkey another app already owns is reported with a toast.
+            _hotkeys.RegisterAll(_mainHwnd, HotkeyConflictToast.Show);
             // First-launch welcome animation: a Racks icon drops from the
             // center of the screen into the system tray and a toast follows
             // pointing the user at where the app now lives. Gated by a
             // registry marker so it runs at most once per machine.
-            try { Racks.Util.FirstRunWelcome.ShowIfFirstRun(_controller.reg); }
+            try { FirstRunWelcome.ShowIfFirstRun(MigrationMarkers.Default); }
             catch (Exception ex) { Debug.WriteLine($"FirstRunWelcome failed: {ex.Message}"); }
         }
 
-        // The tray icon is the only way back into a hidden app, so registration is
-        // guarded (a throw here used to skip the rest of OnSourceInitialized too) and
-        // always forces the icon visible. Register() is idempotent, so the startup
-        // retry and the TaskbarCreated handler can call this freely.
-        private void RegisterTrayIcon()
-        {
-            try
-            {
-                TrayIcon.Register();
-                TrayIcon.Visibility = Visibility.Visible;
-            }
-            catch (Exception ex) { Debug.WriteLine($"TrayIcon register failed: {ex.Message}"); }
-        }
+        private void RegisterTrayIcon() => TrayIconRegistrar.Register(TrayIcon);
+
         private void CloseHide()
         {
             Task.Run(() =>
@@ -505,6 +346,7 @@ namespace Racks
                 });
             });
         }
+
         protected override void OnClosing(CancelEventArgs e)
         {
             base.OnClosing(e);
@@ -512,176 +354,18 @@ namespace Racks
             this.Hide();
         }
 
-        //private void BlurToggle_CheckChanged(object sender, System.Windows.RoutedEventArgs e)
-        //{
-        //    _controller.reg.WriteToRegistryRoot("blurBackground", BlurToggle.IsChecked!);
-        //    _controller.ChangeBlur((bool)BlurToggle.IsChecked!);
-        //}
-        // Flip IsLocked on every rack at once. Persists per-rack AND tells each running
-        // rack window to apply the new chrome — without ApplyLockedState the WindowChrome
-        // wouldn't update at runtime and the lock would only "stick" after a relaunch.
-        private bool _syncingLockAllToggle;
-
-        // The switch reflects reality: on only when there is at least one rack and every rack is
-        // locked. Called at startup and each time the tray menu opens (racks can be locked one by
-        // one from their own menu), without re-applying the change to the racks.
-        private void SyncLockAllToggle()
+        protected override void OnClosed(EventArgs e)
         {
-            _syncingLockAllToggle = true;
-            try { LockAllToggle.IsChecked = _controller.Instances.Count > 0 && _controller.Instances.All(i => i.IsLocked); }
-            finally { _syncingLockAllToggle = false; }
+            _doubleClickHide?.Dispose(); // null-safe: the ctor may have thrown before ComposeRackServices
+            _desktopRouter?.Dispose();
+            _autoRouteService?.Dispose();
+            _hotCorner?.Dispose();
+            _hotkeys.UnregisterAll();
+            base.OnClosed(e);
         }
 
-        private void TrayMenu_Opened(object sender, RoutedEventArgs e) => SyncLockAllToggle();
+        // ---- window messages ---------------------------------------------------------------------
 
-        private void LockAllToggle_CheckChanged(object sender, RoutedEventArgs e)
-        {
-            if (_syncingLockAllToggle) return;
-            bool locked = LockAllToggle.IsChecked == true;
-            foreach (var inst in _controller.Instances)
-            {
-                inst.IsLocked = locked;
-            }
-            foreach (var w in _controller._subWindows)
-            {
-                try { w.ApplyLockedState(); }
-                catch (Exception ex) { Debug.WriteLine($"ApplyLockedState failed: {ex.Message}"); }
-            }
-        }
-
-        // Global on/off for the ice-rink physics. Persists and applies live (no restart):
-        // off means racks no longer push, glide, or bounce when dragged together.
-        private void IcePhysicsToggle_CheckChanged(object sender, RoutedEventArgs e)
-        {
-            bool on = IcePhysicsToggle.IsChecked == true;
-            _controller.reg.WriteToRegistryRoot("IcePhysics", on);
-            Util.RackPhysics.Enabled = on;
-        }
-
-        // Manual "Check for updates": queries the GitHub releases API and shows a toast
-        // (either "new release" with an Install button, or "up to date"). Same code path the
-        // auto-update toast uses; Install is handled in App.ToastActivatedHandler.
-        // Silent: shows a toast only when a newer release exists (Updater stays quiet on a first
-        // failure such as being offline).
-        private static async System.Threading.Tasks.Task CheckForUpdatesInBackgroundAsync()
-        {
-            try
-            {
-                await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(20));
-                await Updater.CheckUpdateAsync(Updater.ReleasesApi, showToastIfNoUpdate: false);
-            }
-            catch (Exception ex) { Debug.WriteLine($"Background update check failed: {ex.Message}"); }
-        }
-
-        private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
-        {
-            try { await Updater.CheckUpdateAsync(Updater.ReleasesApi, showToastIfNoUpdate: true); }
-            catch (Exception ex) { Debug.WriteLine($"Manual update check failed: {ex.Message}"); }
-        }
-
-        // Hot-corner peek: poll cursor position every 100ms. When it enters a small
-        // square at the top-right of the primary monitor, hide all racks; when it
-        // leaves, show them again. State machine prevents flicker / repeated Hide.
-        private void HotCornerHideToggle_CheckChanged(object sender, RoutedEventArgs e)
-        {
-            bool on = HotCornerHideToggle.IsChecked == true;
-            _controller.reg.WriteToRegistryRoot("HotCornerHide", on);
-            if (on) StartHotCornerWatch(); else StopHotCornerWatch();
-        }
-
-        private void StartHotCornerWatch()
-        {
-            if (_hotCornerTimer != null) return;
-            _hotCornerTimer = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(100)
-            };
-            _hotCornerTimer.Tick += (_, _) =>
-            {
-                try
-                {
-                    var pt = System.Windows.Forms.Cursor.Position;
-                    var primary = System.Windows.Forms.Screen.PrimaryScreen!.Bounds;
-                    // 16x16 pixel hot zone at the top-right corner.
-                    bool inCorner = pt.X >= primary.Right - 16 && pt.X <= primary.Right
-                                  && pt.Y >= primary.Top && pt.Y <= primary.Top + 16;
-                    if (inCorner && !_hotCornerHidden)
-                    {
-                        _hotCornerHidden = true;
-                        foreach (var w in _controller._subWindows) w.Hide();
-                    }
-                    else if (!inCorner && _hotCornerHidden)
-                    {
-                        // 64-pixel "leave" margin to avoid flicker on jitter.
-                        bool nearCorner = pt.X >= primary.Right - 64 && pt.Y <= primary.Top + 64;
-                        if (!nearCorner)
-                        {
-                            _hotCornerHidden = false;
-                            foreach (var w in _controller._subWindows) w.Show();
-                        }
-                    }
-                }
-                catch (Exception ex) { Debug.WriteLine($"HotCorner tick failed: {ex.Message}"); }
-            };
-            _hotCornerTimer.Start();
-        }
-
-        private void StopHotCornerWatch()
-        {
-            _hotCornerTimer?.Stop();
-            _hotCornerTimer = null;
-            if (_hotCornerHidden)
-            {
-                _hotCornerHidden = false;
-                foreach (var w in _controller._subWindows) w.Show();
-            }
-        }
-
-        // Toggle the visibility of the Windows desktop icons (SHELLDLL_DefView under
-        // Progman/WorkerW). Used to give the user a clean desktop with only racks.
-        private void HideDesktopIconsToggle_CheckChanged(object sender, RoutedEventArgs e)
-        {
-            bool hide = HideDesktopIconsToggle.IsChecked == true;
-            _controller.reg.WriteToRegistryRoot("HideDesktopIcons", hide);
-            DesktopIcons.SetHidden(hide);
-        }
-        private void AutorunToggle_CheckChanged(object sender, RoutedEventArgs e)
-        {
-            if ((bool)AutorunToggle.IsChecked!)
-            {
-
-                _controller.reg.AddToAutoRun(InstanceController.appName, Process.GetCurrentProcess().MainModule!.FileName);
-            }
-            else
-            {
-                _controller.reg.RemoveFromAutoRun(InstanceController.appName);
-                _controller.reg.RemoveFromAutoRun(InstanceController.LegacyAppName);
-            }
-            _controller.reg.WriteToRegistryRoot("startOnLogin", AutorunToggle.IsChecked);
-        }
-        private void visitGithub_Buton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                ProcessStartInfo sInfo = new ProcessStartInfo($"https://github.com/duartelcunha/Racks") { UseShellExecute = true };
-                _ = Process.Start(sInfo);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"visitGithub failed: {ex.Message}");
-            }
-        }
-
-        private void ExitApp(object sender, RoutedEventArgs e)
-        {
-            TrayIcon.Visibility = Visibility.Hidden;
-            Racks.Util.LifecycleAnimations.RunQuitAnimation(() => Application.Current.Shutdown());
-        }
-
-        private void Settings_Button_Click(object sender, RoutedEventArgs e)
-        {
-            new SettingsWindow(_controller, this).Show();
-        }
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             if (msg == _taskbarRestartMessage)
@@ -694,81 +378,27 @@ namespace Racks
                         _controller.CheckFrameWindowsLive();
                 });
             }
-            if (msg == 0x007E) // WM_DISPLAYCHANGE
+            // WM_DISPLAYCHANGE and the follow-up message: one debounced reposition pass (DisplayChangeDebouncer).
+            _display.OnMessage(msg);
+            if (_hotkeys.TryDispatch(msg, wParam))
             {
-                if (!_controller.isInitializingInstances)
-                {
-                    HandleDisplayOrSettingsChange();
-                    reseted = true;
-                }
-            }
-            if (msg == 0x001C && reseted) // WM_WININICHANGE
-            {
-                if (!_controller.isInitializingInstances)
-                {
-
-                    reseted = false;
-                    HandleDisplayOrSettingsChange();
-                }
-            }
-            if (msg == Interop.WM_HOTKEY && wParam.ToInt32() == QUICK_FINDER_HOTKEY_ID)
-            {
-                try
-                {
-                    _quickFinder?.Close();
-                    _quickFinder = new QuickFinderWindow(_controller);
-                    _quickFinder.Show();
-                    _quickFinder.Activate();
-                }
-                catch (Exception ex) { Debug.WriteLine($"QuickFinder open failed: {ex.Message}"); }
                 handled = true;
             }
-            if (msg == Interop.WM_HOTKEY && wParam.ToInt32() == NEW_RACK_HOTKEY_ID)
+            if (_ipcCommands.TryGetValue(msg, out var command))
             {
-                try { _controller.AddVirtualInstance(); }
-                catch (Exception ex) { Debug.WriteLine($"New rack hotkey failed: {ex.Message}"); }
+                command();
                 handled = true;
             }
             return IntPtr.Zero;
         }
-        // On a real display or settings change (resolution, monitor plugged/unplugged,
-        // DPI, theme) reposition every rack against the new working area.
-        //
-        // This used to also spawn a throwaway "DummyWindow" (a real desktop-child
-        // RackWindow shown and immediately closed) 200ms after each message. That was the
-        // root cause of a runaway freeze: creating a desktop-child window itself emits
-        // WM_DISPLAYCHANGE/WM_WININICHANGE, so each dummy triggered another change, which
-        // spawned another dummy - a self-sustaining message storm (~4/sec) that pegged the
-        // UI thread and made the app unresponsive (couldn't even quit) right after a rack
-        // was created. CheckFrameWindowsLive already repositions and repaints the racks, so
-        // the dummy did nothing useful. Removed. The _dummyWindowPending flag still
-        // debounces bursts of genuine display messages into a single reposition pass.
-        private void HandleDisplayOrSettingsChange()
-        {
-            if (_dummyWindowPending) return;
-            _dummyWindowPending = true;
-            Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                try { _controller.CheckFrameWindowsLive(); }
-                finally { _dummyWindowPending = false; }
-            });
-        }
-        protected override void OnClosed(EventArgs e)
-        {
-            if (_lowLevelMouseHook != null)
-            {
-                _lowLevelMouseHook.Stop();
-                _lowLevelMouseHook.Dispose();
-            }
-            _desktopRouter?.Dispose();
-            StopHotCornerWatch();
-            if (_mainHwnd != IntPtr.Zero)
-            {
-                try { Interop.UnregisterHotKey(_mainHwnd, QUICK_FINDER_HOTKEY_ID); } catch { }
-                try { Interop.UnregisterHotKey(_mainHwnd, NEW_RACK_HOTKEY_ID); } catch { }
-            }
-            base.OnClosed(e);
-        }
 
+        // The WM_RACKS_TOGGLE_* messages set IsChecked (which fires Checked/Unchecked, so the handler runs) AND then call
+        // the handler by hand, so the handler runs twice for one message. Every handler is idempotent, and the tools/*E2ERunner
+        // scripts were written against this: kept exactly (characterized in TrayToggleServiceTests).
+        private void FlipAndRun(ToggleSwitch toggle, RoutedEventHandler handler)
+        {
+            toggle.IsChecked = !(toggle.IsChecked == true);
+            handler(this, new RoutedEventArgs());
+        }
     }
 }

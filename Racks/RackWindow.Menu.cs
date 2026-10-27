@@ -468,36 +468,8 @@ namespace Racks
             };
             autoRouteItem.Click += async (_, _) =>
             {
-                var input = new TextBox
-                {
-                    Text = Instance.AutoRouteRegex ?? "",
-                    MinWidth = 280,
-                    Margin = new Thickness(0, 8, 0, 0),
-                };
-                var help = new TextBlock
-                {
-                    Text = "Regex matched against file names on the Desktop. " +
-                           "Examples:  \\.png$   ^report-.*\\.pdf$   .*screenshot.*",
-                    Opacity = 0.7,
-                    TextWrapping = TextWrapping.Wrap,
-                    Margin = new Thickness(0, 0, 0, 6),
-                };
-                var panel = new StackPanel();
-                panel.Children.Add(help);
-                panel.Children.Add(input);
-                var dlg = new MessageBox
-                {
-                    Title = "Auto-route rule",
-                    Content = panel,
-                    PrimaryButtonText = "Save",
-                    SecondaryButtonText = "Clear rule",
-                    CloseButtonText = "Cancel",
-                };
-                var res = await dlg.ShowDialogAsync();
-                if (res == MessageBoxResult.Primary)
-                    Instance.AutoRouteRegex = input.Text ?? "";
-                else if (res == MessageBoxResult.Secondary)
-                    Instance.AutoRouteRegex = "";
+                string? rule = await Racks.Views.AutoRouteRuleDialog.EditAsync(Instance.AutoRouteRegex ?? "");
+                if (rule != null) Instance.AutoRouteRegex = rule;
             };
 
             MenuItem frameSettings = new MenuItem
@@ -625,10 +597,15 @@ namespace Racks
 
                 if (confirmed)
                 {
+                    Instance.isWindowClosing = true;
+                    try { _fileWatcherService.Dispose(); } catch { }
+                    try { _watcherDebounce?.Stop(); } catch { }
+
                     // Collect everything that lands back on the desktop so we can arrange it
                     // into a clean grid afterwards (files just moved back land wherever
                     // Explorer decides, which looks messy).
                     var returnedToDesktop = new List<string>();
+                    string? folderKept = null; // set when the emptied Desktop folder could not be deleted
                     if (Instance.IsDesktopFilterRack && Instance.AssignedFiles != null)
                     {
                         string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -638,9 +615,9 @@ namespace Racks
                             // name by contract. Skip anything with a separator or ".." so a
                             // hand-edited/imported value can't Path.Combine its way out of the
                             // workspace and move an arbitrary file to the desktop.
-                            if (string.IsNullOrEmpty(fileName) || System.IO.Path.GetFileName(fileName) != fileName)
+                            if (!Infrastructure.FileSystem.PathPolicy.ValidateLeafName(fileName).Ok)
                                 continue;
-                            var back = Rack.WorkspaceReturn.ToDesktop(DesktopIconManager.RacksWorkspacePath, desktopPath, fileName);
+                            var back = Rack.WorkspaceReturn.ToDesktop(Racks.Infrastructure.Shell.ShellOperationGateway.Default.WorkspacePath, desktopPath, fileName);
                             if (back != null) returnedToDesktop.Add(back);
                         }
                     }
@@ -653,7 +630,7 @@ namespace Racks
                         if (report.Kept > 0 || report.KeptFolders.Count > 0)
                         {
                             if (returnedToDesktop.Count > 0)
-                                Util.DesktopIconPositioner.ArrangeInGrid(returnedToDesktop);
+                                Racks.Infrastructure.Shell.ShellOperationGateway.Default.ArrangeDesktopIcons(returnedToDesktop);
                             Racks.Views.RacksMessageBox.Show(
                                 $"{report.Kept} item(s) could not be moved back to your Desktop (for example a file is open). " +
                                 "The rack was kept so nothing is lost. Close the file and remove the rack again.",
@@ -667,23 +644,21 @@ namespace Racks
                         foreach (string file in System.IO.Directory.GetFileSystemEntries(Instance.Folder))
                         {
                             string dest = System.IO.Path.Combine(deskPath, System.IO.Path.GetFileName(file));
-                            if (Util.SafeMove.TryMove(file, dest, out _) == Util.SafeMove.Result.Moved)
+                            if (Infrastructure.FileSystem.FileOperationBroker.Default.Move(file, dest, "remove rack: return to desktop").Completed)
                                 returnedToDesktop.Add(dest);
                         }
-                        try { System.IO.Directory.Delete(Instance.Folder, false); } catch { }
+                        folderKept = Rack.RackFolderRemoval.DeleteEmptiedFolder(Infrastructure.FileSystem.FileOperationBroker.Default, Instance.Folder);
                     }
                     if (returnedToDesktop.Count > 0)
-                        Util.DesktopIconPositioner.ArrangeInGrid(returnedToDesktop);
+                        Racks.Infrastructure.Shell.ShellOperationGateway.Default.ArrangeDesktopIcons(returnedToDesktop);
 
-                    RegistryKey key = Registry.CurrentUser.OpenSubKey(Instance.GetKeyLocation(), true)!;
-                    if (key != null)
-                    {
-                        Registry.CurrentUser.DeleteSubKeyTree(Instance.GetKeyLocation());
-                    }
+                    // Never throws; a failed delete is audited by the settings store.
+                    if (!string.IsNullOrEmpty(Instance.Name)) Instance.Store.Delete(Instance.Name);
                     MainWindow._controller.RemoveInstance(Instance, this);
                     // The sandbox folder was emptied and removed above (ReturnFolderToDesktop). Nothing
                     // is ever deleted recursively here any more: see INV-REMOVE-1.
                     this.Close();
+                    if (folderKept != null) Racks.Views.RacksMessageBox.Show(folderKept, Lang.TitleBarContextMenu_RemoveMessageBox_Title);
 
                 }
             };

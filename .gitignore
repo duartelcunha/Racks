@@ -409,3 +409,6 @@ Racks/Test*.exe
 docs/media/raw/
 docs/media/studio/out/
 docs/media/studio/node_modules/
+
+# Test output screenshots
+tools/e2e_screenshots/

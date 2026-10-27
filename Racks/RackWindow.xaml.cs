@@ -76,7 +76,6 @@ namespace Racks
         private FileItem _itemUnderCursor;
         private FileItem _itemCurrentlyRenaming;
         string _dropIntoFolderPath;
-        FrameworkElement _lastBorder;
         private bool _isRenaming = true;
         private bool _isTopmost = false;
         private bool _inHandleWindowMove = false;
@@ -187,6 +186,7 @@ namespace Racks
             MouseLeaveWindow(false);
             FileListView.ItemContainerGenerator.StatusChanged += ItemContainerGenerator_StatusChanged;
             FileWrapPanel.ItemContainerGenerator.StatusChanged += FileWrapPanel_GeneratorStatusChanged;
+            FileWrapPanel.Loaded += (s, e) => FileWrapPanel_GeneratorStatusChanged(s, e);
         }
 
         // Find the AnimatedTilePanel once it's materialized and wire up its drag
@@ -359,7 +359,7 @@ namespace Racks
             UpdateIconVisibility();
             AnimateChevron(_isMinimized, true, 0.01); // When 0 docked window won't open
             KeepWindowBehind();
-            RegistryHelper rgh = new RegistryHelper(InstanceController.appName);
+            FileWrapPanel_GeneratorStatusChanged(FileWrapPanel, EventArgs.Empty);
 
         }
 

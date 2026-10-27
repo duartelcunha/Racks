@@ -1,4 +1,5 @@
 using System.IO;
+using Racks.Infrastructure.FileSystem;
 using Racks.Util;
 
 namespace Racks.Rack;
@@ -14,7 +15,9 @@ public static class WorkspaceReturn
     /// <summary>The path the item ended up at on the Desktop, or null if it could not be returned.</summary>
     public static string? ToDesktop(string workspaceDir, string desktopDir, string fileName)
     {
-        if (string.IsNullOrEmpty(fileName) || Path.GetFileName(fileName) != fileName) return null;
+        // A plain leaf name only: "." and ".." would name the workspace itself or its parent, and a path, a drive,
+        // a data stream or a device name would leave the workspace (INV-IDS-1, INV-FS-2).
+        if (!PathPolicy.ValidateLeafName(fileName).Ok) return null;
         string from = Path.Combine(workspaceDir, fileName);
         bool isDir = Directory.Exists(from);
         if (!isDir && !File.Exists(from)) return null;
@@ -24,7 +27,9 @@ public static class WorkspaceReturn
             && new FileInfo(from).Length == new FileInfo(wanted).Length)
         {
             // Ctrl+drop left the original on the Desktop and a second name here: same data.
-            try { File.Delete(from); return wanted; } catch { return null; }
+            return FileOperationBroker.Default.Unlink(from, "return from workspace: drop the duplicate name (the Desktop name keeps the data)").Succeeded
+                ? wanted
+                : null;
         }
 
         string target = wanted;
@@ -33,6 +38,6 @@ public static class WorkspaceReturn
             if (attempt > 1000) return null;
             target = Path.Combine(desktopDir, UninstallCleanup.CandidateName(fileName, isDir, attempt));
         }
-        return SafeMove.TryMove(from, target, out _) == SafeMove.Result.Moved ? target : null;
+        return FileOperationBroker.Default.Move(from, target, "return from workspace").Completed ? target : null;
     }
 }

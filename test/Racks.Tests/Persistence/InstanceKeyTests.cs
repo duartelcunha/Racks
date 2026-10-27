@@ -1,7 +1,5 @@
 using System.IO;
-using System.Text.RegularExpressions;
 using Microsoft.Win32;
-using Racks.Tests.Guards;
 
 namespace Racks.Tests.Persistence;
 
@@ -16,7 +14,9 @@ public sealed class InstanceKeyTests : IDisposable
     {
         // The registry root follows InstanceController.appName, so tests never touch HKCU\SOFTWARE\Racks.
         InstanceController.appName = _root;
-        _controller = new InstanceController();
+        // isInitializingInstances keeps InstanceController.RefreshMirror away from the real %USERPROFILE%\Racks
+        // junctions when a test sets a TitleText.
+        _controller = new InstanceController { isInitializingInstances = true };
         Racks.MainWindow._controller = _controller;
     }
 
@@ -94,33 +94,80 @@ public sealed class InstanceKeyTests : IDisposable
         Assert.Null(key);
     }
 
-    // Drift guard: every persisted Instance property must be written by WriteInstanceToKey and read
-    // by InitInstances. A new property that is forgotten in either place fails here.
-    [Fact]
-    public void Every_persisted_property_is_written_and_read()
+    // Drift guard (behaviour, not source text): every public member of Instance that announces a change is either
+    // persisted, which means it is in the golden table and survives write -> load, or it is on the explicit
+    // exclusion list below. A new property that is forgotten in the writer, the reader or the golden table fails here.
+    private static readonly HashSet<string> NotPersistedOnPurpose = new()
     {
-        string instanceSrc = File.ReadAllText(RepoPaths.App("Core", "Instance.cs"));
-        string controllerSrc = File.ReadAllText(RepoPaths.App("Core", "InstanceController.cs"));
+        "IsShortcutsOnly",   // rebuilt from the folder path when the window is created
+        "SettingDefault",    // a mode flag of the "Default Style" instance
+    };
 
-        var props = Regex.Matches(instanceSrc, @"OnPropertyChanged\(nameof\((\w+)\)").Select(m => m.Groups[1].Value).ToHashSet();
-        string writer = Between(controllerSrc, "public void WriteInstanceToKey(", "public void AddInstance(");
-        var written = Regex.Matches(writer, @"SetValue\(""(\w+)""").Select(m => m.Groups[1].Value).ToHashSet();
-        var read = Regex.Matches(controllerSrc, @"case ""(\w+)"":").Select(m => m.Groups[1].Value).ToHashSet();
+    private static readonly HashSet<string> TransientFields = new()
+    {
+        "isWindowClosing",   // set while a window closes, so nothing is saved
+        "IsFolderMissing",   // computed at load from the folder
+    };
 
-        // Not persisted on purpose: rebuilt from the folder path (IsShortcutsOnly) or a mode flag (SettingDefault).
-        var notPersisted = new HashSet<string> { "IsShortcutsOnly", "SettingDefault" };
-        var expected = props.Except(notPersisted).ToList();
+    [Fact]
+    public void Every_persisted_property_round_trips_through_write_and_load()
+    {
+        // Public fields have no change event, so a full save is the only thing that writes them. Found by reflection; the two
+        // that are only run-time state are listed.
+        var persistedFields = typeof(Instance).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .Select(f => f.Name).Where(n => !TransientFields.Contains(n)).ToHashSet();
+        Assert.Equal(GoldenRack.Fields.Order().ToList(), persistedFields.Order().ToList());
 
-        Assert.True(expected.Count > 50, "property scan found too few properties; the regex needs updating");
-        Assert.Empty(expected.Where(p => !written.Contains(p)).Order());
-        Assert.Empty(expected.Where(p => !read.Contains(p)).Order());
+        var persisted = AnnouncedProperties().Where(n => !NotPersistedOnPurpose.Contains(n))
+            .Concat(persistedFields).ToHashSet();
+
+        Assert.True(persisted.Count > 50, "the property scan found too few properties");
+        Assert.Empty(persisted.Except(GoldenRack.Names).Order().ToList());   // a new persisted member: add it to GoldenRack
+        Assert.Empty(GoldenRack.Names.Except(persisted).Order().ToList());   // a golden name that is not a persisted member
+
+        _controller.WriteInstanceToKey(GoldenRack.Build());
+        _controller.Instances.Clear();
+        _controller.LoadInstancesFromRegistry(false, false);
+        var loaded = Assert.Single(_controller.Instances);
+        Assert.Empty(GoldenRack.Mismatches(loaded));
     }
 
-    private static string Between(string text, string start, string end)
+    // Public writable properties whose setter raises PropertyChanged for a new value, found by setting them.
+    private static List<string> AnnouncedProperties()
     {
-        int i = text.IndexOf(start, StringComparison.Ordinal);
-        int j = text.IndexOf(end, i + start.Length, StringComparison.Ordinal);
-        Assert.True(i >= 0 && j > i, $"could not find '{start}'..'{end}'");
-        return text.Substring(i, j - i);
+        var found = new List<string>();
+        foreach (var p in typeof(Instance).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (!p.CanRead || !p.CanWrite || p.GetIndexParameters().Length > 0) continue;
+            var probe = new Instance("probe", false);
+            using var noWrites = probe.SuspendPersistence();
+            bool raised = false;
+            probe.PropertyChanged += (_, e) => raised |= e.PropertyName == p.Name;
+            // A new bool that defaults to true must not slip by: try the value that differs from the current one, then the other.
+            var candidates = GoldenRack.NonDefault.TryGetValue(p.Name, out var golden)
+                ? new List<object?> { golden }
+                : Candidates(p, p.GetValue(probe));
+            foreach (var candidate in candidates)
+            {
+                if (candidate == null) continue;
+                try { p.SetValue(probe, candidate); } catch { continue; }
+                if (raised) { found.Add(p.Name); break; }
+            }
+        }
+        return found;
+    }
+
+    private static List<object?> Candidates(System.Reflection.PropertyInfo p, object? current)
+    {
+        var t = p.PropertyType;
+        if (t == typeof(bool)) return new List<object?> { !(bool)current!, (bool)current! };
+        if (t == typeof(int)) return new List<object?> { (int)current! + 1, 7 };
+        if (t == typeof(double)) return new List<object?> { (double)current! + 1.5, 7.5 };
+        if (t == typeof(string)) return new List<object?> { p.Name.EndsWith("Color") ? "#010203" : p.Name.EndsWith("FontFamily") ? "Arial" : "zz" };
+        if (t == typeof(List<string>)) return new List<object?> { new List<string> { "q" } };
+        if (t == typeof(int[])) return new List<object?> { new[] { 7 } };
+        if (t == typeof(List<Tuple<string, string>>)) return new List<object?> { new List<Tuple<string, string>> { Tuple.Create("q", "1") } };
+        if (t.IsEnum) return Enum.GetValues(t).Cast<object?>().Where(v => !Equals(v, current)).ToList();
+        return new List<object?>();
     }
 }

@@ -21,7 +21,7 @@
          ResizeMode="CanResize"
          MouseLeftButtonDown="Window_MouseLeftButtonDown"
          IsTabStop="False" Loaded="Window_Loaded"
-         AllowDrop="True" Drop="Window_Drop" 
+         AllowDrop="True" Drop="Window_Drop" PreviewDragOver="Window_PreviewDragOver" DragOver="Window_DragOver" 
          DragEnter="Window_DragEnter" DragLeave="Window_DragLeave"
          FontSize="12"
          MinHeight="30" 
@@ -240,11 +240,11 @@
             <Border Effect="{StaticResource ImageGrayscaleEffect}" >
                 <Grid>
                     <Grid x:Name="showFolder">
-                        <ui:DynamicScrollViewer Focusable="False" ScrollChanged="scrollViewer_ScrollChanged" x:Name="scrollViewer" IsTabStop="False" VerticalScrollBarVisibility="Auto" Margin="0,30,0,0" >
-                            <ItemsControl Margin="6,5,0,5" Focusable="False" x:Name="FileWrapPanel" IsTabStop="False" ItemsSource="{Binding FileItems}" ItemTemplate="{StaticResource FileItemTemplate}">
+                        <ui:DynamicScrollViewer AllowDrop="True" Focusable="False" ScrollChanged="scrollViewer_ScrollChanged" x:Name="scrollViewer" IsTabStop="False" VerticalScrollBarVisibility="Auto" Margin="0,30,0,0" >
+                            <ItemsControl AllowDrop="True" Margin="6,5,0,5" Focusable="False" x:Name="FileWrapPanel" IsTabStop="False" ItemsSource="{Binding FileItems}" ItemTemplate="{StaticResource FileItemTemplate}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <util:AnimatedTilePanel x:Name="TilePanel" HorizontalAlignment="Left" VerticalAlignment="Top" ClipToBounds="True">
+                                        <util:AnimatedTilePanel AllowDrop="True" x:Name="TilePanel" HorizontalAlignment="Left" VerticalAlignment="Top" ClipToBounds="True">
                                             <util:AnimatedTilePanel.ItemWidth>
                                                 <MultiBinding Converter="{StaticResource ShowDisplayNameToItemWidthConverter}">
                                                     <Binding Path="DataContext.Instance.ShowDisplayName" RelativeSource="{RelativeSource AncestorType=Window}" />

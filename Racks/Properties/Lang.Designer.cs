@@ -58,6 +58,24 @@ namespace Racks.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to That pattern can&apos;t be used: it is not a valid regular expression, or it takes too long to check a file name. The previous rule was kept. Try a simpler pattern..
+        /// </summary>
+        public static string AutoRoute_Invalid_Message {
+            get {
+                return ResourceManager.GetString("AutoRoute.Invalid.Message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Auto-route rule not saved.
+        /// </summary>
+        public static string AutoRoute_Invalid_Title {
+            get {
+                return ResourceManager.GetString("AutoRoute.Invalid.Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Racks kept running. Details were saved to crash.log in %AppData%\Racks. Please include it if you report a bug..
         /// </summary>
         public static string Crash_Toast_Body {
@@ -571,6 +589,154 @@ namespace Racks.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Couldn&apos;t export your racks: {0}
+        ///
+        ///An existing file at that location was not changed..
+        /// </summary>
+        public static string Layout_Export_Failed {
+            get {
+                return ResourceManager.GetString("Layout.Export.Failed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Export racks.
+        /// </summary>
+        public static string Layout_Export_Title {
+            get {
+                return ResourceManager.GetString("Layout.Export.Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Cancel.
+        /// </summary>
+        public static string Layout_Import_Cancel {
+            get {
+                return ResourceManager.GetString("Layout.Import.Cancel", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Importing will REPLACE all your current racks with the layout in the file. Continue?.
+        /// </summary>
+        public static string Layout_Import_Confirm {
+            get {
+                return ResourceManager.GetString("Layout.Import.Confirm", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Imported {0} rack(s). Some values in the file could not be used and were left at their defaults:
+        ///{1}.
+        /// </summary>
+        public static string Layout_Import_Dropped {
+            get {
+                return ResourceManager.GetString("Layout.Import.Dropped", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to ...and {0} more (see audit.log in %AppData%\Racks)..
+        /// </summary>
+        public static string Layout_Import_DroppedMore {
+            get {
+                return ResourceManager.GetString("Layout.Import.DroppedMore", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The file has no racks. Nothing was changed..
+        /// </summary>
+        public static string Layout_Import_Empty {
+            get {
+                return ResourceManager.GetString("Layout.Import.Empty", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The import failed: {0}
+        ///
+        ///Your previous racks were restored..
+        /// </summary>
+        public static string Layout_Import_Failed {
+            get {
+                return ResourceManager.GetString("Layout.Import.Failed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to A copy of your previous racks could not be saved either ({0})..
+        /// </summary>
+        public static string Layout_Import_RecoveryFailed {
+            get {
+                return ResourceManager.GetString("Layout.Import.RecoveryFailed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to A copy of your previous racks was saved to:
+        ///{0}
+        ///Import that file to get them back..
+        /// </summary>
+        public static string Layout_Import_RecoverySaved {
+            get {
+                return ResourceManager.GetString("Layout.Import.RecoverySaved", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Import cancelled: {0}
+        ///
+        ///Your existing racks are unchanged..
+        /// </summary>
+        public static string Layout_Import_Rejected {
+            get {
+                return ResourceManager.GetString("Layout.Import.Rejected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Replace.
+        /// </summary>
+        public static string Layout_Import_Replace {
+            get {
+                return ResourceManager.GetString("Layout.Import.Replace", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The import failed: {0}
+        ///
+        ///Your previous racks could not be fully restored, so some racks may be missing or changed. Details were saved to audit.log in %AppData%\Racks.
+        ///
+        ///{1}.
+        /// </summary>
+        public static string Layout_Import_RollbackFailed {
+            get {
+                return ResourceManager.GetString("Layout.Import.RollbackFailed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Import racks.
+        /// </summary>
+        public static string Layout_Import_Title {
+            get {
+                return ResourceManager.GetString("Layout.Import.Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The import could not be completed: {0}.
+        /// </summary>
+        public static string Layout_Import_Unexpected {
+            get {
+                return ResourceManager.GetString("Layout.Import.Unexpected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Racks is already running.
         /// </summary>
         public static string Racks_AlreadyRunning {
@@ -846,6 +1012,34 @@ namespace Racks.Properties {
         public static string RacksSettings_TitleBarText {
             get {
                 return ResourceManager.GetString("RacksSettings.TitleBarText", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The rack was removed, but its folder &quot;{0}&quot; is still on your Desktop because something in it could not be moved back (for example a file is open). Nothing was deleted. You can delete the folder yourself once it is empty..
+        /// </summary>
+        public static string RemoveRack_FolderKept {
+            get {
+                return ResourceManager.GetString("RemoveRack.FolderKept", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Couldn&apos;t rename to &quot;{0}&quot;:
+        ///{1}.
+        /// </summary>
+        public static string Rename_Failed_Message {
+            get {
+                return ResourceManager.GetString("Rename.Failed.Message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Rename failed.
+        /// </summary>
+        public static string Rename_Failed_Title {
+            get {
+                return ResourceManager.GetString("Rename.Failed.Title", resourceCulture);
             }
         }
         
@@ -1188,6 +1382,24 @@ namespace Racks.Properties {
         public static string Tray_CheckUpdates_ToolTip {
             get {
                 return ResourceManager.GetString("Tray.CheckUpdates.ToolTip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Diagnostics HUD.
+        /// </summary>
+        public static string Tray_DevDiagnostics {
+            get {
+                return ResourceManager.GetString("Tray.DevDiagnostics", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Open live developer diagnostics HUD.
+        /// </summary>
+        public static string Tray_DevDiagnostics_ToolTip {
+            get {
+                return ResourceManager.GetString("Tray.DevDiagnostics.ToolTip", resourceCulture);
             }
         }
         

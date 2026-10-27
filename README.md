@@ -135,11 +135,13 @@ Colors, fonts, opacity, shadow, gradient or pure glass, per rack. Right-click â€
 
 <br />
 
-**Where do my files live?** In a hidden `RacksWorkspace` folder in your user profile (folder racks use your folder).
+**Where do my files live?** Racks never copies them to a cloud. A rack that mirrors your desktop keeps its files in a hidden `RacksWorkspace` folder in your user profile. A rack with no folder of its own keeps them under `%AppData%\Racks\VirtualFrames`. A **folder rack** shows the folder you picked, so what you drop in goes into that folder.
 
-**What happens when I remove a rack?** Its files go back to the desktop. A folder rack on a folder directly on the Desktop asks, then empties and deletes that folder.
+**What happens when I remove a rack?** Its files go back to the desktop (a name that is already taken gets "(from Racks)"; nothing is overwritten). If something cannot be moved, for example a file that is open, the rack or its folder stays and you are told. A rack on a folder directly on the Desktop asks first, then empties and deletes that folder.
 
-**Does it send anything?** Only update checks to GitHub, when you ask or turn on auto-update.
+**Does it send anything?** Only update checks to GitHub (the list of releases and, if you press Install, the installer), when you ask or turn on auto-update. An update is installed only if its signature, version, size and checksum all verify; otherwise nothing runs. No account, no analytics.
+
+**What does Racks write on my PC?** Your settings in the registry (`HKCU\Software\Racks`), and two small logs that stay on your PC and are never uploaded: `%AppData%\Racks\audit.log` (one line per file move, rename or delete Racks does, and per setting it had to ignore; it contains file and folder names) and `%AppData%\Racks\crash.log` (error details after a crash). If an imported layout fails halfway, your previous racks are saved under `%AppData%\Racks\recovery` so you can import them back. Read the logs before you share them. Uninstalling removes the two logs and your settings and gives your files back to the desktop; it keeps the `recovery` folder.
 
 **"Windows protected your PC"?** Indie app, no paid certificate. Click **More info â€º Run anyway**.
 
@@ -153,6 +155,8 @@ Colors, fonts, opacity, shadow, gradient or pure glass, per rack. Right-click â€
 
 Get `Racks-Setup-<version>.exe` from the [latest release](https://github.com/duartelcunha/Racks/releases/latest). No admin rights needed. Right-click the tray icon to make your first rack.
 
+**Requirements:** 64-bit Windows 10 version 2004 (build 19041) or later, including Windows 11. The installer carries the .NET runtime, so there is nothing else to install. (The app is built for that minimum; the installer itself does not check the Windows version.)
+
 <br />
 
 ## Build it yourself
@@ -161,10 +165,15 @@ Needs the **.NET 10 SDK** (and **Inno Setup 6** for the installer).
 
 ```powershell
 dotnet run --project Racks/Racks.csproj   # run from source
+dotnet test Racks.sln -c Release          # the whole suite (real NTFS in temp folders, no real Desktop)
+dotnet format whitespace --verify-no-changes
+dotnet build Racks.sln -c Release         # 0 warnings expected
 .\build-installer.ps1                   # -> installer\Output\Racks-Setup-<version>.exe
 ```
 
-Design notes: [`ABOUT.md`](ABOUT.md). Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md). README media: [`docs/media/studio`](docs/media/studio/README.md).
+The full list of checks to run before a pull request is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+Design notes: [`ABOUT.md`](ABOUT.md). How the code is laid out: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Security rules, what is enforced and what is still open: [`docs/SECURITY-INVARIANTS.md`](docs/SECURITY-INVARIANTS.md) and [`SECURITY.md`](SECURITY.md). Hardening history, merge order and how to resume: [`docs/HARDENING-ROADMAP.md`](docs/HARDENING-ROADMAP.md). Releasing: [`docs/RELEASING.md`](docs/RELEASING.md). README media: [`docs/media/studio`](docs/media/studio/README.md).
 
 <br />
 

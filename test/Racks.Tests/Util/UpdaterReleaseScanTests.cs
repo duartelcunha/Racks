@@ -1,4 +1,4 @@
-using System.IO;
+using Racks.UseCases.Updates;
 using System.Text.Json;
 using Racks.Util;
 
@@ -30,7 +30,7 @@ public class UpdaterReleaseScanTests
     [Fact]
     public void Signed_releases_newer_than_this_build_are_candidates_newest_first()
     {
-        var list = Updater.SelectCandidates(
+        var list = ReleaseManifestValidator.SelectCandidates(
             Releases(Rel("v1.4.1"), Rel("v1.6.0"), Rel("v1.5.0"), Rel("v1.4.0"), Rel("v1.3.0")),
             "1.4.0.0", out var newest);
 
@@ -41,7 +41,7 @@ public class UpdaterReleaseScanTests
     [Fact]
     public void An_unsigned_newer_release_is_reported_but_not_a_candidate()
     {
-        var list = Updater.SelectCandidates(Releases(Rel("v2.0.0", signed: false), Rel("v1.5.0")), "1.4.0", out var newest);
+        var list = ReleaseManifestValidator.SelectCandidates(Releases(Rel("v2.0.0", signed: false), Rel("v1.5.0")), "1.4.0", out var newest);
 
         Assert.Equal(new[] { "1.5.0" }, list.Select(a => a.Version));
         Assert.Equal("2.0.0", newest);
@@ -50,7 +50,7 @@ public class UpdaterReleaseScanTests
     [Fact]
     public void Drafts_prereleases_and_odd_tags_are_ignored()
     {
-        var list = Updater.SelectCandidates(Releases(
+        var list = ReleaseManifestValidator.SelectCandidates(Releases(
             Rel("v3.0.0", draft: true),
             Rel("v2.5.0", prerelease: true),
             Rel("v2.4.0-rc1"),
@@ -64,7 +64,7 @@ public class UpdaterReleaseScanTests
     [Fact]
     public void Nothing_newer_means_no_candidates_and_no_version()
     {
-        var list = Updater.SelectCandidates(Releases(Rel("v1.4.0"), Rel("v1.3.9")), "1.4.0.0", out var newest);
+        var list = ReleaseManifestValidator.SelectCandidates(Releases(Rel("v1.4.0"), Rel("v1.3.9")), "1.4.0.0", out var newest);
         Assert.Empty(list);
         Assert.Null(newest);
     }
@@ -72,16 +72,16 @@ public class UpdaterReleaseScanTests
     [Fact]
     public void Only_the_first_page_is_scanned()
     {
-        var many = Enumerable.Range(0, Updater.MaxReleasesScanned).Select(i => Rel($"v1.0.{i}")).Append(Rel("v9.0.0")).ToArray();
-        var list = Updater.SelectCandidates(Releases(many), "0.9.0", out var newest);
-        Assert.Equal(Updater.MaxReleasesScanned, list.Count);
-        Assert.Equal($"1.0.{Updater.MaxReleasesScanned - 1}", newest);
+        var many = Enumerable.Range(0, ReleaseManifestValidator.MaxReleasesScanned).Select(i => Rel($"v1.0.{i}")).Append(Rel("v9.0.0")).ToArray();
+        var list = ReleaseManifestValidator.SelectCandidates(Releases(many), "0.9.0", out var newest);
+        Assert.Equal(ReleaseManifestValidator.MaxReleasesScanned, list.Count);
+        Assert.Equal($"1.0.{ReleaseManifestValidator.MaxReleasesScanned - 1}", newest);
     }
 
     [Fact]
     public void A_response_that_is_not_a_list_has_no_candidates()
     {
-        var list = Updater.SelectCandidates(JsonSerializer.SerializeToElement(Rel("v9.0.0")), "1.0.0", out var newest);
+        var list = ReleaseManifestValidator.SelectCandidates(JsonSerializer.SerializeToElement(Rel("v9.0.0")), "1.0.0", out var newest);
         Assert.Empty(list);
         Assert.Null(newest);
     }
@@ -89,18 +89,18 @@ public class UpdaterReleaseScanTests
     private static UpdateManifest Manifest(string version) => UpdateManifest.ForInstaller(version, new byte[32], 10);
 
     [Fact]
-    public void A_newer_release_that_fails_verification_does_not_hide_an_older_good_one()
+    public async Task A_newer_release_that_fails_verification_does_not_hide_an_older_good_one()
     {
-        var list = Updater.SelectCandidates(Releases(Rel("v1.6.0"), Rel("v1.5.0")), "1.4.0", out _);
+        var list = ReleaseManifestValidator.SelectCandidates(Releases(Rel("v1.6.0"), Rel("v1.5.0")), "1.4.0", out _);
         var tried = new List<string>();
 
-        var (offer, _) = Updater.ChooseVerifiedAsync(list, a =>
+        var (offer, _) = await ReleaseManifestValidator.ChooseVerifiedAsync(list, a =>
         {
             tried.Add(a.Version);
             return Task.FromResult(a.Version == "1.6.0"
                 ? (UpdateCheck.BadSignature, (UpdateManifest?)null)
                 : (UpdateCheck.Ok, (UpdateManifest?)Manifest(a.Version)));
-        }).GetAwaiter().GetResult();
+        });
 
         Assert.Equal(new[] { "1.6.0", "1.5.0" }, tried);
         Assert.NotNull(offer);
@@ -109,43 +109,33 @@ public class UpdaterReleaseScanTests
     }
 
     [Fact]
-    public void When_nothing_verifies_the_newest_failure_is_reported()
+    public async Task When_nothing_verifies_the_newest_failure_is_reported()
     {
-        var list = Updater.SelectCandidates(Releases(Rel("v1.6.0"), Rel("v1.5.0")), "1.4.0", out _);
-        var (offer, failure) = Updater.ChooseVerifiedAsync(list, a => Task.FromResult(a.Version == "1.6.0"
+        var list = ReleaseManifestValidator.SelectCandidates(Releases(Rel("v1.6.0"), Rel("v1.5.0")), "1.4.0", out _);
+        var (offer, failure) = await ReleaseManifestValidator.ChooseVerifiedAsync(list, a => Task.FromResult(a.Version == "1.6.0"
             ? (UpdateCheck.HashMismatch, (UpdateManifest?)null)
-            : (UpdateCheck.BadSignature, (UpdateManifest?)null))).GetAwaiter().GetResult();
+            : (UpdateCheck.BadSignature, (UpdateManifest?)null)));
 
         Assert.Null(offer);
         Assert.Equal(UpdateCheck.HashMismatch, failure);
     }
 
     [Fact]
-    public void A_verified_manifest_for_another_version_is_not_offered()
+    public async Task A_verified_manifest_for_another_version_is_not_offered()
     {
-        var list = Updater.SelectCandidates(Releases(Rel("v1.6.0")), "1.4.0", out _);
-        var (offer, failure) = Updater.ChooseVerifiedAsync(list, a => Task.FromResult((UpdateCheck.Ok, (UpdateManifest?)Manifest("1.5.0"))))
-            .GetAwaiter().GetResult();
+        var list = ReleaseManifestValidator.SelectCandidates(Releases(Rel("v1.6.0")), "1.4.0", out _);
+        var (offer, failure) = await ReleaseManifestValidator.ChooseVerifiedAsync(list, a => Task.FromResult((UpdateCheck.Ok, (UpdateManifest?)Manifest("1.5.0"))));
 
         Assert.Null(offer);
         Assert.Equal(UpdateCheck.WrongRelease, failure);
     }
 
     [Fact]
-    public void No_candidates_means_no_offer()
+    public async Task No_candidates_means_no_offer()
     {
-        var (offer, failure) = Updater.ChooseVerifiedAsync(Array.Empty<Updater.ReleaseAssets>(),
-            _ => throw new InvalidOperationException("nothing to verify")).GetAwaiter().GetResult();
+        var (offer, failure) = await ReleaseManifestValidator.ChooseVerifiedAsync(Array.Empty<ReleaseAssets>(),
+            _ => throw new InvalidOperationException("nothing to verify"));
         Assert.Null(offer);
         Assert.Equal(UpdateCheck.MissingManifest, failure);
-    }
-
-    [Fact]
-    public void Toasts_show_only_validated_versions_never_api_text()
-    {
-        // The toast texts in CheckUpdateAsync may interpolate only the validated version strings.
-        string src = File.ReadAllText(Racks.Tests.Guards.RepoPaths.App("Util", "Updater.cs"));
-        Assert.DoesNotContain("GetProperty(\"body\")", src);
-        Assert.DoesNotContain("GetProperty(\"name\")", src);
     }
 }

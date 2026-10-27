@@ -24,6 +24,11 @@
   <ItemGroup>
     <None Remove="ico.png" />
     <None Remove="Icon\ico.png" />
+    <None Remove="Icon\tray.png" />
+    <None Remove="Icon\tray_16.png" />
+    <None Remove="Icon\tray_20.png" />
+    <None Remove="Icon\tray_24.png" />
+    <None Remove="Icon\tray_32.png" />
     <None Remove="Shaders\GrayscaleEffect.ps" />
   </ItemGroup>
   <!-- COMReference items for Shell32 + IWshRuntimeLibrary were removed because they
@@ -31,12 +36,19 @@
        Shell32 was unused; IWshRuntimeLibrary was only used for .lnk creation, which is
        now handled by Util/ShellLinkHelper.cs (hand-rolled ComImport IShellLink). -->
   <ItemGroup>
+    <!-- Low-level global mouse hook for double-click-to-hide (Infrastructure/Shell/GlobalMouseHook.cs, UseCases/DoubleClickHide). -->
     <PackageReference Include="H.Hooks" Version="1.7.0" />
+    <!-- Shell folder/file pickers and shell objects (RackWindow.*.cs, dialogs). -->
     <PackageReference Include="Microsoft-WindowsAPICodePack-Shell" Version="1.1.5" />
-    <PackageReference Include="Microsoft.ML" Version="5.0.0" />
+    <!-- Local, offline file categorisation for Magic Organize (Core/AutoOrganizer.cs). Pulls Newtonsoft.Json transitively. -->
+    <PackageReference Include="Microsoft.ML" Version="5.0.1" />
+    <!-- Toast notifications and toast activation (Infrastructure/Startup, Infrastructure/Update/ToastUpdateNotifier.cs, Views/HotkeyConflictToast.cs). -->
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+    <!-- Virtual desktop queries and change events (Core/Instance.cs, RackWindow.*.cs, RackSettingsDialog). Pulls Microsoft.CodeAnalysis transitively. -->
     <PackageReference Include="Slions.VirtualDesktop" Version="6.9.2" />
-    <PackageReference Include="Svg" Version="3.4.7" />
+    <!-- SVG rendering for icons, behind the sanitiser Util/SafeSvg.cs. Pulls ExCSS transitively. -->
+    <PackageReference Include="Svg" Version="3.4.8" />
+    <!-- WPF-UI tray icon (NotifyIcon in MainWindow.xaml) and Fluent controls/theme used across the windows. -->
     <PackageReference Include="WPF-UI.Tray" Version="4.3.0" />
   </ItemGroup>
   <ItemGroup>
@@ -48,6 +60,11 @@
   <ItemGroup>
     <Resource Include="ico.png" />
     <Resource Include="Icon\ico.png" />
+    <Resource Include="Icon\tray.png" />
+    <Resource Include="Icon\tray_16.png" />
+    <Resource Include="Icon\tray_20.png" />
+    <Resource Include="Icon\tray_24.png" />
+    <Resource Include="Icon\tray_32.png" />
     <Resource Include="Shaders\GrayscaleEffect.ps" />
   </ItemGroup>
   <!-- Strongly typed Lang class.

@@ -11,7 +11,7 @@
         mc:Ignorable="d"
         Title="Racks" Height="450" Width="800" Initialized="Window_Initialized">
     <tray:NotifyIcon Grid.Row="0" FocusOnLeftClick="True"
-                   Icon="/ico.png"
+                   Icon="/Icon/tray.png"
                    Name="TrayIcon" MenuOnRightClick="True"
                    TooltipText="Racks" >
         <tray:NotifyIcon.Menu>
@@ -102,6 +102,7 @@
                 <Separator Margin="0,3,0,3"/>
                 <MenuItem Name="checkUpdatesMenuItem" Height="34" Header="{x:Static prop:Lang.TrayContextMenu_CheckUpdateButton}" ToolTip="{x:Static prop:Lang.Tray_CheckUpdates_ToolTip}" Click="CheckUpdates_Click" Icon="{ui:SymbolIcon Symbol=ArrowSync20}"/>
                 <MenuItem Name="helpMenuItem" Height="34" Header="{x:Static prop:Lang.Tray_Help}" ToolTip="{x:Static prop:Lang.Tray_Help_ToolTip}" Click="HelpMenuItem_Click" Icon="{ui:SymbolIcon Symbol=QuestionCircle20}"/>
+                <MenuItem Name="devDiagnosticsMenuItem" Height="34" Header="{x:Static prop:Lang.Tray_DevDiagnostics}" ToolTip="{x:Static prop:Lang.Tray_DevDiagnostics_ToolTip}" Click="DevDiagnosticsMenuItem_Click" Icon="{ui:SymbolIcon Symbol=Wrench20}"/>
                 <MenuItem x:Name="Exit_Button" Height="34" 
                           Header="{x:Static prop:Lang.TrayContextMenu_Exit}" Click="ExitApp" Icon="{ui:SymbolIcon Symbol=ArrowExit20}" />
 

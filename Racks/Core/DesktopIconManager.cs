@@ -3,7 +3,7 @@ using System.IO;
 
 namespace Racks.Core
 {
-    public static class DesktopIconManager
+    internal static class DesktopIconManager
     {
         public static string RacksWorkspacePath { get; private set; } = string.Empty;
 
@@ -11,16 +11,35 @@ namespace Racks.Core
         {
             try
             {
-                // Create the workspace folder
                 RacksWorkspacePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "RacksWorkspace");
-                if (!Directory.Exists(RacksWorkspacePath))
+                // The icon is a dedicated high-res one for the workspace folder (separate from the app's own
+                // tray/window icon), deployed next to the exe by the csproj.
+                string iconSource = Path.Combine(AppContext.BaseDirectory, "Icon", "WorkspaceFolder.ico");
+                string librariesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Libraries");
+                Setup(RacksWorkspacePath, iconSource, librariesPath, Environment.GetFolderPath(Environment.SpecialFolder.Desktop));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to init workspace: {ex.Message}");
+            }
+        }
+
+        // Everything Initialize does, with the four places it touches passed in so a test can run it against a temp
+        // folder (the workspace, the icon to copy, the Libraries folder, the Desktop folder the library points at).
+        // Same steps, same order, same swallowing of errors as before.
+        internal static void Setup(string workspacePath, string iconSource, string librariesPath, string desktopPath)
+        {
+            try
+            {
+                // Create the workspace folder
+                if (!Directory.Exists(workspacePath))
                 {
-                    DirectoryInfo di = Directory.CreateDirectory(RacksWorkspacePath);
+                    DirectoryInfo di = Directory.CreateDirectory(workspacePath);
                     di.Attributes |= FileAttributes.Hidden; // Hide the workspace folder itself from the user's home directory so it's not messy
                 }
 
-                ApplyWorkspaceIcon();
-                CreateDesktopLibrary();
+                ApplyWorkspaceIcon(workspacePath, iconSource);
+                CreateDesktopLibrary(workspacePath, librariesPath, desktopPath);
             }
             catch (Exception ex)
             {
@@ -32,16 +51,13 @@ namespace Racks.Core
         // the user's home folders. Done the standard Windows way: a hidden copy of the icon
         // inside the folder + a desktop.ini pointing at it, with the folder flagged ReadOnly
         // so the shell reads that desktop.ini.
-        private static void ApplyWorkspaceIcon()
+        private static void ApplyWorkspaceIcon(string workspacePath, string srcIcon)
         {
             try
             {
-                // Dedicated high-res icon for the workspace folder (separate from the app's
-                // own tray/window icon). Deployed next to the exe by the csproj.
-                string srcIcon = Path.Combine(AppContext.BaseDirectory, "Icon", "WorkspaceFolder.ico");
                 if (!File.Exists(srcIcon)) return;
 
-                string iconInFolder = Path.Combine(RacksWorkspacePath, ".RacksIcon.ico");
+                string iconInFolder = Path.Combine(workspacePath, ".RacksIcon.ico");
                 if (!File.Exists(iconInFolder)
                     || File.GetLastWriteTimeUtc(srcIcon) > File.GetLastWriteTimeUtc(iconInFolder))
                 {
@@ -51,7 +67,7 @@ namespace Racks.Core
                     File.SetAttributes(iconInFolder, FileAttributes.Hidden | FileAttributes.System);
                 }
 
-                string desktopIni = Path.Combine(RacksWorkspacePath, "desktop.ini");
+                string desktopIni = Path.Combine(workspacePath, "desktop.ini");
                 string content =
                     "[.ShellClassInfo]\r\n" +
                     "IconResource=.RacksIcon.ico,0\r\n" +
@@ -62,7 +78,7 @@ namespace Racks.Core
                 File.SetAttributes(desktopIni, FileAttributes.Hidden | FileAttributes.System);
 
                 // The folder must be ReadOnly (or System) for the shell to honor desktop.ini.
-                var di = new DirectoryInfo(RacksWorkspacePath);
+                var di = new DirectoryInfo(workspacePath);
                 di.Attributes |= FileAttributes.ReadOnly;
             }
             catch (Exception ex)
@@ -71,16 +87,13 @@ namespace Racks.Core
             }
         }
 
-        private static void CreateDesktopLibrary()
+        private static void CreateDesktopLibrary(string workspacePath, string librariesPath, string desktopPath)
         {
             try
             {
-                string librariesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), @"Microsoft\Windows\Libraries");
                 if (!Directory.Exists(librariesPath)) return;
 
                 string libraryFile = Path.Combine(librariesPath, "DesktopWorkspace.library-ms");
-
-                string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
                 string xml = $@"<?xml version=""1.0"" encoding=""UTF-8""?>
 <libraryDescription xmlns=""http://schemas.microsoft.com/windows/2009/library"">
@@ -96,14 +109,14 @@ namespace Racks.Core
       <isDefaultSaveLocation>true</isDefaultSaveLocation>
       <isSupported>false</isSupported>
       <simpleLocation>
-        <url>{desktopPath}</url>
+        <url>{System.Security.SecurityElement.Escape(desktopPath)}</url>
       </simpleLocation>
     </searchConnectorDescription>
     <searchConnectorDescription>
       <isDefaultNonOwnerSaveLocation>false</isDefaultNonOwnerSaveLocation>
       <isSupported>false</isSupported>
       <simpleLocation>
-        <url>{RacksWorkspacePath}</url>
+        <url>{System.Security.SecurityElement.Escape(workspacePath)}</url>
       </simpleLocation>
     </searchConnectorDescription>
   </searchConnectorDescriptionList>

@@ -692,33 +692,29 @@ namespace Racks
                 }
 
                 string oldPath = _itemCurrentlyRenaming.FullPath!;
-                string newPath = Path.Combine(Path.GetDirectoryName(oldPath)!, newName);
-                bool renamed = true;
 
-                // A colliding name, a trailing dot/space, a reserved character, or a
-                // file locked by another process all throw here - renaming is routine
-                // enough that this was one of the easiest ways to crash the app.
-                try
+                // What the user typed is a NAME. The broker rejects anything that is not (a slash, "..",
+                // "C:\x", a reserved device name), so a rename can never move the item elsewhere (INV-FS-2).
+                // A colliding name, a trailing dot/space or a file locked by another process comes back as
+                // a status too, not an exception - renaming is routine enough that this used to be one of
+                // the easiest ways to crash the app.
+                string finalLeaf = newName;
+                if (!_itemCurrentlyRenaming.IsFolder && !string.IsNullOrWhiteSpace(newName))
                 {
-                    if (!_itemCurrentlyRenaming.IsFolder)
-                    {
-                        var ext = Path.GetExtension(oldPath);
-                        if (!string.IsNullOrEmpty(ext) && string.IsNullOrEmpty(Path.GetExtension(newName)))
-                        {
-                            newPath += ext;
-
-                        }
-                        File.Move(oldPath, newPath);
-                    }
-                    else
-                    {
-                        Directory.Move(oldPath, newPath);
-                    }
+                    var ext = Path.GetExtension(oldPath);
+                    if (!string.IsNullOrEmpty(ext) && string.IsNullOrEmpty(Path.GetExtension(newName)))
+                        finalLeaf += ext;
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+
+                // Pressing Enter without changing the name is not a rename.
+                bool renamed = string.Equals(Path.GetFileName(oldPath), finalLeaf, StringComparison.Ordinal);
+                if (!renamed)
                 {
-                    renamed = false;
-                    Racks.Views.RacksMessageBox.Show($"Couldn't rename to \"{newName}\":\n{ex.Message}", "Rename failed");
+                    var rename = Infrastructure.FileSystem.FileOperationBroker.Default.Rename(oldPath, finalLeaf, "inline rename");
+                    renamed = rename.Succeeded;
+                    if (!renamed)
+                        Racks.Views.RacksMessageBox.Show(
+                            string.Format(Lang.Rename_Failed_Message, newName, rename.Reason), Lang.Rename_Failed_Title);
                 }
 
                 _isRenaming = false;

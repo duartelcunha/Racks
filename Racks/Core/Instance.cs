@@ -1,5 +1,6 @@
 #pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604, CS8618, CS8625
 using Racks;
+using Racks.Infrastructure.Registry;
 using Racks.Util;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -176,16 +177,21 @@ public class Instance : INotifyPropertyChanged
         }
     }
 
-    // Regex matched against file names appearing on the user's Desktop. Any match
-    // is auto-routed (shortcut created) into this rack. Empty disables routing.
+    // Regex matched against file names appearing on the user's Desktop. A match moves the file into this
+    // rack (AutoRouteService). Empty disables routing. The text is stored exactly as given, also when it was
+    // loaded from the registry or imported: a rule must never be lost because a check failed at load time
+    // (a busy machine can make the slow-pattern probe time out on a fine pattern). Whether it can run is
+    // decided where it is used (AutoRouteService makes a rack with an invalid or too-slow rule inactive and
+    // records it once) and where it is edited (the rule dialog refuses to save such a pattern). INV-ROUTE-1.
     public string AutoRouteRegex
     {
         get => _autoRouteRegex;
         set
         {
+            value ??= "";
             if (_autoRouteRegex != value)
             {
-                _autoRouteRegex = value ?? "";
+                _autoRouteRegex = value;
                 OnPropertyChanged(nameof(AutoRouteRegex), _autoRouteRegex);
             }
         }
@@ -976,103 +982,9 @@ public class Instance : INotifyPropertyChanged
             using var noWrites = SuspendPersistence();
             try
             {
-                RegistryHelper helper = new RegistryHelper(InstanceController.appName);
-
-                var v = helper.ReadKeyValueRoot("IdleOpacity");
-                if (v != null) _idleOpacity = double.Parse(v.ToString());
-
-                v = helper.ReadKeyValueRoot("AnimationSpeed");
-                if (v != null) _animationSpeed = double.Parse(v.ToString());
-
-                v = helper.ReadKeyValueRoot("MaxGrayScaleStrength");
-                if (v != null) _maxGrayscaleStrength = double.Parse(v.ToString());
-
-                v = helper.ReadKeyValueRoot("GrayScaleEnabled");
-                if (v != null) _grayScaleEnabled = (bool)v;
-
-                v = helper.ReadKeyValueRoot("GrayScaleEnabled_InactiveOnly");
-                if (v != null) _grayScaleEnabled_InactiveOnly = (bool)v;
-
-                v = helper.ReadKeyValueRoot("TitleFontFamily");
-                if (v != null) TitleFontFamily = v.ToString() ?? "";
-
-                v = helper.ReadKeyValueRoot("ItemFontFamily");
-                if (v != null) ItemFontFamily = v.ToString() ?? "";
-
-                v = helper.ReadKeyValueRoot("ShowHiddenFiles");
-                if (v != null) _showHiddenFiles = (bool)v;
-
-                v = helper.ReadKeyValueRoot("ShowFileExtension");
-                if (v != null) _showFileExtension = (bool)v;
-
-                v = helper.ReadKeyValueRoot("ShowFileExtensionIcon");
-                if (v != null) _showFileExtensionIcon = (bool)v;
-
-                v = helper.ReadKeyValueRoot("ShowHiddenFilesIcon");
-                if (v != null) _showHiddenFilesIcon = (bool)v;
-
-                v = helper.ReadKeyValueRoot("ShowDisplayName");
-                if (v != null) _showDisplayName = (bool)v;
-
-                v = helper.ReadKeyValueRoot("BorderEnabled");
-                if (v != null) _borderEnabled = (bool)v;
-
-                v = helper.ReadKeyValueRoot("ActiveBorderEnabled");
-                if (v != null) _activeBorderEnabled = (bool)v;
-
-                v = helper.ReadKeyValueRoot("ActiveBackgroundEnabled");
-                if (v != null) _activeBackgroundEnabled = (bool)v;
-
-                v = helper.ReadKeyValueRoot("ActiveTitleTextEnabled");
-                if (v != null) _activeTitleTextEnabled = (bool)v;
-
-                v = helper.ReadKeyValueRoot("TitleTextAlignment");
-                if (v != null) _titleTextAlignment = (Forms.HorizontalAlignment)Enum.Parse(typeof(Forms.HorizontalAlignment), v.ToString());
-
-                v = helper.ReadKeyValueRoot("FileFilterRegex");
-                if (v != null) _fileFilterRegex = v.ToString();
-
-                v = helper.ReadKeyValueRoot("FileFilterHideRegex");
-                if (v != null) _fileFilterHideRegex = v.ToString();
-
-                v = helper.ReadKeyValueRoot("TitleBarColor");
-                if (v != null) TitleBarColor = v.ToString() ?? "";
-
-                v = helper.ReadKeyValueRoot("TitleTextColor");
-                if (v != null) TitleTextColor = v.ToString() ?? "";
-
-                v = helper.ReadKeyValueRoot("ListViewBackgroundColor");
-                if (v != null) ListViewBackgroundColor = v.ToString() ?? "";
-
-                v = helper.ReadKeyValueRoot("ActiveBackgroundColor");
-                if (v != null) ActiveBackgroundColor = v.ToString() ?? "";
-
-                v = helper.ReadKeyValueRoot("ActiveTitleTextColor");
-                if (v != null) ActiveTitleTextColor = v.ToString() ?? "";
-
-                v = helper.ReadKeyValueRoot("ActiveBorderColor");
-                if (v != null) ActiveBorderColor = v.ToString() ?? "";
-
-                v = helper.ReadKeyValueRoot("ListViewFontColor");
-                if (v != null) ListViewFontColor = v.ToString() ?? "";
-
-                v = helper.ReadKeyValueRoot("ListViewFontShadowColor");
-                if (v != null) ListViewFontShadowColor = v.ToString() ?? "";
-
-                v = helper.ReadKeyValueRoot("Opacity");
-                if (v != null) _opacity = int.Parse(v.ToString());
-
-                v = helper.ReadKeyValueRoot("SortBy");
-                if (v != null) _sortBy = int.Parse(v.ToString());
-
-                v = helper.ReadKeyValueRoot("FolderOrder");
-                if (v != null) _folderOrder = int.Parse(v.ToString());
-
-                v = helper.ReadKeyValueRoot("TitleFontSize");
-                if (v != null) _titleFontSize = double.Parse(v.ToString());
-
-                v = helper.ReadKeyValueRoot("IconSize");
-                if (v != null) _iconSize = int.Parse(v.ToString());
+                // The store validates each of the 32 defaults on its own (a bad one is audited and skipped, the rest
+                // still apply); the mapper puts them on this rack through the same safe setters a load uses.
+                RackSettingsMapper.Apply(this, Store.ReadGlobalStyleDefaults());
             }
             catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Instance global-defaults read failed: {ex.Message}"); }
         }
@@ -1090,6 +1002,12 @@ public class Instance : INotifyPropertyChanged
         "ShowOnVirtualDesktops",
         "SettingDefault"
     };
+
+    /// <summary>
+    /// Where this rack's settings are saved and where the global style defaults are read (INV-REG-2). The default is the
+    /// real registry; a test replaces it (and puts the old one back). Reading and writing never throw.
+    /// </summary>
+    public static IRackSettingsStore Store { get; set; } = RackSettingsRepository.Default;
 
     private int _persistenceSuspended;
 
@@ -1126,41 +1044,20 @@ public class Instance : INotifyPropertyChanged
 
         if (propertyName == "Name")
         {
-            Debug.WriteLine($"oldname: {_name} \t newname: {Name}");
-            if (Name == "empty")
-            {
-                MainWindow._controller.WriteOverInstanceToKey(this, "empty");
-
-            }
+            Debug.WriteLine($"oldname: {_name} 	 newname: {Name}");
+            // The "empty" placeholder is never kept: a rack renamed to it loses its key.
+            if (Name == "empty") Store.Delete("empty");
         }
         else
         {
-            if ((!propertyName.Contains("Pos")))
-            {
-                // Debug.WriteLine($"Property {propertyName} has changed.");
-            }
             if (!_settingDefault && Name != "empty" && Folder != null)
             {
-                if (propertyName == "LastAccessedFiles")
-                {
-                    MainWindow._controller.reg.WriteMultiLineRegistry(propertyName, LastAccessedFiles, this);
-                }
-                else if (propertyName == "CustomOrderFiles")
-                {
-                    MainWindow._controller.reg.WriteMultiLineTupleRegistry(propertyName, CustomOrderFiles, this);
-                }
-                else if (propertyName != "ShowOnVirtualDesktops")
-                {
-                    MainWindow._controller.reg.WriteToRegistry(propertyName, value, this);
-                }
-                else if (propertyName == "ShowOnVirtualDesktops")
-                {
-                    MainWindow._controller.reg.WriteIntArrayToRegistry(propertyName, ShowOnVirtualDesktops, this);
-                }
+                // The store reads the typed value from this rack, so the text the setter passes is not used.
+                Store.SaveField(this, propertyName);
             }
             if (_settingDefault && !NotGlobalProperties.Contains(propertyName))
             {
-                MainWindow._controller.reg.WriteToRegistryRoot(propertyName, value);
+                Store.SaveGlobalDefault(this, propertyName);
             }
         }
 
@@ -1169,7 +1066,7 @@ public class Instance : INotifyPropertyChanged
 
     public string GetKeyLocation()
     {
-        if (_name != null && Name != null)
+        if (!string.IsNullOrEmpty(_name) && !string.IsNullOrEmpty(Name))
         {
             // MUST follow the rebranded root (InstanceController.appName) or per-instance
             // writes go to the legacy HKCU\SOFTWARE\DeskFrame tree while InitInstances
