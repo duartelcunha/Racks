@@ -73,7 +73,7 @@ public sealed class ValidatedRack
 }
 
 /// <summary>The checked layout, or the reason the whole file is refused.</summary>
-public sealed record LayoutValidationResult(IReadOnlyList<ValidatedRack>? Racks, string? Error)
+public sealed record LayoutValidationResult(IReadOnlyList<ValidatedRack>? Racks, string? Error, IReadOnlyList<DroppedValue>? Dropped = null)
 {
     public bool Ok => Error == null;
     public static LayoutValidationResult Fail(string error) => new(null, error);
@@ -102,7 +102,10 @@ public sealed record ImportResult(
     bool StateChanged = false,
     bool RolledBack = false,
     bool RollbackFailed = false,
-    string RollbackDetails = "")
+    string RollbackDetails = "",
+    IReadOnlyList<DroppedValue>? Dropped = null,
+    string? RecoveryFile = null,
+    string? RecoveryError = null)
 {
     public static ImportResult Imported(int count) => new(ImportStatus.Imported, count, "");
     public static ImportResult Rejected(string reason) => new(ImportStatus.Rejected, 0, reason);
@@ -113,4 +116,14 @@ public sealed record ExportResult(bool Ok, string Message, int RackCount = 0)
 {
     public static ExportResult Done(int racks) => new(true, "", racks);
     public static ExportResult Fail(string message) => new(false, message);
+}
+
+/// <summary>
+/// One value of an imported layout that was not used as written, exactly as the registry loader would not use it: it was out of
+/// range, not a number, not True/False, not a defined enum member, or a list over its caps or with bad items. The default
+/// applies (or, for a number the loader clamps and a list's good items, the corrected value). The rest of the file is imported.
+/// </summary>
+public sealed record DroppedValue(string Rack, string Field, string Reason)
+{
+    public override string ToString() => $"rack '{Rack}': {Field} ({Reason})";
 }

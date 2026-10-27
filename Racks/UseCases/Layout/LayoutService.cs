@@ -15,15 +15,17 @@ public sealed class LayoutService
     private readonly LayoutExporter _exporter;
     private readonly IAuditSink _audit;
 
-    public LayoutService(IRackRegistry registry, IRackSettingsStore store, IAuditSink audit)
+    /// <param name="recoveryDirectory">Where a recovery file goes if an import fails and cannot restore the previous racks.</param>
+    public LayoutService(IRackRegistry registry, IRackSettingsStore store, IAuditSink audit, string recoveryDirectory)
     {
         _audit = audit;
-        _executor = new LayoutImportExecutor(registry, audit);
+        _executor = new LayoutImportExecutor(registry, audit, recoveryDirectory);
         _exporter = new LayoutExporter(store, audit);
     }
 
     /// <summary>The service over the real registry. It follows <c>InstanceController.appName</c>; tests build their own.</summary>
-    public static LayoutService Default { get; } = new(HkcuRackRegistry.ForApp(), RackSettingsRepository.Default, AuditLog.Forwarder);
+    public static LayoutService Default { get; } = new(HkcuRackRegistry.ForApp(), RackSettingsRepository.Default, AuditLog.Forwarder,
+        Racks.Infrastructure.Layout.RecoveryFolder.DefaultDirectory());
 
     /// <summary>Imports a layout file: bounded read, parse, validate, then write (all or nothing).</summary>
     public ImportResult ImportFile(string path, bool replaceExisting)
@@ -61,8 +63,18 @@ public sealed class LayoutService
         if (!parsed.Ok) return Rejected(source, parsed.Error!);
         var validated = LayoutValidator.Validate(parsed.Document!);
         if (!validated.Ok) return Rejected(source, validated.Error!);
-        return _executor.Execute(validated.Racks!, replaceExisting, source);
+        var result = _executor.Execute(validated.Racks!, replaceExisting, source);
+        if (result.Status != ImportStatus.Imported || validated.Dropped is not { Count: > 0 } dropped) return result;
+
+        // The racks were imported, but some values were not used as written: say which, to the user and to the audit log.
+        foreach (var value in dropped.Take(MaxDroppedRecords))
+            LayoutAudit.Write(_audit, LayoutAudit.ValueDroppedKind, source, null, value.Reason, "Skipped", $"rack={value.Rack}; field={value.Field}");
+        if (dropped.Count > MaxDroppedRecords)
+            LayoutAudit.Write(_audit, LayoutAudit.ValueDroppedKind, source, null, $"{dropped.Count - MaxDroppedRecords} more values were not used", "Skipped", $"total={dropped.Count}");
+        return result with { Dropped = dropped };
     }
+
+    private const int MaxDroppedRecords = 50;
 
     private ImportResult Rejected(string source, string reason)
     {

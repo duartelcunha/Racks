@@ -124,11 +124,11 @@ numbers in `Guards/baseline.json` may only go down.
 - **Layout import/export (P9).** `UseCases/Layout/` (namespace `Racks.UseCases.Layout`), one job per class, in the order a file travels:
   `LayoutParser` (bounded read of the file, size/depth/rack-count/entry-count limits from `LayoutLimits`, BOM-aware decoding, an untrusted
   `LayoutDocument`; never throws), `LayoutValidator` (version, names, duplicates, scalar kinds, every value through
-  `RackSettingsValidator`, a typed `ValidatedRack` with the exact `RegistryWrite`s; whole-file refusal with a message naming rack and
-  value) using `LayoutSecurityPolicy` (allow-list from `RackSettingsSchema`, local-drive paths, fonts/colors via `SafeWpfValues`, list
-  and regex size caps), `LayoutImportExecutor` (snapshot, delete, write, verify, checked rollback over `IRackRegistry`; the only
+  `RackSettingsValidator`, a typed `ValidatedRack` with the exact `RegistryWrite`s; whole-file refusal for the security rules with a message naming rack and
+  value, while a bad number/switch/enum/list is dropped like the loader would and reported as `DroppedValue`) using `LayoutSecurityPolicy` (allow-list from `RackSettingsSchema`, local-drive paths, fonts/colors via `SafeWpfValues`, list
+  and regex size caps), `LayoutImportExecutor` (snapshot, delete, write, verify, precise checked rollback over `IRackRegistry`, and a recovery layout in `%AppData%\Racks\recovery` (`LayoutRecovery`, `Infrastructure/Layout/RecoveryFolder`, newest 5) when the restore fails; the only
   place that writes layouts to the registry), `LayoutExporter` (typed racks from `IRackSettingsStore` to the same JSON shape as ever,
-  written by `Infrastructure/Layout/LayoutFileWriter`: temp file next to the destination, then replace), `LayoutService` (composes
+  written by `Infrastructure/Layout/LayoutFileWriter`: short random temp file next to the destination, then one `File.Move(overwrite)`; it first runs its own bytes through parser and validator and refuses a file Racks would not import back), `LayoutService` (composes
   them; results, never exceptions; every failure is an audit record: `LayoutImport`, `LayoutExport`, `LayoutImportRollbackFailed`)
   and `LayoutMessages` (the texts, `Lang.resx`). The dialogs are `Views/LayoutDialogs` (open/save dialog, confirm, shows every
   failure). `ImportResult` says Imported / Rejected / Failed, and for Failed whether the state changed, was rolled back or the

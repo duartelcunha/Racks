@@ -30,7 +30,7 @@ public sealed class LayoutRegistryImportTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch { }
     }
 
-    private LayoutService Service(IRackRegistry? registry = null) => new(registry ?? HkcuRackRegistry.ForApp(), _reg.Repository, _reg.Audit);
+    private LayoutService Service(IRackRegistry? registry = null) => new(registry ?? HkcuRackRegistry.ForApp(), _reg.Repository, _reg.Audit, Path.Combine(_dir, "recovery"));
 
     private string Write(string name, string json)
     {
@@ -167,7 +167,8 @@ public sealed class LayoutRegistryImportTests : IDisposable
             ("garbage", "{ not json"),
             ("unc", "{\"Version\":1,\"Racks\":[{\"Name\":\"Ok\"},{\"Name\":\"Bad\",\"Values\":{\"Folder\":\"\\\\\\\\evil\\\\share\"}}]}"),
             ("newer", "{\"Version\":2,\"Racks\":[{\"Name\":\"Ok\"}]}"),
-            ("range", "{\"Version\":1,\"Racks\":[{\"Name\":\"Ok\",\"Values\":{\"Opacity\":999}}]}"),
+            ("stream", "{\"Version\":1,\"Racks\":[{\"Name\":\"Ok\",\"Values\":{\"Opacity\":999,\"Folder\":\"C:\\\\x\\\\y.txt:stream\"}}]}"),
+            ("duplicate", "{\"Version\":1,\"Racks\":[{\"Name\":\"Ok\",\"Values\":{\"Folder\":\"C:\\\\a\",\"Folder\":\"C:\\\\b\"}}]}"),
         })
         {
             var result = Service().ImportFile(Write(name + ".json", json), replaceExisting: true);

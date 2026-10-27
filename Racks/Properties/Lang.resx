@@ -661,7 +661,9 @@ Your previous racks were restored.</value>
   <data name="Layout.Import.RollbackFailed" xml:space="preserve">
     <value>The import failed: {0}
 
-Your previous racks could not be fully restored, so some racks may be missing or changed. Details were saved to audit.log in %AppData%\Racks. Please include it if you report a bug.</value>
+Your previous racks could not be fully restored, so some racks may be missing or changed. Details were saved to audit.log in %AppData%\Racks.
+
+{1}</value>
   </data>
   <data name="Layout.Import.Unexpected" xml:space="preserve">
     <value>The import could not be completed: {0}</value>
@@ -673,5 +675,20 @@ Your previous racks could not be fully restored, so some racks may be missing or
     <value>Couldn't export your racks: {0}
 
 An existing file at that location was not changed.</value>
+  </data>
+  <data name="Layout.Import.RecoverySaved" xml:space="preserve">
+    <value>A copy of your previous racks was saved to:
+{0}
+Import that file to get them back.</value>
+  </data>
+  <data name="Layout.Import.RecoveryFailed" xml:space="preserve">
+    <value>A copy of your previous racks could not be saved either ({0}).</value>
+  </data>
+  <data name="Layout.Import.Dropped" xml:space="preserve">
+    <value>Imported {0} rack(s). Some values in the file could not be used and were left at their defaults:
+{1}</value>
+  </data>
+  <data name="Layout.Import.DroppedMore" xml:space="preserve">
+    <value>...and {0} more (see audit.log in %AppData%\Racks).</value>
   </data>
 </root>

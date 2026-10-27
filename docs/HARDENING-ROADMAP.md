@@ -306,23 +306,35 @@ which tests were added.
   export failure is shown to the user and audited (before, only `InvalidDataException` was shown and the rest went to
   `Debug.WriteLine`); the export is written atomically, so a failure keeps the previous file.
 - Deliberate differences from before: (1) `Version` newer than 1, or below 1, is refused; a missing one reads as 1. (2) Values go
-  through `RackSettingsValidator`, so a bad number/switch/enum, or a number the loader would clamp (`IconSize` 5), now refuses the
-  file; list items the loader would drop are dropped. (3) Two racks whose names differ only in case are refused; a `Name` value
-  must equal the rack name (case aside); a rack name with a control character is refused. (4) Text with a NUL and over-long
-  regexes/lists are refused. (5) Stored kinds now follow the repository writer: integers REG_DWORD (were REG_QWORD), switches
-  `True`/`False`, decimals invariant text; the legacy `MoveFilesOnDrop` is accepted but not stored. (6) Replace mode deletes each
-  rack key (it used to delete the whole `Instances` tree, so a stray non-rack subkey is now left). (7) Merge mode is also
-  snapshotted and rolled back. (8) The export is built from the typed racks (`RackSettingsRepository.LoadAll`): a value the loader
-  refuses is not exported and the `Name` value always equals the rack name; an export too big to import again is refused.
-  (9) A file with no racks says so instead of doing nothing. New texts are in `Lang.resx` (English; other languages fall back).
-- Tests: 1381 to 1506 passed (4 skipped): parser (size, depth, count, BOM/encodings, garbage), validator (every new rule and
-  message), executor (in-memory registry that fails on command), full `Import()`/export/round trip/old-format file/rollback of
-  every REG_ kind over the throwaway registry root, atomic export, message texts. One existing test needed one argument
+  through `RackSettingsValidator`. After the review, old backups must stay importable, so a bad number, switch, enum or list
+  (out of range, NaN/Infinity, not True/False, undefined, over the list caps) does NOT refuse the file: that value is dropped as
+  the loader would (a number the loader clamps, `IconSize` 5, is clamped; a list keeps its good items), one `LayoutValueDropped`
+  audit record per value and a message listing them. The security rules still refuse the whole file (names, paths, fonts, colors,
+  NUL, size, depth, counts, version, duplicates, Name mismatch, regex over its cap). (3) Two racks whose names differ only in case
+  are refused; a `Name` value must equal the rack name (case aside); a rack name with a control character is refused; a repeated
+  JSON property in one object is refused. (4) Text with a NUL and over-long regexes are refused. (5) Stored kinds now follow the
+  repository writer: integers REG_DWORD (were REG_QWORD), switches `True`/`False`, decimals invariant text; the legacy
+  `MoveFilesOnDrop` is accepted but not stored. (6) Replace mode deletes each rack key (it used to delete the whole `Instances`
+  tree, so a stray non-rack subkey is now left). (7) Merge mode is also snapshotted and rolled back. (8) The export is built from
+  the typed racks (`RackSettingsRepository.LoadAll`): a value the loader refuses is not exported, the `Name` value always equals
+  the rack name, and an export that Racks would not import back (too big, a list over its caps, duplicate names) is refused with
+  the rack and the value named. (9) A file with no racks says so instead of doing nothing. (10) A failed import whose restore also
+  fails writes a recovery layout (`%AppData%\Racks\recovery\layout-<date>.json`, newest 5 kept) and the message and audit record
+  name it. New texts are in `Lang.resx` (English; other languages fall back).
+- Review fixes (second commit): the rollback only touches the keys the run reached (a failure at the first `DeleteKey` touches no
+  other rack); `File.Replace` is gone from the export (one `File.Move(overwrite)`, temp deleted only when the destination is
+  confirmed intact, short temp name for 255-character file names); `AllowDuplicateProperties = false`; dialog exceptions are audited.
+- Tests: 1381 to 1536 passed (4 skipped): parser (size, depth, count, BOM/encodings, garbage, repeated properties), validator
+  (every new rule and message, dropped values), executor (in-memory registry that fails on command with every exception type,
+  precise rollback, recovery file that re-imports), full `Import()`/export/round trip/old-format file/rollback of every REG_ kind
+  over the throwaway registry root, atomic export, message texts. One existing test needed one argument
   (`Every_name_the_loader_applies_is_accepted_by_import_with_its_stored_form` now names its rack "Golden", because a `Name` value must match).
-- Guards: `fs-allowlist.json` `Util/RackLayoutIO.cs` 1 became `Infrastructure/Layout/LayoutFileWriter.cs` 4 (the one allowlist
-  increase of the whole plan, each call justified in the file); `baseline.json` `mainWindowLines` 420 to 404.
+- Guards: `fs-allowlist.json` `Util/RackLayoutIO.cs` 1 became `Infrastructure/Layout/LayoutFileWriter.cs` 3 and
+  `Infrastructure/Layout/RecoveryFolder.cs` 2 (the one allowlist increase of the whole plan, 32 to 36 calls, each call justified
+  in the file); `baseline.json` `mainWindowLines` 420 to 404.
 - Not done on purpose: the real app, dialogs, `Test-Racks.ps1` and the dev-tools e2e were not run (the dialogs are covered by the
-  message tests only); a rack key's nested subkeys (the app writes none) are not part of the snapshot.
+  message tests only); a rack key's nested subkeys (the app writes none) are not copied by the snapshot and not compared by the
+  restore check.
 
 ### Follow-up recorded by the P8 review (not implemented)
 

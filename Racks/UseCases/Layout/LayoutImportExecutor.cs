@@ -9,27 +9,36 @@ namespace Racks.UseCases.Layout;
 /// validation completed.
 /// <list type="number">
 /// <item><b>Snapshot</b> the keys about to change (replace mode: every rack key; merge mode: the keys named in the file), with
-/// every value's kind and data.</item>
+/// every value's kind and data (exact, REG_EXPAND_SZ unexpanded).</item>
 /// <item>Replace mode only: <b>delete</b> every existing rack key.</item>
 /// <item><b>Write</b> each rack (the stored forms of <see cref="ValidatedRack.Writes"/>).</item>
 /// <item><b>Verify</b>: read every written rack back and compare it with what was written.</item>
 /// </list>
-/// A failure in 2, 3 or 4 restores the snapshot (delete what is there, write the old values back with their kinds) and
-/// then CHECKS the restore. A restore that cannot finish is never swallowed: the result carries
-/// <see cref="ImportResult.RollbackFailed"/> and what went wrong, an audit record <see cref="LayoutAudit.RollbackFailedKind"/> is
-/// written, and the caller tells the user. Nothing here throws.
+/// A failure in 2, 3 or 4 rolls back. The rollback is PRECISE: it only touches the keys the run actually reached (each key is
+/// recorded just before its delete or write is attempted), so a failure at the first delete leaves every other rack exactly as
+/// it was. A reached key that already equals its snapshot is left alone; the others are deleted and written back from the
+/// snapshot with their kinds. Then the restore is CHECKED against the snapshot. A restore that cannot finish is never swallowed:
+/// the result carries <see cref="ImportResult.RollbackFailed"/> and what went wrong, an audit record
+/// <see cref="LayoutAudit.RollbackFailedKind"/> is written, and because the in-memory snapshot is then the user's only copy of
+/// their racks it is ALWAYS saved as a recovery layout file (<see cref="LayoutRecovery"/>, newest 5 kept) whose path (or the
+/// reason it could not be written) is in the result and the audit record.
+/// <para>Limits, stated plainly: the snapshot and the restore check cover the VALUES of the rack keys. A rack key may in theory
+/// have nested subkeys; the app writes none, the snapshot does not copy them and <c>CheckRestore</c> does not compare them. A
+/// recovery file holds what a layout file can hold (no binary values, no names Racks does not know). Nothing here throws.</para>
 /// </summary>
 public sealed class LayoutImportExecutor
 {
     private readonly IRackRegistry _registry;
     private readonly IAuditSink _audit;
+    private readonly string _recoveryDirectory;
 
-    public LayoutImportExecutor(IRackRegistry registry, IAuditSink audit)
+    /// <param name="recoveryDirectory">Where the recovery file goes when a rollback fails (<see cref="Racks.Infrastructure.Layout.RecoveryFolder.DefaultDirectory"/> in the app; a temp folder in tests).</param>
+    public LayoutImportExecutor(IRackRegistry registry, IAuditSink audit, string recoveryDirectory)
     {
         _registry = registry;
         _audit = audit;
+        _recoveryDirectory = recoveryDirectory;
     }
-
     /// <param name="source">Where the layout came from, for the audit record (a file path).</param>
     public ImportResult Execute(IReadOnlyList<ValidatedRack> racks, bool replaceExisting, string source = "")
     {
@@ -48,18 +57,27 @@ public sealed class LayoutImportExecutor
             return failed;
         }
 
+        // Every key is recorded BEFORE its delete or write is attempted, so a failure leaves a precise list of what may have changed.
+        var touched = new List<string>();
         try
         {
             if (replaceExisting)
-                foreach (var key in snapshot.Values.Keys) _registry.DeleteKey(key);
-            foreach (var rack in racks) _registry.Apply(rack.Name, rack.Writes);
+                foreach (var key in snapshot.Values.Keys)
+                {
+                    touched.Add(key);
+                    _registry.DeleteKey(key);
+                }
+            foreach (var rack in racks)
+            {
+                if (!touched.Contains(rack.Name, StringComparer.OrdinalIgnoreCase)) touched.Add(rack.Name);
+                _registry.Apply(rack.Name, rack.Writes);
+            }
             Verify(racks);
         }
         catch (Exception ex)
         {
-            return Roll(snapshot, racks, replaceExisting, ex, source, mode);
+            return Roll(snapshot, touched, ex, source, mode);
         }
-
         LayoutAudit.Write(_audit, LayoutAudit.ImportKind, source, _registry.Path, "", "Succeeded", $"mode={mode}; racks={racks.Count}");
         return ImportResult.Imported(racks.Count);
     }
@@ -110,24 +128,43 @@ public sealed class LayoutImportExecutor
 
     // ---- rollback ------------------------------------------------------------------------------------------------------
 
-    private ImportResult Roll(Snapshot snapshot, IReadOnlyList<ValidatedRack> racks, bool replaceExisting, Exception cause, string source, string mode)
+    private ImportResult Roll(Snapshot snapshot, List<string> touched, Exception cause, string source, string mode)
     {
-        // Every key the import may have changed: all that existed (replace mode) plus every key it wrote.
-        var touched = new HashSet<string>(racks.Select(r => r.Name), StringComparer.OrdinalIgnoreCase);
-        if (replaceExisting) touched.UnionWith(snapshot.Values.Keys);
-
         var problems = new List<string>();
+        HashSet<string> existing;
+        try
+        {
+            existing = new HashSet<string>(_registry.GetRackKeyNames(), StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            // Cannot even list: assume every key the run reached exists, and let the check below say what it finds.
+            existing = new HashSet<string>(snapshot.AllKeys.Concat(touched), StringComparer.OrdinalIgnoreCase);
+            problems.Add($"the rack list could not be read: {ex.Message}");
+        }
+
         foreach (var key in touched)
         {
-            try { _registry.DeleteKey(key); }
-            catch (Exception ex) { problems.Add($"could not remove '{key}': {ex.Message}"); }
-        }
-        foreach (var (key, values) in snapshot.Values)
-        {
+            snapshot.Values.TryGetValue(key, out var wanted);
             try
             {
-                var writes = values.Select(v => RegistryWrite.Set(v.Key, v.Value.Data, v.Value.Kind)).ToList();
-                _registry.Apply(key, writes);
+                if (IsAsWanted(key, wanted, existing)) continue;   // the failed step never changed this key
+            }
+            catch (Exception ex)
+            {
+                problems.Add($"could not read '{key}': {ex.Message}");
+                continue;
+            }
+
+            if (existing.Contains(key))
+            {
+                try { _registry.DeleteKey(key); }
+                catch (Exception ex) { problems.Add($"could not remove '{key}': {ex.Message}"); }
+            }
+            if (wanted == null) continue;   // it did not exist before: removed is right
+            try
+            {
+                _registry.Apply(key, wanted.Select(v => RegistryWrite.Set(v.Key, v.Value.Data, v.Value.Kind)).ToList());
             }
             catch (Exception ex) { problems.Add($"could not restore '{key}': {ex.Message}"); }
         }
@@ -135,30 +172,51 @@ public sealed class LayoutImportExecutor
 
         string details = string.Join("; ", problems);
         bool restoreFailed = problems.Count > 0;
+        string? recoveryFile = null, recoveryError = null;
+        if (restoreFailed)
+            (recoveryFile, recoveryError) = LayoutRecovery.Save(_recoveryDirectory, snapshot.Values);
+
         var result = new ImportResult(ImportStatus.Failed, 0, cause.Message, StateChanged: true,
-            RolledBack: !restoreFailed, RollbackFailed: restoreFailed, RollbackDetails: details);
+            RolledBack: !restoreFailed, RollbackFailed: restoreFailed, RollbackDetails: details,
+            RecoveryFile: recoveryFile, RecoveryError: recoveryError);
 
         Record(source, result, $"mode={mode}; rolledBack={!restoreFailed}");
         if (restoreFailed)
             LayoutAudit.Write(_audit, LayoutAudit.RollbackFailedKind, source, _registry.Path,
-                "the previous racks could not be fully restored after a failed import", "Failed", $"mode={mode}; cause={cause.Message}; {Shorten(details)}");
+                "the previous racks could not be fully restored after a failed import", "Failed",
+                $"mode={mode}; cause={cause.Message}; {Shorten(details)}; "
+                + (recoveryFile != null ? $"recoveryFile={recoveryFile}" : $"recoveryFile=NOT WRITTEN ({recoveryError})"));
         return result;
     }
 
-    // Reads the registry again and compares it with the snapshot: the same keys, the same values with the same kinds.
-    private IEnumerable<string> CheckRestore(Snapshot snapshot, HashSet<string> touched)
+    // Does this key already hold exactly what the snapshot says (or not exist, when it did not before)?
+    private bool IsAsWanted(string key, IReadOnlyDictionary<string, RegistryValue>? wanted, HashSet<string> existing)
+    {
+        if (wanted == null) return !existing.Contains(key);
+        if (!existing.Contains(key)) return false;
+        var actual = _registry.ReadValuesExact(key);
+        if (actual.Count != wanted.Count) return false;
+        foreach (var (name, want) in wanted)
+            if (!actual.TryGetValue(name, out var got) || got.Kind != want.Kind || !SameData(want.Data, got.Data)) return false;
+        return true;
+    }
+
+    // Reads the registry again and compares the keys the run reached with the snapshot: present or absent as before, the same
+    // values with the same kinds. (Keys the run never reached are not looked at; nested subkeys are not compared.)
+    private IEnumerable<string> CheckRestore(Snapshot snapshot, List<string> touched)
     {
         var problems = new List<string>();
         try
         {
             var now = new HashSet<string>(_registry.GetRackKeyNames(), StringComparer.OrdinalIgnoreCase);
-            var before = new HashSet<string>(snapshot.AllKeys, StringComparer.OrdinalIgnoreCase);
-            foreach (var key in before.Except(now)) problems.Add($"rack '{key}' is missing after the restore");
-            foreach (var key in now.Except(before)) problems.Add($"rack '{key}' was left behind by the import");
-
-            foreach (var (key, expected) in snapshot.Values)
+            foreach (var key in touched)
             {
-                if (!now.Contains(key)) continue;
+                if (!snapshot.Values.TryGetValue(key, out var expected))
+                {
+                    if (now.Contains(key)) problems.Add($"rack '{key}' was left behind by the import");
+                    continue;
+                }
+                if (!now.Contains(key)) { problems.Add($"rack '{key}' is missing after the restore"); continue; }
                 var actual = _registry.ReadValuesExact(key);
                 if (actual.Count != expected.Count)
                     problems.Add($"rack '{key}' has {actual.Count} value(s) after the restore, expected {expected.Count}");
@@ -173,7 +231,6 @@ public sealed class LayoutImportExecutor
         }
         return problems;
     }
-
     private void Record(string source, ImportResult result, string detail) =>
         LayoutAudit.Write(_audit, LayoutAudit.ImportKind, source, _registry.Path, result.Message, "Failed", detail);
 

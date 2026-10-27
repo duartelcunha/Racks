@@ -15,10 +15,11 @@ namespace Racks.UseCases.Layout;
 /// <item><b>Racks</b>: the name is one safe registry segment; two racks may not differ only in case (registry keys are not case
 /// sensitive); a <c>Name</c> value, when present, must equal the rack name (case aside).</item>
 /// <item><b>Values</b>: JSON scalars of the right kind, then every value goes through <see cref="RackSettingsValidator"/>, the
-/// same strict parser the loader uses. A number out of range, NaN, Infinity or a switch that is not True/False refuses the file
-/// with a message naming the rack and the value; it is never clamped silently. Paths, fonts and colors also pass
-/// <see cref="LayoutSecurityPolicy"/> first (its messages come first). A list item the loader would drop is dropped.</item>
-/// </list>
+/// same strict parser the loader uses. Old backups must stay importable, so a number out of range, NaN, Infinity, a switch that
+/// is not True/False, an undefined enum, a list over its caps or with bad items does NOT refuse the file: that one value is
+/// dropped (the default applies; a clamped number and the good items of a list are kept, as the loader does) and listed in
+/// <see cref="LayoutValidationResult.Dropped"/>. The security rules still refuse the whole file: names, paths
+/// (<see cref="LayoutSecurityPolicy"/>), fonts, colors, NUL, a regex over its cap, wrong JSON shapes, duplicates, version.</item>/// </list>
 /// Never throws.
 /// </summary>
 public static class LayoutValidator
@@ -33,6 +34,7 @@ public static class LayoutValidator
             if (version != null) return LayoutValidationResult.Fail(version);
 
             var result = new List<ValidatedRack>();
+            var dropped = new List<DroppedValue>();
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var rack in document.Racks ?? [])
             {
@@ -42,9 +44,9 @@ public static class LayoutValidator
                     throw new Refused($"Layout contains an unsafe rack name: '{rack.Name}'.");
                 if (!names.Add(rack.Name!))
                     throw new Refused($"Layout contains the rack '{rack.Name}' more than once (rack names are not case sensitive).");
-                result.Add(ValidateRack(rack));
+                result.Add(ValidateRack(rack, dropped));
             }
-            return new LayoutValidationResult(result, null);
+            return new LayoutValidationResult(result, null, dropped);
         }
         catch (Refused ex)
         {
@@ -57,7 +59,7 @@ public static class LayoutValidator
         }
     }
 
-    private static ValidatedRack ValidateRack(LayoutDocumentRack rack)
+    private static ValidatedRack ValidateRack(LayoutDocumentRack rack, List<DroppedValue> dropped)
     {
         string name = rack.Name!;
         var settings = new RackSettings();
@@ -90,7 +92,13 @@ public static class LayoutValidator
             string? problem = LayoutSecurityPolicy.CheckText(name, d, text);
             if (problem != null) throw new Refused(problem);
 
-            Apply(settings, d, ToRaw(d, e), name, text ?? e.GetRawText(), fields);
+            string shown = text ?? e.GetRawText();
+            if (text != null && LayoutSecurityPolicy.SplitListText(d, text) is { } items && LayoutSecurityPolicy.ListProblem(items) is { } tooBig)
+            {
+                dropped.Add(new DroppedValue(name, d.Name, tooBig));
+                continue;
+            }
+            Apply(settings, d, ToRaw(d, e), name, shown, fields, dropped);
         }
 
         foreach (var kv in rack.MultiStringValues ?? new Dictionary<string, string[]?>())
@@ -105,7 +113,12 @@ public static class LayoutValidator
             string? problem = LayoutSecurityPolicy.CheckLines(name, d, kv.Value);
             if (problem != null) throw new Refused(problem);
 
-            Apply(settings, d, new RegistryValue(kv.Value, RegistryValueKind.MultiString), name, string.Join(" | ", kv.Value), fields);
+            if (LayoutSecurityPolicy.ListProblem(kv.Value) is { } tooBig)
+            {
+                dropped.Add(new DroppedValue(name, d.Name, tooBig));
+                continue;
+            }
+            Apply(settings, d, new RegistryValue(kv.Value, RegistryValueKind.MultiString), name, string.Join(" | ", kv.Value), fields, dropped);
         }
 
         // The key is the rack's identity: a Name value that says otherwise would load as a different rack than the one checked.
@@ -122,25 +135,33 @@ public static class LayoutValidator
         return new ValidatedRack(name, settings, writes);
     }
 
-    // Runs one value through the loader's own parser. A refusal names the rack, the value and the reason.
-    private static void Apply(RackSettings settings, SettingDescriptor d, RegistryValue raw, string rack, string shown, List<SettingDescriptor> fields)
+    // Runs one value through the loader's own parser. What the loader would not use as written does not refuse the file for the
+    // kinds of value an OLD backup can legitimately carry badly (numbers, switches, enums, lists): that one value is dropped
+    // (the default applies) or corrected exactly as the loader would (a clamped number, the good items of a list), and it is
+    // reported. Every other kind (text, paths, fonts, colors, names) keeps whole-file refusal.
+    private static void Apply(RackSettings settings, SettingDescriptor d, RegistryValue raw, string rack, string shown,
+        List<SettingDescriptor> fields, List<DroppedValue> dropped)
     {
         var parsed = RackSettingsValidator.Parse(d, raw);
         switch (parsed.Status)
         {
             case ParseStatus.Absent:
                 return;   // the legacy name, which the app reads and throws away
+            case ParseStatus.Rejected when IsDroppable(d):
+                dropped.Add(new DroppedValue(rack, d.Name, $"{parsed.Reason}; '{LayoutSecurityPolicy.Shorten(shown)}' not used, the default applies"));
+                return;
             case ParseStatus.Rejected:
                 throw new Refused(Describe(rack, d, parsed.Reason, shown));
-            case ParseStatus.Changed when parsed.Normalizes:
-                // A number the loader would move to its limit: the file is wrong, so say so instead of changing it.
-                throw new Refused(Describe(rack, d, parsed.Reason, shown));
-                // Changed otherwise: list items the loader would drop. The kept items are what the rack will have anyway.
+            case ParseStatus.Changed:
+                dropped.Add(new DroppedValue(rack, d.Name, $"{parsed.Reason}; {parsed.Fallback}"));
+                break;
         }
         settings.Set(d.Name, parsed.Value);
         fields.Add(d);
     }
 
+    private static bool IsDroppable(SettingDescriptor d) => d.Kind is SettingKind.Double or SettingKind.Int or SettingKind.Bool
+        or SettingKind.Enum or SettingKind.IntList or SettingKind.PipeList or SettingKind.MultiString or SettingKind.PairList;
     private static string Describe(string rack, SettingDescriptor d, string reason, string shown) =>
         LayoutSecurityPolicy.Invalid(rack, d.Name, $"{reason} ('{LayoutSecurityPolicy.Shorten(shown)}')");
 

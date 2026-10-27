@@ -10,13 +10,19 @@ namespace Racks.Tests.Layouts;
 
 // INV-IMPORT-2: snapshot, delete, write, verify, and a restore that is checked and never swallowed. The registry is an
 // in-memory fake that keeps every value kind and fails on command; nothing here touches the real registry.
-public sealed class LayoutImportExecutorTests
+public sealed class LayoutImportExecutorTests : IDisposable
 {
     private readonly ScriptedRackRegistry _registry = new();
     private readonly RecordingAuditSink _audit = new();
+    private readonly string _recovery = Path.Combine(Path.GetTempPath(), "RacksLayoutRecovery-" + Guid.NewGuid().ToString("N"));
 
-    private LayoutImportExecutor Executor => new(_registry, _audit);
-    private LayoutService Service => new(_registry, new NoStore(), _audit);
+    public void Dispose()
+    {
+        try { Directory.Delete(_recovery, recursive: true); } catch { }
+    }
+
+    private LayoutImportExecutor Executor => new(_registry, _audit, _recovery);
+    private LayoutService Service => new(_registry, new NoStore(), _audit, _recovery);
 
     private sealed class NoStore : IRackSettingsStore
     {
@@ -137,7 +143,7 @@ public sealed class LayoutImportExecutorTests
     [InlineData("{\"Version\":9,\"Racks\":[]}")]
     [InlineData("{\"Version\":1,\"Racks\":[{\"Name\":\"Ok\",\"Values\":{\"Folder\":\"C:\\\\ok\"}},{\"Name\":\"Bad\",\"Values\":{\"Folder\":\"\\\\\\\\evil\\\\share\"}}]}")]
     [InlineData("{\"Version\":1,\"Racks\":[{\"Name\":\"Ok\"},{\"Name\":\"ok\"}]}")]
-    [InlineData("{\"Version\":1,\"Racks\":[{\"Name\":\"Ok\",\"Values\":{\"IdleOpacity\":9}}]}")]
+    [InlineData("{\"Version\":1,\"Racks\":[{\"Name\":\"Ok\",\"Values\":{\"TitleFontFamily\":\"\\\\\\\\evil\\\\x\"}}]}")]
     public void An_invalid_file_leaves_the_registry_untouched_and_never_even_reads_it(string json)
     {
         SeedExisting();
@@ -318,7 +324,7 @@ public sealed class LayoutImportExecutorTests
     public void An_audit_sink_that_fails_never_changes_the_outcome()
     {
         SeedExisting();
-        var executor = new LayoutImportExecutor(_registry, new ThrowingAuditSink());
+        var executor = new LayoutImportExecutor(_registry, new ThrowingAuditSink(), _recovery);
         var ok = executor.Execute(Validated(TwoNewRacks()), replaceExisting: true);
         Assert.Equal(ImportStatus.Imported, ok.Status);
 

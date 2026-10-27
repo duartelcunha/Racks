@@ -76,37 +76,56 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   `Import()`): `UseCases/Layout/LayoutImportExecutor` trabalha só sobre `IRackRegistry` (já não há `Registry.CurrentUser`
   no import). Ordem: snapshot das chaves que vão mudar (modo replace: todas; modo merge: as do ficheiro), com o tipo e os
   bytes exatos de cada valor (`ReadValuesExact`: REG_EXPAND_SZ não expandido); replace apaga cada chave; escreve cada rack;
-  **verifica** lendo de volta o que escreveu. Qualquer falha em apagar/escrever/verificar restaura o snapshot (apaga o que
-  lá está, volta a escrever os valores antigos com o mesmo tipo) e **confere** o restauro (mesmas chaves, mesmos valores,
-  mesmos tipos). Um restauro que não completa **nunca é engolido**: o resultado traz `RollbackFailed` + detalhes, escreve-se
-  um registo `LayoutImportRollbackFailed` no `audit.log` e a interface diz ao utilizador que podem faltar racks (antes era
-  `catch { }` e a falha original saía sozinha). Nada toca no registo antes de a validação terminar. *(teste:
-  `LayoutImportExecutorTests` com um registo em memória que falha por ordem: sucesso em replace e em merge, falha a meio da
-  escrita, ao apagar, na verificação, em merge, restauro que falha, ficheiro inválido deixa o registo intocado e nem o lê;
-  `LayoutRegistryImportTests` sobre o registo descartável real: `Import()` completo, falha com rollback de todos os tipos
-  REG_, round trip export→import byte a byte)*
+  **verifica** lendo de volta o que escreveu. Qualquer falha em apagar/escrever/verificar (qualquer tipo de exceção:
+  `IOException`, `UnauthorizedAccessException`, `SecurityException`...) faz rollback **preciso**: cada chave é registada
+  *antes* de se tentar apagá-la ou escrevê-la e só essas são tocadas, por isso uma falha no primeiro `DeleteKey` não toca em
+  nenhuma outra rack; uma chave alcançada que já é igual ao snapshot fica como está, as outras são apagadas e reescritas com
+  os valores antigos e o mesmo tipo. O restauro é depois **conferido** (as chaves alcançadas, presentes ou ausentes como antes,
+  mesmos valores, mesmos tipos). Um restauro que não completa **nunca é engolido** e o snapshot em memória, que passa a ser a
+  única cópia das racks do utilizador, **é sempre gravado** como ficheiro de recuperação (`%AppData%\Racks\recovery\
+  layout-<data>.json`, o mesmo formato de um export, atómico, as 5 mais recentes ficam; `UseCases/Layout/LayoutRecovery` +
+  `Infrastructure/Layout/RecoveryFolder`): o resultado traz `RollbackFailed`, os detalhes e o caminho do ficheiro (ou porque
+  não foi possível gravá-lo), escreve-se um registo `LayoutImportRollbackFailed` no `audit.log` com esse caminho e a interface
+  diz ao utilizador onde está a cópia ("importe esse ficheiro para as ter de volta"). Importar o ficheiro de recuperação repõe
+  as racks (só o que um layout pode ter: sem valores binários nem nomes que o Racks não conhece). Nada toca no registo antes de
+  a validação terminar. Limite assumido: o snapshot e a conferência cobrem os **valores** das chaves de rack; subchaves
+  aninhadas dentro de uma rack não são copiadas nem comparadas (a app não escreve nenhuma). *(teste:
+  `LayoutImportExecutorTests` e `LayoutReviewFixTests` com um registo em memória que falha por ordem: sucesso em replace e em
+  merge, falha no primeiro e no segundo delete, a meio da escrita de uma chave com cada tipo de exceção, na verificação, em
+  merge, restauro que falha + ficheiro de recuperação que reimporta para o estado original, recuperação que também falha,
+  ficheiro inválido deixa o registo intocado e nem o lê; `LayoutRegistryImportTests` sobre o registo descartável real:
+  `Import()` completo, falha com rollback de todos os tipos REG_, round trip export→import byte a byte)*
 - **INV-IMPORT-5** Um ficheiro de layout vem de fora (backup, partilhado por outra pessoa): tamanho e forma são limitados
-  **antes** de qualquer objeto ser criado, e o ficheiro é recusado inteiro ao primeiro problema (`UseCases/Layout/`:
-  `LayoutParser` forma, `LayoutValidator` significado, `LayoutSecurityPolicy` política, `LayoutLimits` os números).
-  Limites (`LayoutLimits`): ficheiro até **2 MiB** (verificado no comprimento e numa leitura limitada que pára 1 byte depois
-  do limite, nunca `File.ReadAllText`; pipes e ficheiros que crescem não passam); JSON até **8** níveis (um layout real tem
-  5; a varredura por tokens recusa antes de desserializar, por isso `[[[[...` não esgota a pilha); até **500** racks; até
-  **256** entradas em `Values` e em `MultiStringValues` de cada rack; listas (`AssignedFiles`, `LastAccessedFiles`,
-  `CustomOrderFiles`, `ShowOnVirtualDesktops`) até **10 000** itens, **1024** caracteres por item e **262 144** no total;
-  regex (`AutoRouteRegex`, `FileFilterRegex`, `FileFilterHideRegex`) até **1024** caracteres (o texto não é compilado no
-  import: `SafeRegex` compila-o com timeout onde é usado, INV-REGEX-1); texto com NUL recusado (o registo cortava-o).
-  `Version`: em falta lê-se como a atual, mais antiga lê-se, **mais nova é recusada** com mensagem ("atualize o Racks"), `< 1`
-  é inválida. **Números** passam pelo `RackSettingsValidator` (o mesmo parser do load): fora do intervalo, NaN, Infinity,
-  overflow, não inteiro, interruptor que não é `True`/`False` ou enum que não existe recusam o ficheiro com uma mensagem que
-  diz a rack e o campo; nada é cortado em silêncio (um `IconSize` de 5 recusa, em vez de virar 16). Nomes de racks
-  **duplicados** comparam-se sem distinguir maiúsculas (as chaves do registo também não distinguem) e o valor `Name`, quando
-  existe, tem de ser igual ao nome da rack (diferença só de maiúsculas é aceite). Um item de lista que o load deitaria fora
-  (par sem vírgula, inteiro inválido) é deitado fora; uma lista de inteiros sem nenhum bom recusa. Nenhuma entrada do registo
-  é escrita até a validação inteira acabar. O **export** escreve em passo único (`Infrastructure/Layout/LayoutFileWriter`:
-  ficheiro temporário oculto na mesma pasta, `Flush` a disco, `File.Replace`/`File.Move` por cima do destino, o temporário é
-  apagado se algo falhar; o destino passa por `PathPolicy.ValidateFullPath`), por isso uma falha deixa o ficheiro anterior
-  intacto, e recusa gerar um ficheiro que o próprio Racks não leria de volta. *(teste: `LayoutParserTests`,
-  `LayoutValidatorTests`, `LayoutExportTests`, `RackLayoutImportValidationTests` — as regras antigas continuam as mesmas)*
+  e o ficheiro é recusado inteiro ao primeiro problema de **segurança** (`UseCases/Layout/`: `LayoutParser` forma,
+  `LayoutValidator` significado, `LayoutSecurityPolicy` política, `LayoutLimits` os números). Limites (`LayoutLimits`):
+  ficheiro até **2 MiB** (o comprimento é verificado antes quando o ficheiro o diz, e a leitura pára assim que passa o limite,
+  no máximo um bloco de 80 KB a mais: nunca `File.ReadAllText`); JSON até **8** níveis (um layout real tem 5; a varredura por
+  tokens recusa antes de desserializar, por isso `[[[[...` não esgota a pilha); até **500** racks e **256** entradas em
+  `Values` e em `MultiStringValues` de cada rack (contados logo a seguir ao parse, a memória fica limitada pelo teto de
+  2 MiB do ficheiro); regex (`AutoRouteRegex`, `FileFilterRegex`, `FileFilterHideRegex`) até **1024** caracteres (o texto não
+  é compilado no import: `SafeRegex` compila-o com timeout onde é usado, INV-REGEX-1); texto com NUL recusado (o registo
+  cortava-o); uma propriedade repetida no mesmo objeto JSON (`"Folder"` duas vezes) recusa o ficheiro, em vez de a última
+  ganhar em silêncio. `Version`: em falta lê-se como a atual, mais antiga lê-se, **mais nova é recusada** com mensagem
+  ("atualize o Racks"), `< 1` é inválida. Nomes de racks **duplicados** comparam-se sem distinguir maiúsculas (as chaves do
+  registo também não distinguem) e o valor `Name`, quando existe, tem de ser igual ao nome da rack (diferença só de maiúsculas
+  é aceite). **Compatibilidade, decisão do lead:** os backups antigos têm de continuar a importar-se. Por isso, para os valores
+  numéricos, interruptores, enums e **listas** (`AssignedFiles`, `LastAccessedFiles`, `CustomOrderFiles`,
+  `ShowOnVirtualDesktops`) o que o `RackSettingsValidator` (o parser do load) não usaria **não recusa o ficheiro**: esse valor
+  é largado como o load o largaria (aplica-se o valor por omissão; um número que o load corta, `IconSize`/`GridSize`, fica
+  cortado; de uma lista ficam os itens bons), é escrito um registo `LayoutValueDropped` por valor (rack e campo; até 50, depois
+  um resumo) e a mensagem final diz quais foram. Listas: até **10 000** itens, **1024** caracteres por item e **262 144** no
+  total, senão a lista inteira é largada. Mantêm a **recusa do ficheiro inteiro** as regras de segurança: nomes/chaves, caminhos
+  (UNC/dispositivo/ADS/traversal), fontes, cores, NUL e caracteres de controlo, tamanho, profundidade, nº de racks e de
+  entradas, versão, duplicados, `Name` diferente da chave, formas JSON erradas (objeto onde devia haver escalar), regex acima do
+  limite. Nenhuma entrada do registo é escrita até a validação inteira acabar. O **export** escreve em passo único
+  (`Infrastructure/Layout/LayoutFileWriter`: ficheiro temporário oculto de nome curto e aleatório na mesma pasta, `Flush` a
+  disco, um único `File.Move(..., overwrite: true)` por cima do destino; **não** se usa `File.Replace`, que pode falhar a meio
+  com o destino já apagado; o temporário só é apagado se o destino estiver confirmadamente como estava, senão fica e o erro
+  diz onde; o destino passa por `PathPolicy.ValidateFullPath`), por isso uma falha deixa o ficheiro anterior intacto, e antes
+  de escrever o exporter corre os bytes pelo parser e pelo validador: um ficheiro que o próprio Racks recusaria (ou largaria
+  valores) não é gravado, e a falha diz a rack e o campo. *(teste: `LayoutParserTests`, `LayoutValidatorTests`,
+  `LayoutExportTests`, `LayoutReviewFixTests`, `RackLayoutImportValidationTests` — as regras de segurança antigas continuam as
+  mesmas)*
 - **INV-REGEX-1** Todo o regex compilado de input persistido/importado tem `MatchTimeout` (e degrada
   em vez de crashar/congelar). *(mecânica: existe um scanner grep "new Regex(" sem timeout; teste)*
   ✅ Aplicado (Lote A #3, `Util.SafeRegex` + belt global).
@@ -191,13 +210,15 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   virtual, a pasta de rack esvaziada no Desktop, o nome de hardlink do workspace (`WorkspaceReturn`), as
   pastas vazias do desfazer do Magic Organize, as junções do `RackMirror` e, no `UninstallCleanup`, os
   renames (`MoveSameVolume`), os desligamentos de junções/hardlinks (`Unlink`) e a remoção de pastas vazias
-  (`DeleteEmptyDirectory`). A allowlist tem agora 9 ficheiros (35 chamadas; era 32 até à P9, antes 12 ficheiros e 45), todos
+  (`DeleteEmptyDirectory`). A allowlist tem agora 10 ficheiros (36 chamadas; era 32 em 9 ficheiros até à P9, antes 12 ficheiros e 45), todos
   estado do próprio Racks (logs, pasta `RacksWorkspace` e `desktop.ini`, pasta-raiz das junções, sandboxes
   vazias em `VirtualFrames`, relatório/nota do uninstall, ficheiro temporário do updater, export do
-  layout) ou uma cópia sem apagar (o `.url` do `ShortcutFactory`); só pode descer. Única subida, justificada: na P9 o export
-  do layout deixou de ser um `File.WriteAllText` (1 chamada, em `RackLayoutIO`) e passou a escrita atómica em
-  `Infrastructure/Layout/LayoutFileWriter` (4 chamadas, cada uma explicada no `why` da allowlist: criar o temporário com
-  `CreateNew`, `File.Replace` ou `File.Move` para o destino que o utilizador escolheu, e apagar o próprio temporário em falha). Limites conhecidos do guard (não
+  layout e pasta de recuperação) ou uma cópia sem apagar (o `.url` do `ShortcutFactory`); só pode descer. Única subida,
+  justificada: na P9 o export do layout deixou de ser um `File.WriteAllText` (1 chamada, em `RackLayoutIO`) e passou a
+  escrita atómica em `Infrastructure/Layout/LayoutFileWriter` (3 chamadas, cada uma explicada no `why` da allowlist: criar o
+  temporário com `CreateNew`, um só `File.Move(..., overwrite: true)` para o destino que o utilizador escolheu, e apagar o
+  próprio temporário) mais `Infrastructure/Layout/RecoveryFolder` (2: criar a pasta de recuperação e apagar as cópias de
+  recuperação antigas do mesmo padrão). Limites conhecidos do guard (não
   vê chamadas por variável como `info.Delete()`, `File.Create`/`FileStream`, chamadas Win32/shell,
   `Process.Start`, nem código em `tools/`) estão no cabeçalho do teste; o guard impede o desvio fácil,
   não substitui a revisão. O guard exige contagem *igual* à da allowlist (a mais ou a menos falha).

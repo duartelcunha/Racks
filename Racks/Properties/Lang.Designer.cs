@@ -627,6 +627,25 @@ namespace Racks.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Imported {0} rack(s). Some values in the file could not be used and were left at their defaults:
+        ///{1}.
+        /// </summary>
+        public static string Layout_Import_Dropped {
+            get {
+                return ResourceManager.GetString("Layout.Import.Dropped", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to ...and {0} more (see audit.log in %AppData%\Racks)..
+        /// </summary>
+        public static string Layout_Import_DroppedMore {
+            get {
+                return ResourceManager.GetString("Layout.Import.DroppedMore", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to The file has no racks. Nothing was changed..
         /// </summary>
         public static string Layout_Import_Empty {
@@ -643,6 +662,26 @@ namespace Racks.Properties {
         public static string Layout_Import_Failed {
             get {
                 return ResourceManager.GetString("Layout.Import.Failed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to A copy of your previous racks could not be saved either ({0})..
+        /// </summary>
+        public static string Layout_Import_RecoveryFailed {
+            get {
+                return ResourceManager.GetString("Layout.Import.RecoveryFailed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to A copy of your previous racks was saved to:
+        ///{0}
+        ///Import that file to get them back..
+        /// </summary>
+        public static string Layout_Import_RecoverySaved {
+            get {
+                return ResourceManager.GetString("Layout.Import.RecoverySaved", resourceCulture);
             }
         }
         
@@ -669,7 +708,9 @@ namespace Racks.Properties {
         /// <summary>
         ///   Looks up a localized string similar to The import failed: {0}
         ///
-        ///Your previous racks could not be fully restored, so some racks may be missing or changed. Details were saved to audit.log in %AppData%\Racks. Please include it if you report a bug..
+        ///Your previous racks could not be fully restored, so some racks may be missing or changed. Details were saved to audit.log in %AppData%\Racks.
+        ///
+        ///{1}.
         /// </summary>
         public static string Layout_Import_RollbackFailed {
             get {

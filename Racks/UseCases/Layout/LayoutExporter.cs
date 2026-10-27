@@ -50,6 +50,20 @@ public sealed class LayoutExporter
         return document;
     }
 
+    // A backup its own import would refuse (or change) is not a backup: run the bytes through the same parser and validator and
+    // say what is wrong, naming the rack and the value. Nothing is truncated or dropped silently.
+    private static string? Unimportable(byte[] bytes)
+    {
+        const string Lead = "The layout was not exported because Racks would not import it back: ";
+        var parsed = LayoutParser.Parse(bytes);
+        if (!parsed.Ok) return Lead + parsed.Error;
+        var validated = LayoutValidator.Validate(parsed.Document!);
+        if (!validated.Ok) return Lead + validated.Error;
+        if (validated.Dropped is { Count: > 0 } dropped)
+            return Lead + string.Join("; ", dropped.Take(5)) + (dropped.Count > 5 ? $"; and {dropped.Count - 5} more" : "") + ".";
+        return null;
+    }
+
     public string BuildJson() => JsonSerializer.Serialize(Build(), Json);
 
     /// <summary>Writes the layout to <paramref name="path"/> in one atomic step. Never throws.</summary>
@@ -65,6 +79,10 @@ public sealed class LayoutExporter
             {
                 // A file this build would refuse to read back is not a backup.
                 result = ExportResult.Fail($"The layout is too large to export: Racks reads at most {LayoutLimits.MaxRacks} racks and {LayoutLimits.MaxFileBytes / (1024 * 1024)} MB.");
+            }
+            else if (Unimportable(bytes) is { } problem)
+            {
+                result = ExportResult.Fail(problem);
             }
             else
             {

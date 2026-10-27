@@ -18,6 +18,12 @@ public sealed class ScriptedRackRegistry : IRackRegistry
 
     public Func<string, string, int, bool>? FailWhen { get; set; }
 
+    /// <summary>Makes the exception a scripted failure throws (default <see cref="IOException"/>).</summary>
+    public Func<string, Exception> Failure { get; set; } = message => new IOException(message);
+
+    /// <summary>When set, the next write to this key stores the first half of its values and then fails with <see cref="Failure"/> (a key half written).</summary>
+    public string? HalfwayFailureKey { get; set; }
+
     /// <summary>When set, a write of this value name is accepted but silently not stored (a registry that lies).</summary>
     public string? DropValueOnApply { get; set; }
 
@@ -32,7 +38,7 @@ public sealed class ScriptedRackRegistry : IRackRegistry
     {
         int n = Calls(operation) + 1;
         _counts[operation] = n;
-        if (FailWhen != null && FailWhen(operation, key, n)) throw new IOException($"scripted {operation} failure for '{key}' (call {n})");
+        if (FailWhen != null && FailWhen(operation, key, n)) throw Failure($"scripted {operation} failure for '{key}' (call {n})");
     }
 
     /// <summary>Creates an empty key without counting as a call (test setup).</summary>
@@ -62,12 +68,17 @@ public sealed class ScriptedRackRegistry : IRackRegistry
     {
         Enter("apply", keyName);
         if (!_keys.TryGetValue(keyName, out var values)) _keys[keyName] = values = new Dictionary<string, RegistryValue>(StringComparer.OrdinalIgnoreCase);
-        foreach (var write in writes)
+        bool halfway = string.Equals(keyName, HalfwayFailureKey, StringComparison.OrdinalIgnoreCase);
+        if (halfway) HalfwayFailureKey = null;
+        int stop = halfway ? Math.Max(1, writes.Count / 2) : writes.Count;
+        for (int i = 0; i < stop; i++)
         {
+            var write = writes[i];
             if (write.IsRemoval) values.Remove(write.Name);
             else if (!string.Equals(write.Name, DropValueOnApply, StringComparison.OrdinalIgnoreCase))
                 values[write.Name] = new RegistryValue(Copy(write.Data!), write.Kind);
         }
+        if (halfway) throw Failure($"scripted failure half way through '{keyName}'");
     }
 
     public bool DeleteKey(string keyName)

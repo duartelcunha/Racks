@@ -1,4 +1,5 @@
 using System;
+using Racks.Infrastructure.Logging;
 using Racks.Properties;
 using Racks.UseCases.Layout;
 
@@ -30,6 +31,7 @@ namespace Racks.Views
             }
             catch (Exception ex)
             {
+                LayoutAudit.DialogFailed(AuditLog.Forwarder, import: false, ex);
                 Show(LayoutMessages.Unexpected(import: false, ex));
                 return false;
             }
@@ -50,6 +52,7 @@ namespace Racks.Views
             }
             catch (Exception ex)
             {
+                LayoutAudit.DialogFailed(AuditLog.Forwarder, import: true, ex);
                 Show(LayoutMessages.Unexpected(import: true, ex));
                 return 0;
             }

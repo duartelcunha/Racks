@@ -14,10 +14,11 @@ public static class LayoutParser
 {
     internal const string NotJson = "The layout file is not valid JSON.";
 
-    private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true };
+    // AllowDuplicateProperties = false: a property repeated in one object (also in the Values dictionaries) refuses the file instead of the last one winning silently.
+    private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true, AllowDuplicateProperties = false };
 
     /// <summary>
-    /// Reads a file with a bounded read: the length is checked first, and the read itself stops one byte past the cap, so a
+    /// Reads a file with a bounded read: the length is checked first, and the read itself stops as soon as more than the cap has been read, so a
     /// file that grows, lies about its size or is not a regular file can never be pulled into memory whole.
     /// </summary>
     public static LayoutParseResult ReadFile(string path, int maxBytes = LayoutLimits.MaxFileBytes)
@@ -92,7 +93,9 @@ public static class LayoutParser
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException)
         {
-            return LayoutParseResult.Fail(NotJson);
+            return LayoutParseResult.Fail(ex.Message.Contains("uplicate", StringComparison.Ordinal)
+                ? "The layout file repeats a property in one object."
+                : NotJson);
         }
 
         // A JSON "null" is a file with no racks, as it always was.

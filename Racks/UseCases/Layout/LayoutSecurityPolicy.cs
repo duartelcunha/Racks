@@ -75,36 +75,44 @@ public static class LayoutSecurityPolicy
         if (IsRegexField(d.Name) && s.Length > LayoutLimits.MaxRegexLength)
             return Invalid(rack, d.Name, $"a regular expression can have at most {LayoutLimits.MaxRegexLength} characters");
 
-        // The two lists the registry keeps as one text.
-        if (d.Kind == SettingKind.PipeList) return CheckItems(rack, d.Name, s.Split('|', StringSplitOptions.RemoveEmptyEntries));
-        if (d.Kind == SettingKind.IntList) return CheckItems(rack, d.Name, s.Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries));
         return null;
     }
 
-    /// <summary>For a list value (REG_MULTI_SZ lines): the refusal message, or null.</summary>
+    /// <summary>For a list value (REG_MULTI_SZ lines): the refusal message (a NUL), or null. The size caps are <see cref="ListProblem"/>.</summary>
     public static string? CheckLines(string rack, SettingDescriptor d, string[] lines)
+        => lines.Any(l => l.Contains('\0')) ? Invalid(rack, d.Name, "an item contains a NUL character") : null;
+
+    /// <summary>
+    /// The items of a list the registry keeps as one text (the pipe list and the integer list), or null for any other kind.
+    /// </summary>
+    public static IReadOnlyList<string>? SplitListText(SettingDescriptor d, string s) => d.Kind switch
     {
-        if (lines.Any(l => l.Contains('\0'))) return Invalid(rack, d.Name, "an item contains a NUL character");
-        return CheckItems(rack, d.Name, lines);
-    }
+        SettingKind.PipeList => s.Split('|', StringSplitOptions.RemoveEmptyEntries),
+        SettingKind.IntList => s.Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries),
+        _ => null,
+    };
 
     public static string? Shorten(string? s) => s != null && s.Length > 120 ? s.Substring(0, 120) + "..." : s;
 
     public static string Invalid(string rack, string field, string why) => $"Layout rack '{rack}' has an invalid {field}: {why}.";
 
-    private static string? CheckItems(string rack, string field, IReadOnlyList<string> items)
+    /// <summary>
+    /// Why a list is over its caps (count, item length, total), or null. Not a refusal: the validator drops that one value, as the
+    /// loader would not use such a list either, and imports the rest of the file.
+    /// </summary>
+    public static string? ListProblem(IReadOnlyList<string> items)
     {
         if (items.Count > LayoutLimits.MaxListItems)
-            return Invalid(rack, field, $"it has {items.Count} items; the most Racks reads is {LayoutLimits.MaxListItems}");
+            return $"it has {items.Count} items; the most Racks reads is {LayoutLimits.MaxListItems}";
         long total = 0;
         foreach (var item in items)
         {
             if (item.Length > LayoutLimits.MaxListItemLength)
-                return Invalid(rack, field, $"an item is longer than {LayoutLimits.MaxListItemLength} characters");
+                return $"an item is longer than {LayoutLimits.MaxListItemLength} characters";
             total += item.Length;
         }
         return total > LayoutLimits.MaxListTotalChars
-            ? Invalid(rack, field, $"the items together are longer than {LayoutLimits.MaxListTotalChars} characters")
+            ? $"the items together are longer than {LayoutLimits.MaxListTotalChars} characters"
             : null;
     }
 

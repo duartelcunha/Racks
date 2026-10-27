@@ -69,6 +69,17 @@ public sealed class LayoutValidatorTests
 
     // ---- numbers: ranges and finiteness --------------------------------------------------------------------------------
 
+    // Old backups must stay importable: a bad number/switch/enum is DROPPED (the default applies) and reported, exactly as the
+    // registry loader would not use it; the rest of the file imports. Security rules still refuse the whole file (further down).
+
+    private static ValidatedRack AcceptedWithDropped(string json, out IReadOnlyList<DroppedValue> dropped)
+    {
+        var result = Check(json);
+        Assert.True(result.Ok, result.Error);
+        dropped = result.Dropped!;
+        return Assert.Single(result.Racks!);
+    }
+
     [Theory]
     [InlineData("IdleOpacity", 5)]
     [InlineData("IdleOpacity", -0.5)]
@@ -80,24 +91,32 @@ public sealed class LayoutValidatorTests
     [InlineData("SortBy", 11)]
     [InlineData("FolderOrder", 3)]
     [InlineData("AnimationSpeed", 99)]
-    public void A_number_out_of_range_refuses_the_file_and_names_the_rack_and_the_value(string field, double value)
+    public void A_number_out_of_range_is_dropped_and_reported_with_the_rack_and_the_value(string field, double value)
     {
-        string error = Refused(Json(new Dictionary<string, object> { [field] = value }));
-        Assert.Contains("'Work'", error);
-        Assert.Contains(field, error);
-        Assert.Contains("out of range", error);
+        var rack = AcceptedWithDropped(Json(new Dictionary<string, object> { [field] = value, ["Folder"] = @"C:\ok" }), out var dropped);
+        var one = Assert.Single(dropped);
+        Assert.Equal("Work", one.Rack);
+        Assert.Equal(field, one.Field);
+        Assert.Contains("out of range", one.Reason);
+        Assert.Contains("default applies", one.Reason);
+        Assert.Contains($"rack 'Work': {field}", one.ToString());
+        Assert.Null(rack.Settings.Get(field));                          // not used: the rack keeps its default
+        Assert.DoesNotContain(rack.Writes, w => w.Name == field);       // and nothing is written for it
+        Assert.Equal(@"C:\ok", rack.Settings.Folder);                   // the rest of the rack is imported
     }
 
     [Theory]
-    [InlineData("IconSize", 5)]     // the setters clamp these two; an import refuses instead of changing the file's meaning
-    [InlineData("IconSize", 1000)]
-    [InlineData("GridSize", 1)]
-    [InlineData("GridSize", 999)]
-    public void A_number_the_loader_would_clamp_is_refused_not_clamped_silently(string field, int value)
+    [InlineData("IconSize", 5, 16)]       // the setters clamp these two: the loader keeps the clamped value, so does import, and says so
+    [InlineData("IconSize", 1000, 256)]
+    [InlineData("GridSize", 1, 2)]
+    [InlineData("GridSize", 999, 256)]
+    public void A_number_the_loader_would_clamp_is_clamped_as_the_loader_does_and_reported(string field, int value, int expected)
     {
-        string error = Refused(Json(new Dictionary<string, object> { [field] = value }));
-        Assert.Contains(field, error);
-        Assert.Contains("out of range", error);
+        var rack = AcceptedWithDropped(Json(new Dictionary<string, object> { [field] = value }), out var dropped);
+        Assert.Equal(expected, rack.Settings.Get(field));
+        var one = Assert.Single(dropped);
+        Assert.Equal(field, one.Field);
+        Assert.Contains("clamped", one.Reason);
     }
 
     [Theory]
@@ -106,36 +125,66 @@ public sealed class LayoutValidatorTests
     [InlineData("PosY", "-Infinity")]
     [InlineData("Width", "1e999")]
     [InlineData("IdleOpacity", "not a number")]
-    public void NaN_Infinity_and_text_that_is_not_a_number_are_refused(string field, string value)
+    public void NaN_Infinity_and_text_that_is_not_a_number_are_dropped_and_reported(string field, string value)
     {
-        string error = Refused(Json(new Dictionary<string, object> { [field] = value }));
-        Assert.Contains("'Work'", error);
-        Assert.Contains(field, error);
+        var rack = AcceptedWithDropped(Json(new Dictionary<string, object> { [field] = value }), out var dropped);
+        Assert.Equal(field, Assert.Single(dropped).Field);
+        Assert.Empty(rack.Writes);
     }
 
     [Fact]
-    public void A_json_number_too_large_for_a_double_is_refused()
+    public void A_json_number_too_large_for_a_double_is_dropped()
     {
         // 1e999 as a bare JSON number (not text): overflow to Infinity, never stored.
         string json = "{\"Version\":1,\"Racks\":[{\"Name\":\"Work\",\"Values\":{\"PosX\":1e999}}]}";
-        Assert.Contains("PosX", Refused(json));
+        AcceptedWithDropped(json, out var dropped);
+        Assert.Equal("PosX", Assert.Single(dropped).Field);
     }
 
     [Theory]
     [InlineData("IconSize", "1.5")]
     [InlineData("IconSize", "abc")]
     [InlineData("SortBy", "99999999999")]    // does not fit 32 bits
-    public void A_whole_number_value_must_be_a_whole_number(string field, string value)
-        => Assert.Contains(field, Refused(Json(new Dictionary<string, object> { [field] = value })));
+    public void A_whole_number_value_that_is_not_a_whole_number_is_dropped(string field, string value)
+    {
+        AcceptedWithDropped(Json(new Dictionary<string, object> { [field] = value }), out var dropped);
+        Assert.Equal(field, Assert.Single(dropped).Field);
+    }
 
     [Fact]
-    public void A_switch_and_an_enum_must_say_one_of_their_values()
+    public void A_switch_and_an_enum_that_say_nothing_defined_are_dropped_and_reported()
     {
-        Assert.Contains("IsLocked", Refused(Json(new { IsLocked = "yes" })));
-        Assert.Contains("IsLocked", Refused(Json(new { IsLocked = 1 })));
-        Assert.Contains("TitleTextAlignment", Refused(Json(new { TitleTextAlignment = "Diagonal" })));
-        Assert.Contains("TitleTextAlignment", Refused(Json(new { TitleTextAlignment = "Left, Right" })));
+        AcceptedWithDropped(Json(new { IsLocked = "yes", ShowInGrid = 1, TitleTextAlignment = "Diagonal", DropShadowEnabled = "Left, Right" }), out var dropped);
+        Assert.Equal(new[] { "DropShadowEnabled", "IsLocked", "ShowInGrid", "TitleTextAlignment" }, dropped.Select(d => d.Field).Order(StringComparer.Ordinal));
+        AcceptedWithDropped(Json(new { TitleTextAlignment = "Left, Right" }), out dropped);
+        Assert.Equal("TitleTextAlignment", Assert.Single(dropped).Field);
     }
+
+    [Fact]
+    public void An_old_backup_with_one_NaN_position_and_one_out_of_range_font_size_imports_with_those_two_dropped()
+    {
+        var result = Check(Json(new Dictionary<string, object>
+        {
+            ["Folder"] = @"C:\Users\me\Docs",
+            ["PosX"] = "NaN",
+            ["PosY"] = "40",
+            ["TitleFontSize"] = "500",
+            ["IconSize"] = 64,
+            ["IsLocked"] = "True",
+        }));
+        Assert.True(result.Ok, result.Error);
+        var rack = Assert.Single(result.Racks!);
+        Assert.Equal(new[] { "PosX", "TitleFontSize" }, result.Dropped!.Select(d => d.Field).Order(StringComparer.Ordinal));
+        Assert.All(result.Dropped!, d => Assert.Equal("Work", d.Rack));
+        Assert.Equal(new[] { "Folder", "IconSize", "IsLocked", "PosY" }, rack.Values.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(40.0, rack.Settings.PosY);
+        Assert.Null(rack.Settings.PosX);
+        Assert.Null(rack.Settings.TitleFontSize);
+    }
+
+    [Fact]
+    public void A_clean_file_reports_nothing_dropped()
+        => Assert.Empty(Check(Json(new { Folder = @"C:\ok", IconSize = 64 })).Dropped!);
 
     [Fact]
     public void Numbers_in_range_and_at_the_edges_are_accepted()
@@ -215,14 +264,16 @@ public sealed class LayoutValidatorTests
         var rack = Accepted(Json(new { MoveFilesOnDrop = "True", Folder = @"C:\x" }));
         Assert.Equal(new[] { "Folder" }, rack.Values.Keys);
     }
-
     [Fact]
-    public void A_list_item_the_loader_would_drop_is_dropped_and_a_list_with_no_good_item_is_refused()
+    public void A_list_item_the_loader_would_drop_is_dropped_and_a_list_with_no_good_item_is_dropped_whole()
     {
-        var rack = Accepted(Json(new { ShowOnVirtualDesktops = "1,x,3" }, new Dictionary<string, string[]> { ["CustomOrderFiles"] = ["a.txt,1", "junk"] }));
+        var rack = AcceptedWithDropped(Json(new { ShowOnVirtualDesktops = "1,x,3" }, new Dictionary<string, string[]> { ["CustomOrderFiles"] = ["a.txt,1", "junk"] }), out var dropped);
         Assert.Equal(new[] { 1, 3 }, rack.Settings.ShowOnVirtualDesktops);
         Assert.Equal(new[] { "a.txt,1" }, rack.Writes.Single(w => w.Name == "CustomOrderFiles").Data as string[]);
-        Assert.Contains("ShowOnVirtualDesktops", Refused(Json(new { ShowOnVirtualDesktops = "abc" })));
+        Assert.Equal(new[] { "CustomOrderFiles", "ShowOnVirtualDesktops" }, dropped.Select(d => d.Field).Order(StringComparer.Ordinal));
+
+        AcceptedWithDropped(Json(new { ShowOnVirtualDesktops = "abc" }), out dropped);
+        Assert.Equal("ShowOnVirtualDesktops", Assert.Single(dropped).Field);
     }
 
     // ---- rack names ------------------------------------------------------------------------------------------------------
@@ -277,31 +328,40 @@ public sealed class LayoutValidatorTests
     // ---- sizes ---------------------------------------------------------------------------------------------------------------
 
     [Fact]
-    public void A_list_with_too_many_items_is_refused_in_both_sections()
+    public void A_list_with_too_many_items_is_dropped_and_reported_in_both_sections()
     {
         string many = string.Join("|", Enumerable.Range(0, LayoutLimits.MaxListItems + 1).Select(i => "f" + i));
-        string error = Refused(Json(new { AssignedFiles = many }));
-        Assert.Contains("AssignedFiles", error);
-        Assert.Contains("10001 items", error);
+        var rack = AcceptedWithDropped(Json(new { AssignedFiles = many, Folder = @"C:\ok" }), out var dropped);
+        var one = Assert.Single(dropped);
+        Assert.Equal("AssignedFiles", one.Field);
+        Assert.Contains("10001 items", one.Reason);
+        Assert.Null(rack.Settings.AssignedFiles);
+        Assert.Equal(@"C:\ok", rack.Settings.Folder);
 
         var lines = Enumerable.Range(0, LayoutLimits.MaxListItems + 1).Select(i => "f" + i).ToArray();
-        Assert.Contains("LastAccessedFiles", Refused(Json(multi: new Dictionary<string, string[]> { ["LastAccessedFiles"] = lines })));
+        AcceptedWithDropped(Json(multi: new Dictionary<string, string[]> { ["LastAccessedFiles"] = lines }), out dropped);
+        Assert.Equal("LastAccessedFiles", Assert.Single(dropped).Field);
 
         // At the limit it is accepted.
-        Accepted(Json(new { AssignedFiles = string.Join("|", Enumerable.Range(0, LayoutLimits.MaxListItems).Select(i => "f" + i)) }));
+        AcceptedWithDropped(Json(new { AssignedFiles = string.Join("|", Enumerable.Range(0, LayoutLimits.MaxListItems).Select(i => "f" + i)) }), out dropped);
+        Assert.Empty(dropped);
     }
 
     [Fact]
-    public void A_list_item_that_is_too_long_or_lists_that_are_too_big_together_are_refused()
+    public void A_list_item_that_is_too_long_or_lists_that_are_too_big_together_are_dropped()
     {
         string longItem = new('x', LayoutLimits.MaxListItemLength + 1);
-        Assert.Contains("longer than 1024", Refused(Json(multi: new Dictionary<string, string[]> { ["LastAccessedFiles"] = [longItem] })));
-        Assert.Contains("longer than 1024", Refused(Json(new { AssignedFiles = "ok|" + longItem })));
-        Accepted(Json(multi: new Dictionary<string, string[]> { ["LastAccessedFiles"] = [new string('x', LayoutLimits.MaxListItemLength)] }));
+        AcceptedWithDropped(Json(multi: new Dictionary<string, string[]> { ["LastAccessedFiles"] = [longItem] }), out var dropped);
+        Assert.Contains("longer than 1024", Assert.Single(dropped).Reason);
+        AcceptedWithDropped(Json(new { AssignedFiles = "ok|" + longItem }), out dropped);
+        Assert.Contains("longer than 1024", Assert.Single(dropped).Reason);
+        AcceptedWithDropped(Json(multi: new Dictionary<string, string[]> { ["LastAccessedFiles"] = [new string('x', LayoutLimits.MaxListItemLength)] }), out dropped);
+        Assert.Empty(dropped);
 
         // 300 items of 1000 characters: each is fine, together they are over the total.
         var big = Enumerable.Range(0, 300).Select(_ => new string('y', 1000)).ToArray();
-        Assert.Contains("together", Refused(Json(multi: new Dictionary<string, string[]> { ["LastAccessedFiles"] = big })));
+        AcceptedWithDropped(Json(multi: new Dictionary<string, string[]> { ["LastAccessedFiles"] = big }), out dropped);
+        Assert.Contains("together", Assert.Single(dropped).Reason);
     }
 
     [Fact]
@@ -358,13 +418,35 @@ public sealed class LayoutValidatorTests
             Racks = new object[]
             {
                 new { Name = "Good", Values = new { Folder = @"C:\ok" } },
-                new { Name = "Bad", Values = new { IdleOpacity = 7 } },
+                new { Name = "Bad", Values = new { Folder = @"\\evil\share" } },
             },
         });
         var result = Check(json);
         Assert.False(result.Ok);
         Assert.Null(result.Racks);
         Assert.Contains("'Bad'", result.Error);
+    }
+
+    [Fact]
+    public void Security_violations_still_refuse_the_whole_file_even_next_to_droppable_values()
+    {
+        // The droppable value (NaN) does not make the file importable when something unsafe is in it.
+        foreach (var values in new object[]
+                 {
+                     new { PosX = "NaN", Folder = @"\\evil\share" },
+                     new { PosX = "NaN", TitleFontFamily = @"\\evil\share\#F" },
+                     new { PosX = "NaN", TitleBarColor = "ContextColor file://evil/x.icc 1,2,3" },
+                     new { PosX = "NaN", TitleText = "a\0b" },
+                     new { PosX = "NaN", AutoRouteRegex = new string('a', LayoutLimits.MaxRegexLength + 1) },
+                     new { PosX = "NaN", BackgroundImagePath = @"C:\x\y.png:stream" },
+                     new { PosX = new[] { 1 } },                       // wrong JSON shape
+                 })
+            Assert.False(Check(Json(values)).Ok);
+        Assert.False(Check(Json(new { PosX = "NaN" }, name: "a\\b")).Ok);                                          // unsafe name
+        Assert.False(Check(Json(new { PosX = "NaN", Name = "Other" })).Ok);                                         // Name mismatch
+        Assert.False(Check(Json(new { PosX = "NaN" }, version: 9)).Ok);                                            // newer version
+        Assert.False(Check(TwoRacks("Work", "work")).Ok);                                                          // duplicate
+        Assert.False(Check(Json(multi: new Dictionary<string, string[]> { ["LastAccessedFiles"] = ["a\0b"] })).Ok); // NUL in a list
     }
 
     [Fact]
