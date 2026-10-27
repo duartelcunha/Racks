@@ -50,6 +50,51 @@ public class PathPolicyTests
         Assert.NotEmpty(reason);
     }
 
+    [Theory]
+    [InlineData("COM0")]
+    [InlineData("LPT0.txt")]
+    [InlineData("COM\u00B9")]
+    [InlineData("com\u00B2.log")]
+    [InlineData("COM\u00B3")]
+    [InlineData("LPT\u00B9")]
+    [InlineData("lpt\u00B2")]
+    [InlineData("LPT\u00B3.txt")]
+    public void Zero_and_superscript_device_names_are_reserved_too(string name)
+        => Assert.False(PathPolicy.ValidateLeafName(name).Ok, name);
+
+    // U+007F-U+009F are legal NTFS name characters (mojibake file names from zip extracts exist on disk);
+    // only 0x00-0x1F are refused. char.IsControl would have rejected these.
+    [Fact]
+    public void C1_and_DEL_characters_are_allowed_in_names_and_paths_but_C0_is_not()
+    {
+        for (char c = '\u007F'; c <= '\u009F'; c++)
+        {
+            string name = "a" + c + "b";
+            Assert.True(PathPolicy.ValidateLeafName(name).Ok, $"name with U+{(int)c:X4}");
+            Assert.True(PathPolicy.ValidateFullPath("C:\\dir\\" + name).Ok, $"path with U+{(int)c:X4}");
+        }
+        Assert.True(PathPolicy.ValidateLeafName("\u00E2\u0080\u0093 mojibake.txt").Ok);   // what a bad unzip writes for an en dash
+        Assert.False(PathPolicy.ValidateLeafName("a\u0001b").Ok);
+        Assert.False(PathPolicy.ValidateFullPath("C:\\dir\\a\u0001b").Ok);
+        Assert.False(PathPolicy.ValidateLeafName("a\u001Fb").Ok);
+    }
+
+    [Theory]
+    [InlineData("\\\\server\\C$\\Users\\me\\Desktop")]
+    [InlineData("\\\\localhost\\c$\\x")]
+    [InlineData("\\\\localhost\\ADMIN$\\x")]
+    [InlineData("\\\\?\\UNC\\server\\D$\\x")]
+    [InlineData("\\\\server\\z$")]
+    public void Administrative_shares_are_refused_because_the_protected_folder_check_cannot_see_through_them(string path)
+        => Assert.False(PathPolicy.ValidateFullPath(path).Ok, path);
+
+    [Theory]
+    [InlineData("\\\\server\\data$\\x")]       // a hidden share that is not an admin share
+    [InlineData("\\\\server\\Cdata\\x")]
+    [InlineData("\\\\server\\share\\C$")]      // a folder called C$ inside a share is fine
+    public void Ordinary_and_hidden_non_admin_shares_are_still_allowed(string path)
+        => Assert.True(PathPolicy.ValidateFullPath(path).Ok, path);
+
     [Fact]
     public void Null_is_rejected()
         => Assert.False(PathPolicy.ValidateLeafName(null).Ok);

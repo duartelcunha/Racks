@@ -6,22 +6,30 @@ namespace Racks.Tests.Guards;
 
 /// <summary>
 /// INV-FS-1: destructive file operations on user data go through <c>FileOperationBroker</c>. This guard is a
-/// ratchet like <see cref="ArchitectureRatchetTests"/>: each file under Racks/ may contain at most the number
-/// of raw file mutations recorded in fs-allowlist.json (missing = 0), and the numbers may only go down.
-/// When a change removes a raw call, lower its number in the same PR.
+/// ratchet like <see cref="ArchitectureRatchetTests"/>: each file under Racks/ must contain EXACTLY the number
+/// of raw file mutations recorded in fs-allowlist.json (missing = 0). Too many fails (a new raw call); too few
+/// also fails, so a stale or too-high entry cannot hide a new call later. When a change removes a raw call,
+/// lower its number in the same PR.
 ///
-/// What it sees: <c>File.</c>/<c>Directory.</c> Move, Delete, Copy, CreateDirectory, SetAttributes, Replace,
-/// WriteAllText/Bytes/Lines and AppendAllText (and their *Async forms), <c>.MoveTo(</c>, and
-/// <c>new FileInfo/DirectoryInfo(...).Delete/CopyTo/MoveTo</c>, after comments are removed, over several
-/// lines and whatever the arguments are.
+/// What it sees (after comments are removed, over several lines, whatever the arguments):
+/// <c>File.</c>/<c>Directory.</c> Move, Delete, Copy, Replace, CreateDirectory, SetAttributes, Create,
+/// CreateText, OpenWrite, CreateSymbolicLink, WriteAllText/Bytes/Lines, AppendAllText/Lines/Bytes, AppendText
+/// (and *Async forms), <c>.MoveTo(</c>, <c>new FileInfo/DirectoryInfo(...).Delete/CopyTo</c>, and
+/// <c>File.Open</c> / <c>new FileStream</c> whose arguments name a write intent (FileMode.Create, CreateNew,
+/// Append, OpenOrCreate, Truncate, or FileAccess.Write, ReadWrite). It also bans <c>using static</c> and
+/// <c>using X = ...</c> for File, Directory, FileInfo, DirectoryInfo, SafeMove and SafeDelete, and the same
+/// as a Using item in a csproj, because those would hide the calls from the patterns.
 ///
-/// What it cannot see (so do not rely on it for these): calls through a variable (<c>fi.Delete()</c>,
-/// <c>dirInfo.Create()</c>, <c>info.Attributes = ...</c>), <c>File.Create/Open/OpenWrite</c> and
-/// <c>new FileStream(..., FileMode.Create)</c>, Win32 or shell calls (<c>SHFileOperation</c>,
-/// <c>DeleteFile</c>), <c>Process.Start("cmd", ...)</c>, reflection, and code in other projects (tools/).
-/// <c>Stream.CopyTo</c> is intentionally NOT matched (it copies bytes, not files). Strings are not
-/// blanked, so a string that contains one of the patterns counts too (it fails closed). A reviewer still has
-/// to read new file code; the guard only stops the easy, silent way of bypassing the gateway.
+/// What it cannot see (known blind spots, so do not rely on it for these; a reviewer must read new file code):
+/// calls through a variable (<c>fi.Delete()</c>, <c>dirInfo.Create()</c>, <c>info.Attributes = ...</c>);
+/// <c>File.Open</c>/<c>FileStream</c> with the mode passed in a variable; Win32 and COM calls
+/// (HardlinkHelper <c>CreateHardLinkW</c>, JunctionHelper <c>DeviceIoControl</c>, ShellLinkHelper
+/// <c>IPersistFile.Save</c>, <c>SHFileOperation</c> in SafeDelete); processes (JunctionHelper <c>mklink</c>
+/// via cmd); Updater's <c>new DirectoryInfo(dir).Create(security)</c>;
+/// UninstallCleanup's <c>new DirectoryInfo(..).Attributes =</c>; shell context-menu verbs (delete/cut/paste
+/// run by Explorer itself); reflection; code in other projects (tools/). <c>Stream.CopyTo</c> is
+/// intentionally NOT matched (it copies bytes, not files). Strings are not blanked, so a string that contains
+/// one of the patterns counts too (it fails closed).
 /// </summary>
 public class FileMutationGuardTests
 {
@@ -34,13 +42,27 @@ public class FileMutationGuardTests
     private const string Nested = @"\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)"; // (...) with up to two levels of inner parens
 
     private static readonly Regex StaticCall = new(
-        @"\b(File|Directory)\s*\.\s*(Move|Delete|Copy|CreateDirectory|SetAttributes|Replace|WriteAllText|WriteAllBytes|WriteAllLines|AppendAllText)(Async)?\s*\(",
+        @"\b(File|Directory)\s*\.\s*(Move|Delete|Copy|CreateDirectory|SetAttributes|Replace|WriteAllText|WriteAllBytes|WriteAllLines|AppendAllText|AppendAllLines|AppendAllBytes|AppendText|CreateText|Create|OpenWrite|CreateSymbolicLink)(Async)?\s*\(",
         RegexOptions.Compiled);
     private static readonly Regex MoveToCall = new(@"\.\s*MoveTo\s*\(", RegexOptions.Compiled);
     // new FileInfo(...).MoveTo(...) is already counted by MoveToCall, so it is not repeated here.
     private static readonly Regex NewInfoCall = new(
         @"new\s+(FileInfo|DirectoryInfo)\s*" + Nested + @"\s*\.\s*(Delete|CopyTo)\b", RegexOptions.Compiled);
+    private static readonly Regex OpenCall = new(
+        @"(\bFile\s*\.\s*Open|\bnew\s+FileStream)\s*" + Nested, RegexOptions.Compiled);
+    private static readonly Regex WriteIntent = new(
+        @"FileMode\s*\.\s*(Create|CreateNew|Append|OpenOrCreate|Truncate)\b|FileAccess\s*\.\s*(Write|ReadWrite)\b", RegexOptions.Compiled);
+
     private static readonly Regex PrimitiveCall = new(@"\b(SafeMove|SafeDelete)\s*\.", RegexOptions.Compiled);
+    private static readonly Regex StaticUsing = new(
+        @"\busing\s+static\s+(?:[\w.]*\.)?(?:File|Directory|FileInfo|DirectoryInfo|SafeMove|SafeDelete)\s*;", RegexOptions.Compiled);
+    // An alias that keeps the name (using File = System.IO.File;, needed to beat WPF's ambiguity) hides nothing.
+    private static readonly Regex AliasUsing = new(
+        @"\busing\s+(\w+)\s*=\s*(?:[\w.]*\.)?(File|Directory|FileInfo|DirectoryInfo|SafeMove|SafeDelete)\s*;", RegexOptions.Compiled);
+    // Attribute order does not matter to MSBuild, so look ahead for both parts inside one <Using .../> element.
+    private static readonly Regex HidingProjectUsing = new(
+        @"<Using\b(?=[^>]*\bInclude\s*=\s*""[^""]*\b(?:File|Directory|FileInfo|DirectoryInfo|SafeMove|SafeDelete)"")(?=[^>]*\b(?:Static|Alias)\s*=)[^>]*>",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // String and char literals are matched first so "//" inside them is not taken for a comment.
     private static readonly Regex CommentOrLiteral = new(
@@ -53,45 +75,71 @@ public class FileMutationGuardTests
     internal static int CountMutations(string code)
     {
         string c = StripComments(code);
-        return StaticCall.Matches(c).Count + MoveToCall.Matches(c).Count + NewInfoCall.Matches(c).Count;
+        int opens = OpenCall.Matches(c).Count(m => WriteIntent.IsMatch(m.Value));
+        return StaticCall.Matches(c).Count + MoveToCall.Matches(c).Count + NewInfoCall.Matches(c).Count + opens;
     }
 
     internal static int CountPrimitiveReferences(string code) => PrimitiveCall.Matches(StripComments(code)).Count;
 
+    internal static int CountHidingUsings(string code)
+    {
+        string c = StripComments(code);
+        return StaticUsing.Matches(c).Count + AliasUsing.Matches(c).Count(m => m.Groups[1].Value != m.Groups[2].Value);
+    }
+
     // ---- the guard -------------------------------------------------------------------------
 
     [Fact]
-    public void Raw_file_mutations_outside_the_gateway_do_not_exceed_the_allowlist()
+    public void Raw_file_mutations_outside_the_gateway_match_the_allowlist_exactly()
     {
         var allowed = LoadAllowlist().RawMutations.ToDictionary(e => e.Key, e => e.Value.Count);
-        var over = new List<string>();
-        foreach (var (path, code) in SourceFiles().Where(f => !IsGateway(f.Path)))
+        var problems = new List<string>();
+        foreach (var path in allowed.Keys.Union(SourceFiles().Select(f => f.Path)).Where(p => !IsGateway(p)))
         {
-            int count = CountMutations(code);
+            int count = SourceFiles().Where(f => f.Path == path).Select(f => CountMutations(f.Code)).FirstOrDefault();
             allowed.TryGetValue(path, out int limit);
             if (count > limit)
-                over.Add($"{path}: {count} raw file mutation(s), allowed {limit}");
+                problems.Add($"{path}: {count} raw file mutation(s), allowed {limit}: route the new call through FileOperationBroker");
+            else if (count < limit)
+                problems.Add($"{path}: {count} raw file mutation(s), allowlist says {limit}: lower the entry (the list only shrinks)");
         }
-        Assert.True(over.Count == 0,
-            "Raw File/Directory mutations outside the gateway. Route them through FileOperationBroker " +
-            "(Racks/Infrastructure/FileSystem) or, for a genuine exception, raise the number in " +
-            "Guards/fs-allowlist.json with a justification:\n" + string.Join("\n", over));
+        Assert.True(problems.Count == 0,
+            "Raw File/Directory mutations outside the gateway (Racks/Infrastructure/FileSystem) must equal " +
+            "Guards/fs-allowlist.json:\n" + string.Join("\n", problems));
     }
 
     [Fact]
     public void Nothing_outside_the_gateway_references_the_SafeMove_and_SafeDelete_primitives()
     {
         var allowed = LoadAllowlist().PrimitiveReferences.ToDictionary(e => e.Key, e => e.Value.Count);
-        var over = new List<string>();
+        var problems = new List<string>();
         foreach (var (path, code) in SourceFiles().Where(f => !IsGateway(f.Path)))
         {
             int count = CountPrimitiveReferences(code);
             allowed.TryGetValue(path, out int limit);
-            if (count > limit)
-                over.Add($"{path}: {count} reference(s), allowed {limit}");
+            if (count != limit) problems.Add($"{path}: {count} reference(s), allowlist says {limit}");
         }
-        Assert.True(over.Count == 0,
-            "SafeMove/SafeDelete are internal primitives of FileOperationBroker. Call the broker instead:\n" + string.Join("\n", over));
+        foreach (var stale in allowed.Keys.Where(k => SourceFiles().All(f => f.Path != k)))
+            problems.Add($"{stale}: listed but not found");
+        Assert.True(problems.Count == 0,
+            "SafeMove/SafeDelete are internal primitives of FileOperationBroker. Call the broker instead:\n" + string.Join("\n", problems));
+    }
+
+    [Fact]
+    public void No_using_static_or_alias_hides_File_Directory_SafeMove_or_SafeDelete()
+    {
+        var offenders = SourceFiles().Where(f => CountHidingUsings(f.Code) > 0).Select(f => f.Path).ToList();
+        foreach (var proj in Directory.EnumerateFiles(Root, "*.csproj", SearchOption.AllDirectories)
+                     .Concat(Directory.EnumerateFiles(Root, "Directory.Build.*", SearchOption.AllDirectories))
+                     .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                              && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
+                              && !f.Contains($"{Path.DirectorySeparatorChar}test{Path.DirectorySeparatorChar}")
+                              && !f.Contains($"{Path.DirectorySeparatorChar}tools{Path.DirectorySeparatorChar}")))
+            if (HidingProjectUsing.IsMatch(File.ReadAllText(proj)))
+                offenders.Add(Path.GetRelativePath(Root, proj).Replace('\\', '/'));
+        Assert.True(offenders.Count == 0,
+            "These files import File/Directory/SafeMove/SafeDelete statically or under an alias, which hides raw calls from the guard:\n" +
+            string.Join("\n", offenders));
     }
 
     [Fact]
@@ -120,6 +168,14 @@ public class FileMutationGuardTests
     [InlineData("File . Copy (a, b, true)", 1)]
     [InlineData("await File.WriteAllTextAsync(p, text);", 1)]
     [InlineData("File.AppendAllText(p, \"x\"); File.SetAttributes(p, A);", 2)]
+    [InlineData("File.AppendAllLines(p, l); File.AppendAllBytes(p, b); File.AppendText(p);", 3)]
+    [InlineData("File.Create(p); File.CreateText(p); File.OpenWrite(p);", 3)]
+    [InlineData("File.CreateSymbolicLink(link, target); Directory.CreateSymbolicLink(l, t);", 2)]
+    [InlineData("File.Open(p, FileMode.Create)", 1)]                       // write intent
+    [InlineData("File.Open(p, FileMode.Open, FileAccess.ReadWrite)", 1)]
+    [InlineData("new FileStream(Path.Combine(a, b), FileMode.CreateNew, FileAccess.Write)", 1)]
+    [InlineData("new FileStream(p, FileMode.Open, FileAccess.Read)", 0)]  // read only
+    [InlineData("File.Open(p, FileMode.Open)", 0)]
     [InlineData("info.MoveTo(dest);", 1)]
     [InlineData("new FileInfo(Path.Combine(a, b)).Delete();", 1)]
     [InlineData("new DirectoryInfo(path).MoveTo(dest);", 1)]
@@ -141,12 +197,42 @@ public class FileMutationGuardTests
     public void The_primitive_scanner_counts_what_it_claims_to(string code, int expected)
         => Assert.Equal(expected, CountPrimitiveReferences(code));
 
+    [Theory]
+    [InlineData("using static System.IO.File;", 1)]
+    [InlineData("using static System.IO.Directory;", 1)]
+    [InlineData("global using static System.IO.File;", 1)]
+    [InlineData("using F = System.IO.File;", 1)]
+    [InlineData("using D = Directory;", 1)]
+    [InlineData("using static Racks.Util.SafeMove;", 1)]
+    [InlineData("using M = Racks.Util.SafeDelete;", 1)]
+    [InlineData("using static Racks.Util.Interop;", 0)]
+    [InlineData("using System.IO;", 0)]
+    [InlineData("using Path = System.IO.Path;", 0)]
+    [InlineData("using File = System.IO.File;", 0)]                          // keeps the name: File.Delete( is still seen
+    [InlineData("// using static System.IO.File;", 0)]
+    public void The_using_scanner_counts_what_it_claims_to(string code, int expected)
+        => Assert.Equal(expected, CountHidingUsings(code));
+
+    [Theory]
+    [InlineData("<Using Include=\"System.IO.File\" Static=\"True\" />", true)]
+    [InlineData("<Using Static=\"true\" Include=\"System.IO.Directory\" />", true)]
+    [InlineData("<Using Include=\"System.IO.File\" Alias=\"F\" />", true)]
+    [InlineData("<Using Alias=\"F\" Include=\"System.IO.File\" />", true)]
+    [InlineData("<Using Include=\"System.Linq\" />", false)]
+    [InlineData("<InternalsVisibleTo Include=\"Racks.Tests\" />", false)]
+    public void The_project_using_scanner_counts_what_it_claims_to(string xml, bool expected)
+        => Assert.Equal(expected, HidingProjectUsing.IsMatch(xml));
+
     // ---- helpers ---------------------------------------------------------------------------
 
     private static bool IsGateway(string relPath) =>
         GatewayFiles.Contains(relPath) || GatewayFolders.Any(f => relPath.StartsWith(f, StringComparison.Ordinal));
 
-    private static IEnumerable<(string Path, string Code)> SourceFiles()
+    private static List<(string Path, string Code)>? _sources;
+
+    private static List<(string Path, string Code)> SourceFiles() => _sources ??= ReadSources().ToList();
+
+    private static IEnumerable<(string Path, string Code)> ReadSources()
     {
         string app = Path.Combine(Root, "Racks");
         foreach (var file in Directory.EnumerateFiles(app, "*.cs", SearchOption.AllDirectories))

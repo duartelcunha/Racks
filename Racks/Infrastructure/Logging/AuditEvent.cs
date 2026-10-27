@@ -2,7 +2,8 @@ namespace Racks.Infrastructure.Logging;
 
 /// <summary>
 /// One line of the audit log: a destructive file operation and how it ended. Strings, not the broker's
-/// enums, so Logging does not depend on FileSystem. No user name or machine name is recorded.
+/// enums, so Logging does not depend on FileSystem. There are no user-name or machine-name fields; the
+/// paths and names themselves are recorded as they are (see <see cref="FileAuditSink"/>).
 /// </summary>
 /// <param name="OperationId">Same id as the <c>FileOperationResult</c>.</param>
 /// <param name="Kind">Move, Rename, DeleteToRecycleBin, DeleteTree or CreateDirectory.</param>

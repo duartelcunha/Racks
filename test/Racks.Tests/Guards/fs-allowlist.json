@@ -11,7 +11,7 @@
     "Racks/Util/RackMirror.cs": { "count": 4, "why": "Maintains the junction mirror folder under AppData (create root, remove stale reparse points only, non-recursive). The app's own folder, not user data. P2 reviews it." },
     "Racks/Util/ShortcutFactory.cs": { "count": 1, "why": "Copies a dropped .url shortcut file into the rack under a unique name (File.Copy never overwrites). P2 moves it to the broker." },
     "Racks/Util/UninstallCleanup.cs": { "count": 15, "why": "Rename-only return of user files on uninstall plus cleanup of the app's own folders (INV-UNINSTALL-1). Runs in a separate process; P2 moves the moves to MoveSameVolume and shrinks this." },
-    "Racks/Util/Updater.cs": { "count": 2, "why": "Deletes the files and folder of its own per-run temp directory (Racks-update-<guid>). Not user data; P10 reworks the updater." }
+    "Racks/Util/Updater.cs": { "count": 3, "why": "Creates the private installer file and deletes the files and folder of its own per-run temp directory (Racks-update-<guid>). Not user data; P10 reworks the updater." }
   },
   "primitiveReferences": {}
 }

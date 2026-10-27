@@ -7,8 +7,9 @@ namespace Racks.Infrastructure.Logging;
 /// <summary>
 /// Appends one JSON line per event to <c>%AppData%\Racks\audit.log</c>. Rotation (audit.log.1 once the
 /// size cap is reached) is <see cref="CrashLog.Append"/>'s. Local only: nothing here is ever uploaded.
-/// Paths under the user profile are written as <c>%USERPROFILE%\...</c> so the log can be pasted in a bug
-/// report without the account name. Never throws.
+/// Privacy, honestly: only the exact user-profile prefix is replaced with <c>%USERPROFILE%</c>. File and
+/// folder names and all other paths ARE logged, so read the log before sharing it. Writes are synchronous
+/// (a short append under a lock). Never throws.
 /// </summary>
 public sealed class FileAuditSink : IAuditSink
 {

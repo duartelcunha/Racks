@@ -49,7 +49,25 @@ which tests were added.
   spots are listed in the test's header comment.
 - Not done on purpose: shell notifications stay where they were (P3); the 12 files still in the allowlist are P2.
 - Known gap (unchanged from `SafeMove`): protection is by equality with a protected folder, so a path that
-  *contains* a protected folder (for example `C:\Users`) is not refused by `DeleteTree`/`Move`.
+  *contains* a protected folder (for example `C:\Users`) is not refused by `DeleteTree`/`Move`. Admin shares
+  (`\\host\C$\...`) are refused by `PathPolicy` because over SMB the canonical form is the UNC one.
+- Audit log privacy: only the exact user-profile prefix becomes `%USERPROFILE%`; file names and other paths are
+  logged. The log is local only and is written synchronously.
+- Review fixes (second commit): rename acts on the link itself (no volume check, protected check on the item,
+  not its target), case-only rename is one direct move with a temp-name fallback that keeps the extension,
+  `DeleteToRecycleBin` fails closed on UNC / non-fixed drives (residual risk documented in INV-FS-1), only
+  0x00-0x1F are control characters, the guard requires exact counts and also looks at `File.Create`,
+  `AppendAll*`, write-intent `FileStream`/`File.Open` and `using static`/alias imports.
+
+### Follow-ups recorded by the P1 review (not implemented)
+
+- **P2:** `Move`/`DeleteTree`/`DeleteToRecycleBin` must also refuse a source that is an ANCESTOR of any protected
+  folder (for example `%USERPROFILE%\AppData`, or the OneDrive root when Desktop/Documents are redirected), by
+  canonical prefix with a trailing backslash.
+- **P11 or later:** `SafeMove.CopyThenDelete` cleanup after a failed copy should delete only what this call
+  created (CreateNew / a did-not-exist flag), because of a TOCTOU window; the audit sink does synchronous I/O on
+  the calling (often UI) thread, so consider a background queue; `MoveChecked` runs `SafeMove.Check` twice (once
+  directly, once inside `TryMove`); reason texts are English only.
 
 Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (done).
 

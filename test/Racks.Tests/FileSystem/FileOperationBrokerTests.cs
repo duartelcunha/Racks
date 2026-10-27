@@ -173,16 +173,244 @@ public sealed class FileOperationBrokerTests : IDisposable
         AssertOneRecord(r, FileOperationKind.Rename, OperationStatus.Rejected, "inline rename");
     }
 
+    // A Ctrl+dropped reference is a junction inside a rack. Renaming it renames the LINK: it must work whatever
+    // the link points at (a protected folder, another volume) and never touch the target.
     [Fact]
-    public void Rename_of_a_protected_path_is_rejected()
+    public void Rename_of_a_junction_that_points_at_a_protected_folder_renames_the_link_only()
     {
-        string link = JunctionToDesktop();                                   // canonicalizes to the Desktop
+        string link = JunctionToDesktop();                                   // would canonicalize to the Desktop
+        string before = string.Join("|", Directory.EnumerateFileSystemEntries(Desktop).Order());
 
-        var r = _broker.Rename(link, "Renamed", "test protected");
+        var r = _broker.Rename(link, "Desktop shortcut", "test link rename");
 
-        Assert.Equal(OperationStatus.Rejected, r.Status);
-        Assert.True(Directory.Exists(link));
-        Assert.False(Directory.Exists(P("Renamed")));
+        Assert.True(r.Succeeded, r.Reason);
+        Assert.False(Directory.Exists(link));
+        Assert.True(JunctionHelper.IsReparsePoint(P("Desktop shortcut")));
+        _links.Add(P("Desktop shortcut"));                                   // so Dispose unlinks it under its new name
+        Assert.True(Directory.Exists(Desktop));
+        Assert.Equal(before, string.Join("|", Directory.EnumerateFileSystemEntries(Desktop).Order()));
+    }
+
+    [Fact]
+    public void Rename_of_a_junction_to_Documents_works()
+    {
+        string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        Assert.True(Directory.Exists(docs), "test setup: no Documents folder");
+        string link = Link(docs, P("docs-link"));
+
+        var r = _broker.Rename(link, "My documents", "test link rename");
+
+        Assert.True(r.Succeeded, r.Reason);
+        _links.Add(P("My documents"));
+        Assert.True(Directory.Exists(docs));
+    }
+
+    [Fact]
+    public void Rename_of_a_junction_whose_target_is_on_another_volume_is_not_a_volume_error()
+    {
+        string? tempRoot = Path.GetPathRoot(_root);
+        var other = DriveInfo.GetDrives().FirstOrDefault(d =>
+            d.DriveType == DriveType.Fixed && d.IsReady && !string.Equals(d.Name, tempRoot, StringComparison.OrdinalIgnoreCase));
+        if (other == null) return;                                           // single-volume machine: the Documents test above covers the link logic
+
+        string link = Link(other.RootDirectory.FullName, P("other-volume"));
+        var r = _broker.Rename(link, "Elsewhere", "test cross-volume link");
+
+        Assert.True(r.Succeeded, r.Reason);
+        _links.Add(P("Elsewhere"));
+        Assert.True(Directory.Exists(other.RootDirectory.FullName));
+    }
+
+    [Fact]
+    public void Rename_of_the_real_protected_folder_is_still_rejected()
+    {
+        // SendTo is on SafeMove's protected list and, unlike the Desktop, harmless if a regression ever renamed it;
+        // the finally block puts it back anyway.
+        string sendTo = Environment.GetFolderPath(Environment.SpecialFolder.SendTo);
+        Assert.True(SafeMove.IsProtectedLink(sendTo, out _));
+        if (!Directory.Exists(sendTo)) return;
+        string renamedTo = Path.Combine(Path.GetDirectoryName(sendTo)!, "SendTo-renamed-by-test");
+        try
+        {
+            var r = _broker.Rename(sendTo, "SendTo-renamed-by-test", "test protected");
+
+            Assert.Equal(OperationStatus.Rejected, r.Status);
+            Assert.True(Directory.Exists(sendTo));
+            Assert.False(Directory.Exists(renamedTo));
+        }
+        finally
+        {
+            if (Directory.Exists(renamedTo) && !Directory.Exists(sendTo)) Directory.Move(renamedTo, sendTo);
+        }
+    }
+
+    [Fact]
+    public void Protected_link_check_looks_at_the_item_itself()
+    {
+        string link = JunctionToDesktop();
+        Assert.True(SafeMove.IsProtectedPath(link, out _));                  // follows the junction: the Desktop
+        Assert.False(SafeMove.IsProtectedLink(link, out _));                 // the link itself is just a link
+        Assert.True(SafeMove.IsProtectedLink(Desktop, out _));
+        Assert.True(SafeMove.IsProtectedLink(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), out _));
+    }
+
+    // ---- case-only rename ------------------------------------------------------------------
+
+    [Fact]
+    public void NTFS_renames_a_case_only_change_directly_for_files_and_folders()
+    {
+        string f = File_("lower.txt");
+        Directory.CreateDirectory(P("lowerdir"));
+
+        File.Move(f, P("Lower.txt"));
+        Directory.Move(P("lowerdir"), P("Lowerdir"));
+
+        var names = Directory.EnumerateFileSystemEntries(_root).Select(Path.GetFileName).ToList();
+        Assert.Contains("Lower.txt", names);
+        Assert.Contains("Lowerdir", names);
+    }
+
+    [Fact]
+    public void A_case_only_rename_is_one_direct_move_not_two()
+    {
+        string f = File_("photo.jpg");
+        Directory.CreateDirectory(P("docs"));
+        var steps = new List<(string From, string To)>();
+        _broker.RenameStepHook = (src, dst) => steps.Add((src, dst));
+
+        var rf = _broker.Rename(f, "Photo.jpg", "case file");
+        var rd = _broker.Rename(P("docs"), "Docs", "case folder");
+
+        Assert.True(rf.Succeeded, rf.Reason);
+        Assert.True(rd.Succeeded, rd.Reason);
+        Assert.Equal(2, steps.Count);
+        Assert.DoesNotContain(steps, s => s.To.Contains(".racks-rename-"));
+    }
+
+    [Fact]
+    public void A_case_only_rename_falls_back_to_a_temporary_name_that_keeps_the_extension_and_still_succeeds()
+    {
+        string f = File_("photo.jpg");
+        var steps = new List<(string From, string To)>();
+        _broker.RenameStepHook = (src, dst) =>
+        {
+            steps.Add((src, dst));
+            if (steps.Count == 1) throw new IOException("direct case rename refused (simulated)");
+        };
+
+        var r = _broker.Rename(f, "Photo.jpg", "case fallback");
+
+        Assert.True(r.Succeeded, r.Reason);
+        Assert.Equal(3, steps.Count);
+        Assert.EndsWith(".jpg", steps[1].To);                                // the temp name keeps the extension
+        Assert.StartsWith(".racks-rename-", Path.GetFileName(steps[1].To));
+        Assert.Contains("Photo.jpg", Directory.EnumerateFileSystemEntries(_root).Select(Path.GetFileName));
+        Assert.Equal("data", File.ReadAllText(P("Photo.jpg")));
+    }
+
+    [Fact]
+    public void A_failed_second_step_restores_the_original_name_and_says_so()
+    {
+        string f = File_("photo.jpg", "precious");
+        _broker.RenameStepHook = (src, dst) =>
+        {
+            bool direct = src == f;
+            bool secondStep = Path.GetFileName(src).StartsWith(".racks-rename-") && dst == P("Photo.jpg");
+            if (direct && dst == P("Photo.jpg")) throw new IOException("direct refused (simulated)");
+            if (secondStep) throw new IOException("sharing violation (simulated)");
+        };
+
+        var r = _broker.Rename(f, "Photo.jpg", "case fallback fails");
+
+        Assert.Equal(OperationStatus.Failed, r.Status);
+        Assert.Contains("sharing violation", r.Reason);
+        Assert.Contains("restored", r.Reason);
+        Assert.Equal("precious", File.ReadAllText(f));
+        Assert.Equal(new[] { "photo.jpg" }, Directory.EnumerateFileSystemEntries(_root).Select(Path.GetFileName).ToArray());
+    }
+
+    [Fact]
+    public void When_the_restore_fails_too_the_item_is_kept_under_a_temp_name_with_its_extension_and_the_reason_names_it()
+    {
+        string f = File_("photo.jpg", "precious");
+        _broker.RenameStepHook = (src, dst) =>
+        {
+            if (src == f && dst == P("Photo.jpg")) throw new IOException("direct refused (simulated)");
+            if (Path.GetFileName(src).StartsWith(".racks-rename-")) throw new IOException("locked (simulated)");
+        };
+
+        var r = _broker.Rename(f, "Photo.jpg", "case fallback and restore fail");
+
+        Assert.Equal(OperationStatus.Failed, r.Status);
+        string temp = Assert.Single(Directory.EnumerateFileSystemEntries(_root));
+        Assert.EndsWith(".jpg", temp);
+        Assert.StartsWith(".racks-rename-", Path.GetFileName(temp));
+        Assert.Equal("precious", File.ReadAllText(temp));                    // not lost
+        Assert.Contains(Path.GetFileName(temp), r.Reason);                   // and the user is told where it is
+        Assert.Equal(temp, r.Destination);
+    }
+
+    [Fact]
+    public void A_locked_file_makes_a_case_only_rename_fail_honestly_without_losing_it()
+    {
+        string f = File_("locked.txt", "keep");
+        using var hold = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var r = _broker.Rename(f, "Locked.txt", "case locked");
+
+        Assert.Equal(OperationStatus.Failed, r.Status);
+        Assert.NotEmpty(r.Reason);
+        Assert.Equal(new[] { "locked.txt" }, Directory.EnumerateFileSystemEntries(_root).Select(Path.GetFileName).ToArray());
+    }
+
+    // ---- PartiallyCompleted mapping --------------------------------------------------------
+
+    [Fact]
+    public void A_move_that_leaves_the_original_behind_is_PartiallyCompleted_with_the_reason()
+    {
+        string src = File_("src.txt"), dest = File_("dest.txt");
+        var ctx = OperationContext.Create("test partial");
+
+        var partial = FileOperationBroker.ConfirmMoved(ctx, src, dest, "Copied \"src.txt\" but couldn't fully delete the original.");
+        var partialNoText = FileOperationBroker.ConfirmMoved(ctx, src, dest, "");
+        var clean = FileOperationBroker.ConfirmMoved(ctx, P("gone.txt"), dest, "");
+        var lost = FileOperationBroker.ConfirmMoved(ctx, P("gone.txt"), P("never-arrived.txt"), "");
+
+        Assert.Equal(OperationStatus.PartiallyCompleted, partial.Status);
+        Assert.Contains("couldn't fully delete", partial.Reason);
+        Assert.True(partial.Completed);
+        Assert.False(partial.Succeeded);
+        Assert.Equal(OperationStatus.PartiallyCompleted, partialNoText.Status);
+        Assert.NotEmpty(partialNoText.Reason);
+        Assert.Equal(OperationStatus.Succeeded, clean.Status);
+        Assert.Equal(OperationStatus.Failed, lost.Status);
+        Assert.False(lost.Completed);
+    }
+
+    // ---- Recycle Bin fails closed ----------------------------------------------------------
+
+    [Theory]
+    [InlineData("C:\\Users\\me\\a.txt", DriveType.Fixed, true)]
+    [InlineData("D:\\data\\a.txt", DriveType.Removable, false)]
+    [InlineData("E:\\a.txt", DriveType.Network, false)]
+    [InlineData("F:\\a.txt", DriveType.CDRom, false)]
+    [InlineData("G:\\a.txt", DriveType.Unknown, false)]
+    [InlineData("\\\\server\\share\\a.txt", DriveType.Fixed, false)]          // UNC is never recycled
+    [InlineData("\\\\server\\share\\a.txt", DriveType.Network, false)]
+    [InlineData("", DriveType.Fixed, false)]
+    public void Only_fixed_local_locations_count_as_recyclable(string path, DriveType type, bool expected)
+        => Assert.Equal(expected, SafeDelete.IsRecyclableLocation(path, type));
+
+    [Fact]
+    public void An_unknown_drive_type_is_not_recyclable()
+        => Assert.False(SafeDelete.IsRecyclableLocation("C:\\a.txt", null));
+
+    [Fact]
+    public void A_file_in_the_temp_folder_is_on_a_recyclable_location_or_the_machine_has_no_fixed_temp_drive()
+    {
+        string f = File_("probe.txt");
+        bool fixedDrive = new DriveInfo(Path.GetPathRoot(f)!).DriveType == DriveType.Fixed;
+        Assert.Equal(fixedDrive, SafeDelete.CanRecycle(f));
     }
 
     [Fact]

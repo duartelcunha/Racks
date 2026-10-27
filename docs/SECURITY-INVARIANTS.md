@@ -133,17 +133,28 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   Reciclagem, criar pasta) passa por `Infrastructure/FileSystem/FileOperationBroker`: valida nomes e
   paths (`PathPolicy`), verifica pastas protegidas e aliases (via `SafeMove`/`SafeDelete`, que são
   `internal` e só o broker chama), confirma o resultado no disco e escreve um registo por chamada em
-  `%AppData%\Racks\audit.log` (JSON, rodado, só local, perfil escrito como `%USERPROFILE%`, sem nome de
-  utilizador nem da máquina). Falhas esperadas são um estado (`Rejected`/`Skipped`/`Failed`), nunca uma
-  exceção. *(teste: `FileMutationGuardTests` falha se um ficheiro fora do gateway tiver mais chamadas
+  `%AppData%\Racks\audit.log` (JSON, rodado, só local, escrita síncrona). Privacidade, sem exagero: só o
+  prefixo exato da pasta do perfil é trocado por `%USERPROFILE%`; nomes de ficheiros e os restantes
+  caminhos ficam no registo (não há campos de utilizador/máquina), por isso ler antes de partilhar.
+  Falhas esperadas são um estado (`Rejected`/`Skipped`/`Failed`), nunca uma exceção. *(teste: `FileMutationGuardTests` falha se um ficheiro fora do gateway tiver mais chamadas
   `File.`/`Directory.` Move/Delete/Copy/CreateDirectory/SetAttributes/Replace/Write*/AppendAllText ou
   `.MoveTo(` do que `Guards/fs-allowlist.json` permite, e se algo fora do gateway referir
   `SafeMove.`/`SafeDelete.`; `FileOperationBrokerTests`, `FileAuditSinkTests`)* Parcial: a allowlist
-  ainda tem 12 ficheiros (44 chamadas) por migrar na P2; só pode descer. Limites conhecidos do guard (não
+  ainda tem 12 ficheiros (45 chamadas) por migrar na P2; só pode descer. Limites conhecidos do guard (não
   vê chamadas por variável como `info.Delete()`, `File.Create`/`FileStream`, chamadas Win32/shell,
   `Process.Start`, nem código em `tools/`) estão no cabeçalho do teste; o guard impede o desvio fácil,
-  não substitui a revisão. Limite herdado do `SafeMove`: a proteção é por igualdade com a pasta
-  protegida, por isso um caminho que *contém* uma pasta protegida (por exemplo `C:\Users`) não é recusado.
+  não substitui a revisão. O guard exige contagem *igual* à da allowlist (a mais ou a menos falha).
+  Limites herdados do `SafeMove`: (1) a proteção é por igualdade com a pasta protegida, por isso um
+  caminho que *contém* uma pasta protegida (por exemplo `C:\Users`) não é recusado (P2); (2) sobre SMB o
+  `GetFinalPathNameByHandle` devolve a forma UNC, por isso `\\localhost\C$\Users\eu\Desktop` NÃO é
+  reconhecido como o Desktop; o `PathPolicy` recusa por isso partilhas administrativas (`X$`, `ADMIN$`),
+  com o custo de uma rack não poder mover ficheiros para uma partilha administrativa de outra máquina.
+  Reciclagem: `DeleteToRecycleBin` falha fechado (não apaga nada) em caminhos UNC ou fora de discos fixos,
+  porque o `SHFileOperation` com `FOF_ALLOWUNDO|FOF_NOCONFIRMATION|FOF_SILENT` apagaria definitivamente e em
+  silêncio. Risco residual que não se consegue saber de antemão: num disco fixo com a Reciclagem desligada
+  ou pequena demais para o item, o Windows apaga mesmo definitivamente e o resultado é `Succeeded`; por
+  isso só se usa depois de a cópia estar confirmada (drag-out). Renomear um link (junção/symlink) renomeia
+  o link, não segue o alvo (a pasta protegida real continua recusada).
 - **INV-FS-2** Um nome escrito pelo utilizador (renomear, nome de pasta do Magic Organize) é um *leaf
   name*: `PathPolicy.ValidateLeafName` recusa vazio, `\` `/`, `..`, `:` (drive e data streams), caracteres
   inválidos e de controlo, ponto ou espaço no fim, mais de 255 caracteres e nomes de dispositivo

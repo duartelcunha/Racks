@@ -127,7 +127,7 @@ public sealed class FileOperationBroker
         };
     }
 
-    private static FileOperationResult ConfirmMoved(OperationContext ctx, string src, string dest, string moveReason)
+    internal static FileOperationResult ConfirmMoved(OperationContext ctx, string src, string dest, string moveReason)
     {
         if (!Exists(dest))
             return Make(ctx, OperationStatus.Failed, "The move finished but the destination can't be found.", src, dest);
@@ -148,7 +148,10 @@ public sealed class FileOperationBroker
 
     // ---- Rename ----------------------------------------------------------------------------
 
-    private static FileOperationResult DoRename(OperationContext ctx, FileOperationIntent i)
+    /// <summary>Test seam: called with (source, destination) before every low-level rename step; may throw to simulate a failure.</summary>
+    internal Action<string, string>? RenameStepHook { get; set; }
+
+    private FileOperationResult DoRename(OperationContext ctx, FileOperationIntent i)
     {
         string existing = i.Source, leaf = i.Destination ?? "";
 
@@ -170,44 +173,78 @@ public sealed class FileOperationBroker
 
         if (!Exists(current))
             return Make(ctx, OperationStatus.Rejected, $"\"{Path.GetFileName(current)}\" no longer exists.", existing, target);
-        if (SafeMove.IsProtectedPath(current, out string kind))
+
+        // A rename touches only the item itself and keeps it in its own folder, so it needs no volume check, and the
+        // protected-folder check looks at the item itself, not at what a junction or symlink points to: a
+        // Ctrl+dropped reference to Documents or to a folder on another drive is a link inside a rack and renames
+        // fine, while the real Documents folder is still refused.
+        if (SafeMove.IsProtectedLink(current, out string kind))
             return Make(ctx, OperationStatus.Rejected, $"\"{Path.GetFileName(current)}\" is a {kind} — refusing to rename.", existing, target);
 
         if (string.Equals(current, target, StringComparison.Ordinal))
             return Make(ctx, OperationStatus.Skipped, "The item already has that name.", existing, target);
-        if (string.Equals(current, target, StringComparison.OrdinalIgnoreCase))
-            return RenameCaseOnly(ctx, existing, current, dir, leaf, target);
 
-        if (Exists(target))
+        bool caseOnly = string.Equals(current, target, StringComparison.OrdinalIgnoreCase);
+        if (!caseOnly && Exists(target))
             return Make(ctx, OperationStatus.Skipped, $"\"{leaf}\" already exists.", existing, target);
 
-        return MoveChecked(ctx, current, target, sameVolumeOnly: true);
+        string? failure = MoveItem(current, target);
+        if (failure != null && caseOnly)
+            return RenameViaTemporaryName(ctx, existing, current, dir, target, failure);
+        if (failure != null)
+            return Make(ctx, OperationStatus.Failed, $"Failed to rename \"{Path.GetFileName(current)}\": {failure}", existing, target);
+
+        return ConfirmRenamed(ctx, existing, dir, leaf, target, caseOnly);
     }
 
-    // "photo.jpg" -> "Photo.jpg": the destination "exists" (it is the same item), so a plain move is
-    // refused, and Directory.Move throws when the paths differ only by case. Go through a temporary
-    // name in the same folder; if the second step fails, put the first one back.
-    private static FileOperationResult RenameCaseOnly(OperationContext ctx, string existing, string current, string dir, string leaf, string target)
+    // One rename step: File.Move / Directory.Move on the item itself (a junction or symlink is renamed as
+    // the link). NTFS renames case-only changes directly. Returns null on success, else the reason.
+    private string? MoveItem(string from, string to)
     {
-        string temp = Path.Combine(dir, ".racks-rename-" + ctx.Id);
-
-        if (SafeMove.TryMove(current, temp, out string reason, allowCrossVolumeCopy: false) != SafeMove.Result.Moved)
-            return Make(ctx, OperationStatus.Failed, reason, existing, target);
-
-        if (SafeMove.TryMove(temp, target, out reason, allowCrossVolumeCopy: false) != SafeMove.Result.Moved)
+        try
         {
-            if (SafeMove.TryMove(temp, current, out _, allowCrossVolumeCopy: false) == SafeMove.Result.Moved)
-                return Make(ctx, OperationStatus.Failed, reason, existing, target);
+            RenameStepHook?.Invoke(from, to);
+            if (Directory.Exists(from)) Directory.Move(from, to);
+            else File.Move(from, to);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+
+    private static FileOperationResult ConfirmRenamed(OperationContext ctx, string existing, string dir, string leaf, string target, bool caseOnly)
+    {
+        // Exists() is case-insensitive; for a case change ask the folder for the spelling it stores.
+        bool ok = Exists(target) && (!caseOnly ||
+            Directory.EnumerateFileSystemEntries(dir, leaf).Any(e => string.Equals(Path.GetFileName(e), leaf, StringComparison.Ordinal)));
+        if (ok && (caseOnly || !Exists(existing))) return Make(ctx, OperationStatus.Succeeded, "", existing, target);
+        return Make(ctx, OperationStatus.Failed, "The rename could not be confirmed.", existing, target);
+    }
+
+    // Fallback for a case-only rename the direct move refused: two moves through a temporary name in the same
+    // folder. The temporary name keeps the item's extension (so it stays recognisable to the shell and to a
+    // rack that scans the folder in between). If the second step fails, put the first one back.
+    private FileOperationResult RenameViaTemporaryName(OperationContext ctx, string existing, string current, string dir, string target, string directFailure)
+    {
+        string leaf = Path.GetFileName(target);
+        string temp = Path.Combine(dir, ".racks-rename-" + ctx.Id + (Directory.Exists(current) ? "" : Path.GetExtension(current)));
+
+        string? first = MoveItem(current, temp);
+        if (first != null)
+            return Make(ctx, OperationStatus.Failed, $"Failed to rename \"{Path.GetFileName(current)}\": {first}", existing, target);
+
+        string? second = MoveItem(temp, target);
+        if (second != null)
+        {
+            if (MoveItem(temp, current) == null)
+                return Make(ctx, OperationStatus.Failed, $"Failed to rename \"{Path.GetFileName(current)}\" to \"{leaf}\": {second} The original name was restored.", existing, target);
             return Make(ctx, OperationStatus.Failed,
-                $"{reason} The item was left under the temporary name \"{Path.GetFileName(temp)}\".", existing, temp);
+                $"Failed to rename to \"{leaf}\": {second} The item could not be put back and is now named \"{Path.GetFileName(temp)}\".", existing, temp);
         }
 
-        // Exists() is case-insensitive; ask the folder for the spelling it actually stores.
-        bool spelled = Directory.EnumerateFileSystemEntries(dir, leaf)
-            .Any(e => string.Equals(Path.GetFileName(e), leaf, StringComparison.Ordinal));
-        return spelled
-            ? Make(ctx, OperationStatus.Succeeded, "", existing, target)
-            : Make(ctx, OperationStatus.Failed, "The rename could not be confirmed.", existing, target);
+        return ConfirmRenamed(ctx, existing, dir, leaf, target, caseOnly: true);
     }
 
     // ---- Delete ----------------------------------------------------------------------------
@@ -217,6 +254,13 @@ public sealed class FileOperationBroker
         string path = i.Source;
         var rejected = CheckDeletable(ctx, path, requireDirectory: false);
         if (rejected != null) return rejected;
+
+        // Windows deletes PERMANENTLY and silently when it cannot recycle (network share, removable drive...).
+        // Where we can know that beforehand, refuse and leave the item alone. Residual risk (bin disabled or
+        // too small for the item) is documented on SafeDelete.ToRecycleBin and in INV-FS-1.
+        if (!SafeDelete.CanRecycle(path))
+            return Make(ctx, OperationStatus.Failed,
+                "This item is on a network or removable drive and can't be sent to the Recycle Bin safely, so it was left in place.", path, null);
 
         bool sent = SafeDelete.ToRecycleBin(path);
         if (!Exists(path)) return Make(ctx, OperationStatus.Succeeded, "", path, null);

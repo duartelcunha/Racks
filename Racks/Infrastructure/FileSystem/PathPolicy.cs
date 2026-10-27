@@ -18,7 +18,7 @@ public static class PathPolicy
     private static readonly HashSet<string> ReservedNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
-        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "COM\u00B9", "COM\u00B2", "COM\u00B3",
+        "COM0", "LPT0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "COM\u00B9", "COM\u00B2", "COM\u00B3",
         "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT\u00B9", "LPT\u00B2", "LPT\u00B3",
     };
 
@@ -31,8 +31,10 @@ public static class PathPolicy
         if (string.IsNullOrEmpty(name)) return (false, "The name is empty.");
         if (name.Length > MaxLeafLength) return (false, $"The name is longer than {MaxLeafLength} characters.");
 
+        // Only 0x00-0x1F are refused. U+007F-U+009F are legal NTFS name characters and really occur
+        // (mojibake from zip extracts), so char.IsControl would reject names that exist on disk.
         foreach (char c in name)
-            if (char.IsControl(c)) return (false, "The name contains a control character.");
+            if (c < 0x20) return (false, "The name contains a control character.");
 
         if (name.IndexOfAny([Backslash, '/']) >= 0)
             return (false, "A name can't contain a slash. It must be a name, not a path.");
@@ -68,7 +70,7 @@ public static class PathPolicy
         if (string.IsNullOrWhiteSpace(path)) return (false, "The path is empty.");
 
         foreach (char c in path)
-            if (char.IsControl(c)) return (false, "The path contains a control character.");
+            if (c < 0x20) return (false, "The path contains a control character.");
 
         string p = path.Replace('/', Backslash);
 
@@ -97,6 +99,10 @@ public static class PathPolicy
             if (p.Contains(':')) return (false, "The path contains \":\".");
             var parts = p[2..].Split(Backslash, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length < 2) return (false, "The network path needs a host and a share.");
+            // Admin shares (C$, ADMIN$) are refused: over SMB the protected-folder check sees the UNC form,
+            // so \\localhost\C$\Users\me\Desktop would not be recognised as the Desktop. Trade-off: a rack
+            // cannot move files into an admin share of another machine; ordinary shares work as before.
+            if (IsAdminShare(parts[1])) return (false, "Administrative shares (such as C$) are not allowed.");
             return (true, "");
         }
 
@@ -104,6 +110,9 @@ public static class PathPolicy
             return (false, "The path contains \":\" (data streams are not allowed).");
         return (false, "The path must be a full path (drive letter or network share).");
     }
+
+    private static bool IsAdminShare(string share) =>
+        share.EndsWith('$') && ((share.Length == 2 && char.IsAsciiLetter(share[0])) || share.Equals("ADMIN$", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Turns arbitrary text (a cluster name from Magic Organize) into a name that passes

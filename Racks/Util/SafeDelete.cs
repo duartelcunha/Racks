@@ -88,12 +88,40 @@ namespace Racks.Util
         private const ushort FOF_ALLOWUNDO = 0x0040;   // send to Recycle Bin instead of permanent delete
         private const ushort FOF_NOERRORUI = 0x0400;
 
+        // Where an item can be recycled for sure: a local fixed drive. SHFileOperation with
+        // FOF_ALLOWUNDO + FOF_NOCONFIRMATION + FOF_SILENT DELETES PERMANENTLY, without asking, when the
+        // item cannot go to the Recycle Bin (network share, removable drive, too big for the bin, bin
+        // disabled). Network and non-fixed locations are refused up front. Pure so it can be tested
+        // without such drives; driveType is null when it could not be determined (refused too).
+        internal static bool IsRecyclableLocation(string path, DriveType? driveType)
+            => !string.IsNullOrEmpty(path) && !path.StartsWith(@"\\", StringComparison.Ordinal) && driveType == DriveType.Fixed;
+
+        // Locates the item by its parent folder (a junction or symlink is recycled as the link, which
+        // lives next to it, not where it points).
+        internal static bool CanRecycle(string path)
+        {
+            try
+            {
+                string trimmed = Path.TrimEndingDirectorySeparator(path);
+                string location = SafeMove.Canonicalize(Path.GetDirectoryName(trimmed) ?? trimmed);
+                string? root = Path.GetPathRoot(location);
+                DriveType? type = string.IsNullOrEmpty(root) ? null : new DriveInfo(root).DriveType;
+                return IsRecyclableLocation(location, type);
+            }
+            catch { return false; }
+        }
+
         // Send a file or folder to the Recycle Bin (recoverable), silently. Used where the app
         // removes something the user could conceivably want back, so a mistake or a mid-operation
-        // race is never a permanent loss. Returns true on success.
+        // race is never a permanent loss. Returns true on success. Fails closed (returns false and
+        // deletes nothing) on a network or non-fixed location, see IsRecyclableLocation.
+        // RESIDUAL RISK, cannot be known beforehand: on a fixed drive whose Recycle Bin is disabled
+        // or too small for the item, Windows still deletes permanently and silently, and true is
+        // returned. Callers must only use this after the data is safe elsewhere (drag-out does).
         internal static bool ToRecycleBin(string path)
         {
             if (string.IsNullOrEmpty(path) || (!File.Exists(path) && !Directory.Exists(path))) return false;
+            if (!CanRecycle(path)) return false;
             try
             {
                 var op = new SHFILEOPSTRUCT

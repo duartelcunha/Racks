@@ -198,13 +198,32 @@ namespace Racks.Util
         }
 
         internal static bool IsProtectedPath(string path, out string kind)
+            => IsProtectedCanonical(Canonicalize(path), out kind);
+
+        // For operations that act on the item ITSELF and never on what it points to (renaming a
+        // junction or symlink): canonicalize the parent folder, keep the leaf as it is, and compare
+        // that. A Ctrl+dropped reference to Documents is a link inside a rack and is not Documents;
+        // the real Documents folder still matches.
+        internal static bool IsProtectedLink(string path, out string kind)
+        {
+            string trimmed = Path.TrimEndingDirectorySeparator(path);
+            string? parent = Path.GetDirectoryName(trimmed);
+            string leaf = Path.GetFileName(trimmed);
+            if (string.IsNullOrEmpty(parent) || string.IsNullOrEmpty(leaf)) return IsProtectedPath(path, out kind);
+            string canonicalParent = Canonicalize(parent).TrimEnd(Path.DirectorySeparatorChar);
+            return IsProtectedCanonical(canonicalParent + Path.DirectorySeparatorChar + leaf, out kind);
+        }
+
+        private static bool IsProtectedCanonical(string full, out string kind)
         {
             kind = "";
-            // Canonicalize (resolve 8.3 short names, \\?\ prefixes, subst drives, junctions/
-            // symlinks) BEFORE comparing. A literal string compare could be bypassed by an alias
-            // of a protected folder (e.g. an 8.3 name, a UNC admin-share form, or a junction whose
-            // target is the Desktop), letting SafeMove move/delete the real protected folder.
-            string full = Canonicalize(path);
+            // The caller canonicalized (resolved 8.3 short names, \\?\ prefixes, subst drives,
+            // junctions/symlinks) BEFORE comparing. A literal string compare could be bypassed by an
+            // alias of a protected folder (an 8.3 name, or a junction whose target is the Desktop),
+            // letting SafeMove move/delete the real protected folder. Limit: over SMB
+            // GetFinalPathNameByHandle returns the UNC form, so an admin-share spelling of a local
+            // folder (\\localhost\C$\Users\me\Desktop) does NOT match; the broker's PathPolicy
+            // refuses admin shares for that reason.
             if (string.IsNullOrEmpty(full)) return false;
 
             // Drive root: "C:" or "C:\".
