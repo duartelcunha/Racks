@@ -4,6 +4,8 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-27
+
 > **Do not go back to an older Racks version after this one** (and do not open and re-save your racks in an older version).
 > Racks now saves decimal settings (position, size, opacity) with a dot whatever your Windows language. An older version on a
 > language that uses a space between thousands (Portuguese - Portugal, French) cannot read those numbers and falls back to defaults;
