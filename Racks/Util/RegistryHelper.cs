@@ -8,108 +8,9 @@ public class RegistryHelper
     {
         this.regKeyName = regkeyname;
     }
-    public void WriteToRegistry(string keyName, object value, Instance instance)
-    {
-        try
-        {
-            if (string.IsNullOrEmpty(instance.Name))
-            {
-                Debug.WriteLine("Instance is null reg not writen");
-                return;
-            }
-            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(instance.GetKeyLocation()))
-            {
-                key.SetValue(keyName, value);
-            }
-            //  Debug.WriteLine($"wrote key: {keyName}\t value: {value}\nto: {instance.GetKeyLocation()}");
-        }
-        catch { }
-    }
-    public void WriteMultiLineTupleRegistry(string keyName, List<Tuple<string, string>> list, Instance instance)
-    {
-
-        if (string.IsNullOrWhiteSpace(keyName))
-        {
-            return;
-        }
-
-        if (instance == null || string.IsNullOrWhiteSpace(instance.Name))
-        {
-            Debug.WriteLine("Instance is null reg not written");
-            return;
-        }
-        try
-        {
-            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(instance.GetKeyLocation()))
-            {
-                string[] values;
-
-                if (list == null || list.Count == 0)
-                {
-                    values = Array.Empty<string>();
-                }
-                else
-                {
-                    values = list.Select(t => $"{t.Item1},{t.Item2}").ToArray();
-                }
-                key.SetValue(keyName, values, RegistryValueKind.MultiString);
-            }
-        }
-        catch
-        {
-        }
-    }
-
-    public void WriteMultiLineRegistry(string keyName, List<string> list, Instance instance)
-    {
-        try
-        {
-            if (string.IsNullOrEmpty(instance?.Name))
-            {
-                Debug.WriteLine("Instance is null reg not written");
-                return;
-            }
-            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(instance.GetKeyLocation()))
-            {
-                if (list == null || list.Count == 0)
-                {
-                    key.SetValue(keyName, new string[0], RegistryValueKind.MultiString);
-                }
-                else
-                {
-                    key.SetValue(keyName, list.ToArray(), RegistryValueKind.MultiString);
-                }
-            }
-        }
-        catch
-        {
-        }
-    }
-
-    public void WriteIntArrayToRegistry(string keyName, int[] values, Instance instance)
-    {
-        try
-        {
-            if (string.IsNullOrEmpty(instance?.Name))
-            {
-                Debug.WriteLine("Instance is null reg not writen");
-                return;
-            }
-            if (values == null)
-            {
-                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(instance.GetKeyLocation()))
-                {
-                    key.SetValue(keyName, "");
-                }
-                return;
-            }
-            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(instance.GetKeyLocation()))
-            {
-                key.SetValue(keyName, string.Join(",", values));
-            }
-        }
-        catch { }
-    }
+    // The per-rack writers (WriteToRegistry, WriteMultiLine*, WriteIntArrayToRegistry, KeyExists) were replaced by
+    // RackSettingsRepository (hardening P6). What is left reads and writes loose values under the app root; the
+    // app-wide switches use AppSettings and MigrationMarkers, and the tests compare those against this old helper.
     public void WriteToRegistryRoot(string keyName, object value)
     {
         try
@@ -121,32 +22,6 @@ public class RegistryHelper
         }
         catch { }
     }
-    public bool KeyExists(string keyName, Instance instance)
-    {
-        try
-        {
-            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(instance.GetKeyLocation())!)
-            {
-                if (key != null)
-                {
-                    if (key.GetValue(keyName) != null)
-                    {
-                        Debug.WriteLine($"exists: {keyName},{key.GetValue(keyName)}");
-
-                        return true;
-                    }
-                }
-            }
-            Debug.WriteLine($"doesnt exist: {keyName}");
-            return false;
-        }
-        catch
-        {
-            Debug.WriteLine($"error opening HKCU\\SOFTWARE\\{regKeyName}, {keyName}");
-            return false;
-        }
-    }
-
     public object? ReadKeyValueRoot(string keyName)
     {
         try

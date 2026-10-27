@@ -651,18 +651,8 @@ namespace Racks
                     if (returnedToDesktop.Count > 0)
                         Racks.Infrastructure.Shell.ShellOperationGateway.Default.ArrangeDesktopIcons(returnedToDesktop);
 
-                    try
-                    {
-                        string keyLocation = Instance.GetKeyLocation();
-                        if (!string.IsNullOrEmpty(keyLocation))
-                        {
-                            Registry.CurrentUser.DeleteSubKeyTree(keyLocation, throwOnMissingSubKey: false);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Failed to delete rack registry key: {ex.Message}");
-                    }
+                    // Never throws; a failed delete is audited by the settings store.
+                    if (!string.IsNullOrEmpty(Instance.Name)) Instance.Store.Delete(Instance.Name);
                     MainWindow._controller.RemoveInstance(Instance, this);
                     // The sandbox folder was emptied and removed above (ReturnFolderToDesktop). Nothing
                     // is ever deleted recursively here any more: see INV-REMOVE-1.

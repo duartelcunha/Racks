@@ -7,9 +7,10 @@ which tests were added.
 
 ## Where we are
 
-- **Current phase:** P5 (typed `AppSettings` and `MigrationMarkers`), in review; P4 (`AutoRouteService`) is its base.
-- **Next step:** P6, `RackSettingsSchema` + validator + repository for `Instances\*` and the global style defaults
-  (golden fixtures first); it then lowers `Guards/registry-presentation-allowlist.json` to zero. The file allowlist
+- **Current phase:** P6 (`RackSettingsSchema` + validator + repository), in review; P5 (typed `AppSettings` and
+  `MigrationMarkers`) is its base.
+- **Next step:** P7, decompose `MainWindow` (it still owns the static `MainWindow._controller`: 20 uses, of which
+  `InstanceController.RefreshMirror` is the only one outside presentation). The file allowlist
   (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned state; its numbers only go down.
 - **Base branch:** `feature/scandi-branding-and-stability` (4 commits not yet on `main`). Phase branches are
   `hardening/pN-<name>`; each PR targets the previous phase's branch until the base lands on `main`.
@@ -28,7 +29,7 @@ which tests were added.
 | P3 | `ShellOperationGateway` (shell change notifications, desktop icons) | in review |
 | P4 | `AutoRouteService` + `RoutingPolicy`, testable `DesktopRouter`, watcher hardening | in review |
 | P5 | Typed `AppSettings` and `MigrationMarkers` for root registry values | in review |
-| P6 | `RackSettingsSchema` + validator + repository (golden fixtures first) | todo |
+| P6 | `RackSettingsSchema` + validator + repository (golden fixtures first) | in review |
 | P7 | Decompose `MainWindow` | todo |
 | P8 | Decompose `App` (bootstrap, migrations, crash reporting, uninstall mode) | todo |
 | P9 | Layout import/export: parser, validator, policy, executor | todo |
@@ -171,6 +172,61 @@ which tests were added.
 - Not done on purpose: `Instance`'s global style defaults (`ReadKeyValueRoot` list and the `WriteToRegistryRoot` for
   default-mode racks) and all `Instances\*` code are P6; `Test-Racks.ps1` and the dev-tools e2e were not run. The
   autorun test uses a throwaway Run key (the real one is never touched by tests).
+
+### P6 in short (what changed)
+
+- Two commits. **P6a** (tests only, plus one mechanical extract-method): golden fixtures with a non-default value for every one of
+  the 67 persisted names, written by the bulk writer, by the incremental write-through and as hand-written raw values (REG_DWORD,
+  REG_QWORD, REG_SZ, REG_MULTI_SZ; en-US, pt-PT, de-DE text), read by the real loader; the source-scraping guards
+  (`InstanceKeyTests`, the allow-list switch scan, the `SafeWpfValues` text pin on `Instance.cs`) became behavior tests.
+  The load half of `InitInstances` moved unchanged into `LoadInstancesFromRegistry` so a test can run it without windows.
+  **P6b**: the schema, validator, mapper and repository below.
+- New in `Racks/Infrastructure/Registry/`: `RackSettingsSchema` (the one table), `RackSettings` (typed DTO), `RackSettingsValidator`,
+  `RackSettingsMapper`, `IRackRegistry`/`HkcuRackRegistry` (seam for `Instances\*`), `RackSettingsRepository` behind
+  `IRackSettingsStore`. `InstanceController.InitInstances` delegates to `LoadAll()` and keeps the post pass; `WriteInstanceToKey`,
+  rename, `Instance.OnPropertyChanged` and the 32-default read of the `Instance` constructor use `Instance.Store` (static, replaceable
+  in tests). The three hand-maintained lists (the `switch`, the `SetValue` list, `RackLayoutIO._allowedValues`) are gone.
+  The test assembly wraps the default store so a test that forgets to redirect `InstanceController.appName` throws instead of
+  writing `HKCU\SOFTWARE\Racks`.
+- Routed through the repository: rack removal (`RackWindow.Menu`), Magic Organize undo (`MainWindow`), "reset default style"
+  (`SettingsWindow`) and the uninstall report's folder-to-title map (`App`). `registry-presentation-allowlist.json` is empty;
+  `controllerUsages` went 30 to 20 (27 real uses before). `RackLayoutIO`'s own five registry accesses stay for P9.
+  `InstanceController.RefreshMirror` still reads `MainWindow._controller` (P7).
+- **Deliberate behavior changes:** one rack that fails no longer stops the others (and no rack of the session is lost with it);
+  loading never writes (before, every non-default value was written back while reading, flipping REG_DWORD to REG_SZ and rewriting
+  doubles in the current culture); NaN/Infinity/overflow, an undefined `TitleTextAlignment`, a bool such as `1`, and numbers outside
+  the documented window are refused, audited, and the default applies (`IconSize` and `GridSize` are clamped as their setters do);
+  a bad item in `ShowOnVirtualDesktops`/`CustomOrderFiles` drops only that item (one bad item used to drop the whole virtual-desktop
+  list); a rack with no (or an empty) `Name` takes its key name (it used to get an empty key location), a rack with an unsafe name is
+  skipped with its data left untouched, a rack named `empty` is skipped without deleting its key (loading it used to delete the key);
+  the global defaults are validated one by one (the first bad value used to skip all later ones) and `IconSize` is clamped;
+  `Folder`/`BackgroundImagePath` containing control characters are refused (a NUL in `Folder` used to abort the whole load);
+  `Enum.TryParse` combinations such as `Left, Right` are refused; `IsShortcutsOnly` is no longer written to the rack key (it was
+  never read back); the junk text `System.Collections.Generic.List...` is no longer written to the root by a "Default Style" instance.
+- **Culture and downgrade.** Doubles (`PosX`, `Width`, `IdleOpacity`, ...) are written as invariant text (`123.5`) whatever the culture.
+  The reader tries invariant text first, then the current culture. The real rule: **invariant text is read correctly in every culture;
+  legacy culture text (`123,5`) is read correctly only in the culture that wrote it** (an en-US machine reads `321,75` as 32175, as the
+  old reader did). A **downgrade is unsafe**: an older build on a culture whose group separator is a space (pt-PT, fr-FR) does not
+  parse `123.5` and uses the defaults; on cultures whose group separator is '.' (de-DE, es-ES, it-IT, pt-BR, nl-NL) the old parser
+  (`AllowThousands`) reads `0.4` as 4 and `321.75` as 32175, which can corrupt geometry and opacity. Recommendation: do not downgrade
+  (or re-save the racks there). Integers stay REG_DWORD (the write-through used to store them as REG_SZ), switches stay `True`/`False`,
+  lists as before; the global defaults stay REG_SZ text (an older build reads the root with a text reader).
+- **Audit volume and normalisation (review fixes).** A load no longer writes normalised values back, so the same finding would repeat on every
+  start: findings are logged once per process per (rack key, field, raw value). A rack whose ONLY findings are benign (a stored
+  number clamped, a missing/empty `Name`) is saved once in full, explicitly, as `SettingNormalized`, so the registry is corrected
+  once and later loads are silent; a rack with any refused value or dropped list item is never rewritten (the user's raw data stays
+  until they change it). A `Name` that differs from its key only in case (a case-only rename) is not a finding. A hand-edited rack
+  whose `Name` differs from its key in more than case gets its one-shot migrations in memory only (a write would create a
+  skeleton key under that name that loads as a "folder missing" ghost).
+- Behaviour note: `ShowOnVirtualDesktops` `1,abc` now becomes `[1]` (it used to be dropped whole, meaning "all desktops").
+- Follow-up (pre-existing, not fixed): a rack whose folder is a drive root has the name `""`; it has no registry key, so it is never
+  persisted. Saving it is now a silent skip (it used to log a write failure on every change).
+- Kept on purpose: the two one-shot migrations still write through the setters after a load; a full save leaves an empty
+  `LastAccessedFiles`/`CustomOrderFiles` value alone while a single-value write stores the empty list (and `AssignedFiles` is removed
+  when empty), exactly as before; `BackgroundImagePath` is stored as typed (the local-drive check stays where the image is loaded);
+  a `Name` that differs from its key is used as is (audited), so a later save writes under that name.
+- Not done on purpose: `Test-Racks.ps1` and the dev-tools e2e were not run; `RackLayoutIO.Import/Export` still touch the registry
+  directly (P9); `MoveFilesOnDrop` is still importable although it is discarded.
 
 ### Follow-ups recorded by the P2 review (not implemented)
 
