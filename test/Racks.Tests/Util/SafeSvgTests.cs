@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Racks.Tests.Guards;
+using Racks.Tests.Startup;
 using Racks.Util;
 using Svg;
 
@@ -107,13 +108,18 @@ public class SafeSvgTests
     }
 
     [Fact]
-    public void The_app_applies_the_svg_settings_at_startup()
+    public void The_app_applies_the_svg_settings_before_it_sets_the_main_window()
     {
-        string app = File.ReadAllText(RepoPaths.App("App.xaml.cs"));
-        int startup = app.IndexOf("protected override void OnStartup", StringComparison.Ordinal);
-        int apply = app.IndexOf("Racks.Util.SafeSvg.Apply();", StringComparison.Ordinal);
-        int window = app.IndexOf("StartupUri = new Uri(\"MainWindow.xaml\"", StringComparison.Ordinal);
-        Assert.True(startup > 0 && apply > startup && window > apply);
+        // Behavior test over the startup sequence (replaced a test that read App.xaml.cs as text). WPF builds MainWindow from
+        // StartupUri only after OnStartup returns, so the hardening has to come first in every mode that can open a file.
+        foreach (var mode in Enum.GetValues<Racks.UseCases.Startup.StartupMode>())
+        {
+            var steps = StartupHarness.Create().Bootstrap.StepNames(mode);
+            int svg = steps.ToList().IndexOf(Racks.UseCases.Startup.StartupSteps.ApplySafeSvg);
+            int window = steps.ToList().IndexOf(Racks.UseCases.Startup.StartupSteps.SetStartupUri);
+            Assert.True(svg >= 0, $"{mode} must apply the SVG settings");
+            if (window >= 0) Assert.True(svg < window, $"{mode}: SafeSvg.Apply must run before StartupUri is set");
+        }
     }
 
     private static int CenterPixel(SvgDocument doc)

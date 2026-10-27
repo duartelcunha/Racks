@@ -65,6 +65,19 @@ public class ArchitectureRatchetTests
             $"A MainWindow method has {longest} lines, the largest allowed is {Baseline["mainWindowMethodMaxLines"]}. Extract a use case.");
     }
 
+    // App only bootstraps and exposes the WPF lifecycle (P8): the ordered startup steps, migrations, single instance, uninstall
+    // mode and crash reporting live in Racks/UseCases/Startup and Racks/UseCases/Crash. It must not grow back.
+    [Fact]
+    public void App_code_behind_does_not_grow_and_is_one_file()
+    {
+        var parts = Directory.EnumerateFiles(Path.Combine(Root, "Racks"), "App*.cs").Select(Path.GetFileName).ToList();
+        Assert.Equal(new[] { "App.xaml.cs" }, parts);
+
+        int lines = File.ReadAllLines(Path.Combine(Root, "Racks", "App.xaml.cs")).Length;
+        Assert.True(lines <= Baseline["appLines"],
+            $"App.xaml.cs has {lines} lines, baseline is {Baseline["appLines"]}. Put the logic in a class under Racks/UseCases/Startup instead.");
+    }
+
     [Fact]
     public void Static_service_locator_usage_does_not_grow()
     {
