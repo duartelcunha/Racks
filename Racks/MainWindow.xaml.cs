@@ -108,7 +108,7 @@ namespace Racks
                     (sourcePath, routedRack, destFolder) =>
                     {
                         // Auto-route MOVES matching files into the rack (no duplicate on Desktop).
-                        // Routed through SafeMove so a too-greedy regex (e.g., ".*") can't
+                        // Routed through the FileOperationBroker so a too-greedy regex (e.g., ".*") can't
                         // vacuum shell-special folders into the rack, name collisions are
                         // skipped cleanly, and cross-volume moves fall back to copy+delete.
                         // Failures are silent here (auto-route is background, not user-
@@ -117,10 +117,10 @@ namespace Racks
                         {
                             string dest = System.IO.Path.Combine(destFolder, System.IO.Path.GetFileName(sourcePath));
                             bool isDir = System.IO.Directory.Exists(sourcePath);
-                            var result = Racks.Util.SafeMove.TryMove(sourcePath, dest, out string reason);
-                            if (result != Racks.Util.SafeMove.Result.Moved)
+                            var result = Racks.Infrastructure.FileSystem.FileOperationBroker.Default.Move(sourcePath, dest, "auto-route");
+                            if (!result.Completed)
                             {
-                                Debug.WriteLine($"Auto-route {result}: {reason}");
+                                Debug.WriteLine($"Auto-route {result.Status}: {result.Reason}");
                                 return;
                             }
                             Util.Interop.NotifyShellMove(sourcePath, dest, isDir);
@@ -247,8 +247,7 @@ namespace Racks
                             var cluster = clusters[i];
                             if (cluster.FilePaths.Count == 0) continue;
 
-                            string safeName = string.Join("_", cluster.Name.Split(System.IO.Path.GetInvalidFileNameChars()));
-                            if (string.IsNullOrWhiteSpace(safeName)) safeName = "Cluster_" + Guid.NewGuid().ToString().Substring(0, 4);
+                            string safeName = Racks.Infrastructure.FileSystem.PathPolicy.SanitizeLeafName(cluster.Name, "Cluster_" + Guid.NewGuid().ToString().Substring(0, 4));
 
                             // The name is the registry key: a second run must not reuse (and overwrite) the first run's racks.
                             safeName = Racks.Rack.RackNames.Unique(safeName, _controller.Instances.Select(r => r.Name));
@@ -274,8 +273,8 @@ namespace Racks
                                 string fileName = System.IO.Path.GetFileName(fp);
                                 string destPath = System.IO.Path.Combine(Racks.Core.DesktopIconManager.RacksWorkspacePath, fileName);
 
-                                var moveResult = Racks.Util.SafeMove.TryMove(fp, destPath, out string reason);
-                                if (moveResult == Racks.Util.SafeMove.Result.Moved)
+                                var moveResult = Racks.Infrastructure.FileSystem.FileOperationBroker.Default.Move(fp, destPath, "magic organize: into rack");
+                                if (moveResult.Completed)
                                 {
                                     Racks.Util.Interop.NotifyShellMove(fp, destPath, System.IO.Directory.Exists(fp));
                                     // One rack owns the name: take it from any other rack that still claims it.
@@ -321,10 +320,18 @@ namespace Racks
                         {
                             if (cluster.FilePaths.Count == 0) continue;
 
-                            string folderPath = System.IO.Path.Combine(desktopPath, cluster.Name);
+                            // The cluster name comes from file names: make it a plain folder name before it
+                            // reaches Path.Combine (a name with a slash or ".." would create folders elsewhere).
+                            string folderName = Racks.Infrastructure.FileSystem.PathPolicy.SanitizeLeafName(cluster.Name, "Cluster_" + Guid.NewGuid().ToString().Substring(0, 4));
+                            string folderPath = System.IO.Path.Combine(desktopPath, folderName);
                             if (!System.IO.Directory.Exists(folderPath))
                             {
-                                System.IO.Directory.CreateDirectory(folderPath);
+                                var created = Racks.Infrastructure.FileSystem.FileOperationBroker.Default.CreateDirectory(folderPath, "magic organize: new folder");
+                                if (!created.Succeeded)
+                                {
+                                    Debug.WriteLine($"Magic Organize folder {created.Status}: {created.Reason}");
+                                    continue;
+                                }
                                 undo.CreatedFolders.Add(folderPath);
                             }
 
@@ -333,8 +340,8 @@ namespace Racks
                                 string fileName = System.IO.Path.GetFileName(fp);
                                 string destPath = System.IO.Path.Combine(folderPath, fileName);
 
-                                var moveResult = Racks.Util.SafeMove.TryMove(fp, destPath, out string reason);
-                                if (moveResult == Racks.Util.SafeMove.Result.Moved)
+                                var moveResult = Racks.Infrastructure.FileSystem.FileOperationBroker.Default.Move(fp, destPath, "magic organize: into folder");
+                                if (moveResult.Completed)
                                 {
                                     Racks.Util.Interop.NotifyShellMove(fp, destPath, System.IO.Directory.Exists(fp));
                                     undo.RecordMove(fp, destPath);

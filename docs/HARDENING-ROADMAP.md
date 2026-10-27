@@ -7,8 +7,9 @@ which tests were added.
 
 ## Where we are
 
-- **Current phase:** P0 (base + docs), in review.
-- **Next step:** P1, the file-safety core (see below).
+- **Current phase:** P1 (file-safety core), in review; P0 (base + docs) is its base.
+- **Next step:** P2, route the remaining raw file mutations through the broker (list in
+  `test/Racks.Tests/Guards/fs-allowlist.json`; each entry has a one-line reason and the numbers only go down).
 - **Base branch:** `feature/scandi-branding-and-stability` (4 commits not yet on `main`). Phase branches are
   `hardening/pN-<name>`; each PR targets the previous phase's branch until the base lands on `main`.
 - **Baseline (P0):** `dotnet test` = 493 passed, 1 skipped (`Category=ReleaseGate`, only runs in the release
@@ -21,7 +22,7 @@ which tests were added.
 | # | Phase | Status |
 |---|---|---|
 | P0 | Base, `ARCHITECTURE.md`, `AGENTS.md`, this file | in review |
-| P1 | `FileOperationBroker` (facade over `SafeMove`/`SafeDelete`), `PathPolicy`, `AuditLog`, file-mutation guard; fix inline rename and Magic Organize folder names | todo |
+| P1 | `FileOperationBroker` (facade over `SafeMove`/`SafeDelete`), `PathPolicy`, `AuditLog`, file-mutation guard; fix inline rename and Magic Organize folder names | in review |
 | P2 | Route the remaining raw file mutations through the broker; shrink the allowlist | todo |
 | P3 | `ShellOperationGateway` (shell change notifications, desktop icons) | todo |
 | P4 | `AutoRouteService` + `RoutingPolicy`, testable `DesktopRouter`, watcher hardening | todo |
@@ -34,6 +35,21 @@ which tests were added.
 | P11 | Adversarial test gaps and Windows regression pass | todo |
 | P12 | Dependency notes/updates and dead code | todo |
 | P13 | Final docs: `SECURITY-INVARIANTS.md`, `ARCHITECTURE.md`, README, CHANGELOG | todo |
+
+### P1 in short (what changed)
+
+- New `Racks/Infrastructure/FileSystem/` (`FileOperationBroker`, `PathPolicy`, intent/result/context types) and
+  `Racks/Infrastructure/Logging/` (`IAuditSink`, `FileAuditSink` -> `%AppData%\Racks\audit.log`, `AuditLog`).
+  `SafeMove`/`SafeDelete` are now `internal` primitives; every former caller (auto-route, drop, drag-out,
+  Magic Organize and its undo, workspace return, remove rack, bootstrap rack) calls the broker with a reason.
+- Fixed: inline rename built its target with `Path.Combine(dir, typedText)` (slash, `..`, `C:\x` moved the item);
+  Magic Organize "Folders" mode created folders from the raw group name. Both now go through `PathPolicy`.
+- Guard: `FileMutationGuardTests` counts raw `File`/`Directory` mutations per file against
+  `Guards/fs-allowlist.json` (ratchet) and forbids `SafeMove.`/`SafeDelete.` outside the gateway. Its blind
+  spots are listed in the test's header comment.
+- Not done on purpose: shell notifications stay where they were (P3); the 12 files still in the allowlist are P2.
+- Known gap (unchanged from `SafeMove`): protection is by equality with a protected folder, so a path that
+  *contains* a protected folder (for example `C:\Users`) is not refused by `DeleteTree`/`Move`.
 
 Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (done).
 

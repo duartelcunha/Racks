@@ -14,14 +14,15 @@ public static class CrashLog
     /// <summary>
     /// Appends <paramref name="entry"/> to crash.log in <paramref name="directory"/>. When the file
     /// would pass <paramref name="maxBytes"/> it is first moved to crash.log.1 (replacing an older
-    /// one), so at most about two files of that size exist. Never throws.
+    /// one), so at most about two files of that size exist. <paramref name="fileName"/> lets other logs
+    /// (audit.log) reuse the rotation. Never throws.
     /// </summary>
-    public static void Append(string directory, string entry, long maxBytes = MaxBytes)
+    public static void Append(string directory, string entry, long maxBytes = MaxBytes, string fileName = FileName)
     {
         try
         {
             Directory.CreateDirectory(directory);
-            string path = Path.Combine(directory, FileName);
+            string path = Path.Combine(directory, fileName);
             long incoming = System.Text.Encoding.UTF8.GetByteCount(entry);
             if (File.Exists(path) && new FileInfo(path).Length + incoming > maxBytes)
                 File.Move(path, path + ".1", overwrite: true);

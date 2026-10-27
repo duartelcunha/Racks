@@ -129,6 +129,32 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
 - **INV-IDS-1** Identificadores persistidos são leaf names por contrato: no load, descartar entradas
   onde `Path.GetFileName(name) != name`; após cada `Path.Combine` com dados guardados, afirmar que o
   path resolvido fica sob a raiz esperada. *(teste)*
+- **INV-FS-1** Toda a operação destrutiva sobre ficheiros do utilizador (mover, renomear, apagar,
+  Reciclagem, criar pasta) passa por `Infrastructure/FileSystem/FileOperationBroker`: valida nomes e
+  paths (`PathPolicy`), verifica pastas protegidas e aliases (via `SafeMove`/`SafeDelete`, que são
+  `internal` e só o broker chama), confirma o resultado no disco e escreve um registo por chamada em
+  `%AppData%\Racks\audit.log` (JSON, rodado, só local, perfil escrito como `%USERPROFILE%`, sem nome de
+  utilizador nem da máquina). Falhas esperadas são um estado (`Rejected`/`Skipped`/`Failed`), nunca uma
+  exceção. *(teste: `FileMutationGuardTests` falha se um ficheiro fora do gateway tiver mais chamadas
+  `File.`/`Directory.` Move/Delete/Copy/CreateDirectory/SetAttributes/Replace/Write*/AppendAllText ou
+  `.MoveTo(` do que `Guards/fs-allowlist.json` permite, e se algo fora do gateway referir
+  `SafeMove.`/`SafeDelete.`; `FileOperationBrokerTests`, `FileAuditSinkTests`)* Parcial: a allowlist
+  ainda tem 12 ficheiros (44 chamadas) por migrar na P2; só pode descer. Limites conhecidos do guard (não
+  vê chamadas por variável como `info.Delete()`, `File.Create`/`FileStream`, chamadas Win32/shell,
+  `Process.Start`, nem código em `tools/`) estão no cabeçalho do teste; o guard impede o desvio fácil,
+  não substitui a revisão. Limite herdado do `SafeMove`: a proteção é por igualdade com a pasta
+  protegida, por isso um caminho que *contém* uma pasta protegida (por exemplo `C:\Users`) não é recusado.
+- **INV-FS-2** Um nome escrito pelo utilizador (renomear, nome de pasta do Magic Organize) é um *leaf
+  name*: `PathPolicy.ValidateLeafName` recusa vazio, `\` `/`, `..`, `:` (drive e data streams), caracteres
+  inválidos e de controlo, ponto ou espaço no fim, mais de 255 caracteres e nomes de dispositivo
+  (`CON`, `NUL`, `COM1`... com ou sem extensão). `Rename` valida o nome antes de qualquer `Path.Combine`
+  e confirma que o alvo fica na mesma pasta, por isso um rename nunca move o item para outro sítio;
+  `CreateDirectory` valida o leaf e exige que a pasta-mãe exista. Nomes derivados de dados (grupos do
+  Magic Organize) passam por `PathPolicy.SanitizeLeafName`. Paths gerais têm de ser completos e recusam
+  espaço de dispositivo (`\\.\`, `\\?\GLOBALROOT`), `..`, ADS e wildcards; UNC é permitido (uma rack pode
+  apontar a uma partilha de rede), ao contrário dos layouts importados (INV-IMPORT-1).
+  *(teste: `PathPolicyTests`, `FileOperationBrokerTests`: rename com `..\x`, `C:\x`, `a:b`, `CON` é
+  recusado e nada aparece fora da pasta)*
 
 ---
 

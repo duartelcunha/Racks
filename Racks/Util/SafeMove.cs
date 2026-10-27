@@ -11,9 +11,10 @@ namespace Racks.Util
     // a critical system folder into %AppData%\Racks\VirtualFrames\<guid>.
     //
     // Every drop path (Window_Drop, BootstrapAsVirtualRack, DesktopRouter
-    // route-callback) should go through this. Callers should aggregate the
-    // returned reasons across a multi-file drop and surface them once.
-    public static class SafeMove
+    // route-callback) goes through Infrastructure.FileSystem.FileOperationBroker,
+    // which is the only caller of this primitive (enforced by FileMutationGuardTests).
+    // Callers aggregate the returned reasons across a multi-file drop and surface them once.
+    internal static class SafeMove
     {
         public enum Result
         {
@@ -51,7 +52,10 @@ namespace Racks.Util
             Environment.SpecialFolder.SendTo,
         };
 
-        public static Result TryMove(string src, string dest, out string reason)
+        // The preflight half of TryMove: null means "go ahead", anything else is the verdict with
+        // its reason. Split out so the broker can tell a policy refusal (Rejected here) from an
+        // I/O failure while moving (Rejected by TryMove).
+        internal static Result? Check(string src, string dest, out string reason)
         {
             reason = "";
             if (string.IsNullOrEmpty(src) || string.IsNullOrEmpty(dest))
@@ -83,6 +87,15 @@ namespace Racks.Util
                 reason = $"\"{TryGetLeafName(dest)}\" already exists in the rack — skipping.";
                 return Result.Skipped;
             }
+            return null;
+        }
+
+        // allowCrossVolumeCopy: false refuses the copy+delete fallback, for callers that must only
+        // ever rename (the uninstall path): a move that would need a copy is Rejected untouched.
+        public static Result TryMove(string src, string dest, out string reason, bool allowCrossVolumeCopy = true)
+        {
+            var verdict = Check(src, dest, out reason);
+            if (verdict != null) return verdict.Value;
 
             bool srcIsDir = Directory.Exists(src);
             try
@@ -90,6 +103,11 @@ namespace Racks.Util
                 if (srcIsDir) Directory.Move(src, dest);
                 else File.Move(src, dest);
                 return Result.Moved;
+            }
+            catch (IOException ex) when (IsCrossVolumeError(ex) && !allowCrossVolumeCopy)
+            {
+                reason = $"\"{TryGetLeafName(src)}\" is on another volume and this operation may not copy — nothing was changed.";
+                return Result.Rejected;
             }
             catch (IOException ex) when (IsCrossVolumeError(ex))
             {
@@ -179,7 +197,7 @@ namespace Racks.Util
             }
         }
 
-        private static bool IsProtectedPath(string path, out string kind)
+        internal static bool IsProtectedPath(string path, out string kind)
         {
             kind = "";
             // Canonicalize (resolve 8.3 short names, \\?\ prefixes, subst drives, junctions/
@@ -240,7 +258,7 @@ namespace Racks.Util
         // Resolve a path to its canonical, volume-rooted final form. Falls back to GetFullPath
         // for paths that can't be opened (e.g. don't exist yet). Returns without a trailing
         // separator and without the \\?\ prefix so results compare cleanly.
-        private static string Canonicalize(string path)
+        internal static string Canonicalize(string path)
         {
             if (string.IsNullOrEmpty(path)) return "";
             try

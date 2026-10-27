@@ -850,6 +850,25 @@ namespace Racks.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Couldn&apos;t rename to &quot;{0}&quot;:
+        ///{1}.
+        /// </summary>
+        public static string Rename_Failed_Message {
+            get {
+                return ResourceManager.GetString("Rename.Failed.Message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Rename failed.
+        /// </summary>
+        public static string Rename_Failed_Title {
+            get {
+                return ResourceManager.GetString("Rename.Failed.Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Drop a folder.
         /// </summary>
         public static string showFolderInGrid_DropFolder {

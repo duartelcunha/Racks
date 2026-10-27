@@ -12,14 +12,23 @@ namespace Racks.Util
     // virtual rack contains a junction pointing at the user's Desktop folder.
     // This walker enumerates entries manually, unlinks reparse points without
     // descending, and only recurses into real subdirectories.
-    public static class SafeDelete
+    internal static class SafeDelete
     {
-        public static void DeleteDirectoryRecursive(string path)
+        internal static void DeleteDirectoryRecursive(string path)
         {
             DirectoryInfo root;
             try { root = new DirectoryInfo(path); if (!root.Exists) return; }
             catch { return; }
             DeleteDirectoryRecursive(root);
+        }
+
+        // Same walk, but reports whether the directory is gone afterwards. The broker uses this so it
+        // can tell Succeeded from PartiallyCompleted (a locked file stays behind; nothing throws).
+        internal static bool TryDeleteTree(string path)
+        {
+            DeleteDirectoryRecursive(path);
+            try { return !Directory.Exists(path); }
+            catch { return false; }
         }
 
         private static void DeleteDirectoryRecursive(DirectoryInfo dir)
@@ -82,7 +91,7 @@ namespace Racks.Util
         // Send a file or folder to the Recycle Bin (recoverable), silently. Used where the app
         // removes something the user could conceivably want back, so a mistake or a mid-operation
         // race is never a permanent loss. Returns true on success.
-        public static bool ToRecycleBin(string path)
+        internal static bool ToRecycleBin(string path)
         {
             if (string.IsNullOrEmpty(path) || (!File.Exists(path) && !Directory.Exists(path))) return false;
             try
