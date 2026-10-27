@@ -437,7 +437,7 @@ public sealed class MagicOrganizeServiceTests : IDisposable
 
         await _service.RunAsync();
 
-        Assert.Empty(_audit.Events.Where(e => e.Reason == "magic organize: new folder"));
+        Assert.DoesNotContain(_audit.Events, e => e.Reason == "magic organize: new folder");
         Assert.True(File.Exists(Path.Combine(_desktop, "a.txt")));        // undone: back on the desktop
         Assert.True(Directory.Exists(Path.Combine(_desktop, "Docs")));    // it was not ours to remove
         Assert.Null(MagicOrganizeUndo.Last);

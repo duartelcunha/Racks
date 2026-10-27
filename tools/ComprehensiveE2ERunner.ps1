@@ -10,7 +10,7 @@
 #>
 
 param(
-    [string]$ArtifactScreenshotsDir = "C:\Users\duart\.gemini\antigravity\brain\b69a19a5-89fa-4023-8c23-873d082988ee"
+    [string]$ArtifactScreenshotsDir = (Join-Path $env:TEMP "racks-e2e")
 )
 
 $ErrorActionPreference = "Stop"

@@ -76,7 +76,6 @@ namespace Racks
         private FileItem _itemUnderCursor;
         private FileItem _itemCurrentlyRenaming;
         string _dropIntoFolderPath;
-        FrameworkElement _lastBorder;
         private bool _isRenaming = true;
         private bool _isTopmost = false;
         private bool _inHandleWindowMove = false;

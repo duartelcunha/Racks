@@ -69,13 +69,23 @@ namespace Racks.Tests.Rack
         [Fact]
         public void FileWatcherService_Dispose_prevents_raising_events_after_folder_deletion()
         {
-            string tempDir = Path.Combine(Path.GetTempPath(), "RackDeletionTest_" + Guid.NewGuid().ToString("N"));
+            // A private parent: the service watches the parent of the rack folder, and %TEMP% itself is busy with
+            // other tests creating and deleting folders, which used to raise events from outside this test.
+            string root = Path.Combine(Path.GetTempPath(), "RackDeletionTest_" + Guid.NewGuid().ToString("N"));
+            string tempDir = Path.Combine(root, "rack");
             Directory.CreateDirectory(tempDir);
 
             try
             {
                 var service = new FileWatcherService();
                 service.Initialize(tempDir, tempDir);
+
+                // Control: a live service on the same folder. Its event proves the deletion was delivered to
+                // watchers, so waiting on it replaces a blind sleep.
+                var control = new FileWatcherService();
+                using var controlSeen = new System.Threading.ManualResetEventSlim(false);
+                control.ParentChanged += (_, _) => controlSeen.Set();
+                control.Initialize(tempDir, tempDir);
 
                 bool eventFired = false;
                 service.ParentChanged += (_, _) => eventFired = true;
@@ -87,16 +97,16 @@ namespace Racks.Tests.Rack
                 // Delete the watched folder
                 Directory.Delete(tempDir, recursive: true);
 
-                // Wait a moment for any potential background file system events
-                System.Threading.Thread.Sleep(100);
+                Assert.True(controlSeen.Wait(TimeSpan.FromSeconds(10)), "the live control watcher never saw the deletion");
+                control.Dispose();
 
                 Assert.False(eventFired, "Disposed FileWatcherService should not raise events after directory deletion.");
             }
             finally
             {
-                if (Directory.Exists(tempDir))
+                if (Directory.Exists(root))
                 {
-                    try { Directory.Delete(tempDir, true); } catch { }
+                    try { Directory.Delete(root, true); } catch { }
                 }
             }
         }

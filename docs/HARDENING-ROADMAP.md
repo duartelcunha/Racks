@@ -7,9 +7,9 @@ which tests were added.
 
 ## Where we are
 
-- **Current phase:** P11 (adversarial filesystem tests and the Windows regression pass, plus four small follow-ups), in
-  review; P10 (update path split) is its base.
-- **Next step:** P12, dependency notes/updates and dead code. Before it, decide what to do with the open P11 findings
+- **Current phase:** P12 (dependency notes, patch bumps, dead code, old warnings), in review; P11 (adversarial filesystem
+  tests) is its base.
+- **Next step:** P13, final docs. Before it, decide what to do with the open P11 findings
   F1 and F4 to F8 (see "P11 in short"; F2, F3 and F7 were closed in the P11c commit): none is a regression, F1 is the one worth a phase of its own.
   `MainWindow._controller` is still a public static (20 uses, of which `InstanceController.RefreshMirror` is the only
   one outside presentation). The file allowlist (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned
@@ -37,7 +37,7 @@ which tests were added.
 | P9 | Layout import/export: parser, validator, policy, executor | in review |
 | P10 | `UpdateService` split (behavior tests first; stays fail-closed) | in review |
 | P11 | Adversarial test gaps and Windows regression pass | in review |
-| P12 | Dependency notes/updates and dead code | todo |
+| P12 | Dependency notes/updates and dead code | in review |
 | P13 | Final docs: `SECURITY-INVARIANTS.md`, `ARCHITECTURE.md`, README, CHANGELOG | todo |
 
 ### P1 in short (what changed)
@@ -493,6 +493,33 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
   `Test-Racks.ps1` and the dev-tools e2e were not run; the rack-removal dialog is covered through `RackFolderRemoval` (the decision and the
   text), not by showing the window. A second fixed drive existed on the machine used (D:), so the real cross-volume tests ran there; on a
   one-drive machine (and in CI) they show as skipped.
+
+### P12 in short (what changed)
+
+- One commit, no behavior change. Every `PackageReference` in `Racks.csproj` and the test project now has a comment saying why it
+  exists and where it is used (all 7 app packages were checked with grep: all are used; none removed). Transitive on purpose, not
+  referenced directly: Newtonsoft.Json (via Microsoft.ML), ExCSS (via Svg), Microsoft.CodeAnalysis (via Slions.VirtualDesktop).
+- Bumps, all pinned exactly: `Microsoft.ML` 5.0.0 to 5.0.1 and `Svg` 3.4.7 to 3.4.8 (build and the whole suite green, SVG tests included).
+  `THIRD-PARTY-NOTICES.md` unchanged (no package added or removed; note: it does not list Microsoft.ML, which is MIT, a gap for P13).
+- `dotnet list package --vulnerable --include-transitive`: none in Racks, Racks.Tests and RacksSigner. `--outdated`: only test tooling,
+  `Microsoft.NET.Test.Sdk` 17.14.1 (latest 18.11.0) and `xunit.runner.visualstudio` 3.1.4 (latest 4.0.1), both left on purpose
+  (major versions, no need).
+- Dead code removed (zero references in `Racks/` and `test/`, checked by name): `RegistryHelper.ReadKeyValueRoot` and
+  `ReadKeyValueRootInt` (only mentioned in comments and in text samples of the registry guard test); in `Util/Interop.cs` the unused
+  `InvalidateRect`, `UpdateWindow`, `IsWindow`, `DwmExtendFrameIntoClientArea`/`MARGINS`, `ShellExecuteEx`/`SHELLEXECUTEINFO`,
+  `SHGetFileInfo` (and its `NotImplementedException` stub)/`SHFILEINFO`/`SHGFI*`, both `SHCreateItemFromParsingName` overloads with
+  `IShellItem`/`IShellItemImageFactory`, the `EnumWindows(EnumedWindow)` overload with `EnumWindowCallback`, and unused constants
+  (`MOD_*`, some `SHCNE_*`, `WM_*`, `SW_SHOWNA`, `HWND_NOTOPMOST`, `SEE_MASK_INVOKEIDLIST`). `RegistryHelper.KeyExists` was already gone (P6).
+- Kept on purpose: `RegistryHelper.WriteToRegistryRoot` (tests use it as the old-behavior oracle), `AccentPolicy` fields (struct
+  layout), `IContextMenu`/`CMINVOKECOMMANDINFO` (used), everything in DesktopIcons, DesktopIconPositioner, ShellLinkHelper,
+  HardlinkHelper, JunctionHelper, FolderSize, WindowPlacement, FlickTracker and Particle (all members referenced).
+- Old warnings gone: unused field `RackWindow._lastBorder`, the `string?` key in `ArchitectureRatchetTests`, four xUnit1031 in
+  `UpdaterReleaseScanTests` (tests now `async Task`, same asserts) and one xUnit2029 (`Assert.DoesNotContain`, same meaning).
+  Build warnings 8 to 0. Ratchet baselines lowered to the exact new values: `rackWindowLines` 577 to 561, `rackWindowPartMaxLines`
+  919 to 911, `rackWindowTotalLines` 5934 to 5925.
+- Hygiene: `tools/ComprehensiveE2ERunner.ps1` no longer defaults to a personal `.gemini` path (now `$env:TEMP\racks-e2e`);
+  the PR template no longer says the test project does not exist and asks for what was refactored, risk reduced, tests added and local checks.
+- Tests: 1868 passed, 6 skipped, 0 failed before and after (no test added or removed). Two flaky tests found in repeated runs were fixed in a follow-up commit: `SettingsAuditRecordTests.Without_an_injected_sink_...` (the process-wide audit sink also received events from parallel tests outside the AuditLog collection; the test now keeps only its own thread's events) and `RackDeletionTests.FileWatcherService_Dispose_...` (it watched the shared %TEMP% and used a blind sleep; real race too: an event already queued could reach a disposed `FileWatcherService`, now dropped by an `IsDisposed` guard; the test uses a private parent folder and a live control watcher instead of a sleep). Each class 30 runs and the whole suite 5 runs: all green.
 
 ## Findings that drive the order
 

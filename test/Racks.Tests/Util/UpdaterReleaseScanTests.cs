@@ -89,18 +89,18 @@ public class UpdaterReleaseScanTests
     private static UpdateManifest Manifest(string version) => UpdateManifest.ForInstaller(version, new byte[32], 10);
 
     [Fact]
-    public void A_newer_release_that_fails_verification_does_not_hide_an_older_good_one()
+    public async Task A_newer_release_that_fails_verification_does_not_hide_an_older_good_one()
     {
         var list = ReleaseManifestValidator.SelectCandidates(Releases(Rel("v1.6.0"), Rel("v1.5.0")), "1.4.0", out _);
         var tried = new List<string>();
 
-        var (offer, _) = ReleaseManifestValidator.ChooseVerifiedAsync(list, a =>
+        var (offer, _) = await ReleaseManifestValidator.ChooseVerifiedAsync(list, a =>
         {
             tried.Add(a.Version);
             return Task.FromResult(a.Version == "1.6.0"
                 ? (UpdateCheck.BadSignature, (UpdateManifest?)null)
                 : (UpdateCheck.Ok, (UpdateManifest?)Manifest(a.Version)));
-        }).GetAwaiter().GetResult();
+        });
 
         Assert.Equal(new[] { "1.6.0", "1.5.0" }, tried);
         Assert.NotNull(offer);
@@ -109,33 +109,32 @@ public class UpdaterReleaseScanTests
     }
 
     [Fact]
-    public void When_nothing_verifies_the_newest_failure_is_reported()
+    public async Task When_nothing_verifies_the_newest_failure_is_reported()
     {
         var list = ReleaseManifestValidator.SelectCandidates(Releases(Rel("v1.6.0"), Rel("v1.5.0")), "1.4.0", out _);
-        var (offer, failure) = ReleaseManifestValidator.ChooseVerifiedAsync(list, a => Task.FromResult(a.Version == "1.6.0"
+        var (offer, failure) = await ReleaseManifestValidator.ChooseVerifiedAsync(list, a => Task.FromResult(a.Version == "1.6.0"
             ? (UpdateCheck.HashMismatch, (UpdateManifest?)null)
-            : (UpdateCheck.BadSignature, (UpdateManifest?)null))).GetAwaiter().GetResult();
+            : (UpdateCheck.BadSignature, (UpdateManifest?)null)));
 
         Assert.Null(offer);
         Assert.Equal(UpdateCheck.HashMismatch, failure);
     }
 
     [Fact]
-    public void A_verified_manifest_for_another_version_is_not_offered()
+    public async Task A_verified_manifest_for_another_version_is_not_offered()
     {
         var list = ReleaseManifestValidator.SelectCandidates(Releases(Rel("v1.6.0")), "1.4.0", out _);
-        var (offer, failure) = ReleaseManifestValidator.ChooseVerifiedAsync(list, a => Task.FromResult((UpdateCheck.Ok, (UpdateManifest?)Manifest("1.5.0"))))
-            .GetAwaiter().GetResult();
+        var (offer, failure) = await ReleaseManifestValidator.ChooseVerifiedAsync(list, a => Task.FromResult((UpdateCheck.Ok, (UpdateManifest?)Manifest("1.5.0"))));
 
         Assert.Null(offer);
         Assert.Equal(UpdateCheck.WrongRelease, failure);
     }
 
     [Fact]
-    public void No_candidates_means_no_offer()
+    public async Task No_candidates_means_no_offer()
     {
-        var (offer, failure) = ReleaseManifestValidator.ChooseVerifiedAsync(Array.Empty<ReleaseAssets>(),
-            _ => throw new InvalidOperationException("nothing to verify")).GetAwaiter().GetResult();
+        var (offer, failure) = await ReleaseManifestValidator.ChooseVerifiedAsync(Array.Empty<ReleaseAssets>(),
+            _ => throw new InvalidOperationException("nothing to verify"));
         Assert.Null(offer);
         Assert.Equal(UpdateCheck.MissingManifest, failure);
     }
