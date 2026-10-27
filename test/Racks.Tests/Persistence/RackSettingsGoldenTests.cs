@@ -10,7 +10,8 @@ namespace Racks.Tests.Persistence;
 /// <c>WriteInstanceToKey</c>, the incremental write-through of <c>Instance</c>, and hand-written raw values in the
 /// stored forms old installs and layout imports leave) and read back by the real loader. These tests describe what
 /// an existing install MUST keep loading as, so they stay green across the P6b rewrite of the reader.
-/// Behaviour that P6b changes on purpose is NOT here: see <see cref="RackSettingsLoadQuirksToday"/>.
+/// Behaviour that P6b changed on purpose (one bad rack, NaN and out-of-range values, culture-sensitive writes) is
+/// covered by <c>RackSettingsValidationTests</c> and <c>RackSettingsRepositoryTests</c>; everything here is unchanged.
 /// </summary>
 [Collection("Registry")]
 public sealed class RackSettingsGoldenTests : IDisposable
@@ -105,7 +106,7 @@ public sealed class RackSettingsGoldenTests : IDisposable
 
     [Theory]
     [InlineData("en-US", GoldenRack.RawStyle.Invariant)]
-    [InlineData("pt-PT", GoldenRack.RawStyle.Invariant)]   // invariant text read under a comma culture: see the quirks class for what "0.5" does
+    [InlineData("pt-PT", GoldenRack.RawStyle.Invariant)]   // invariant text read under a comma culture: the doubles are only readable since P6b (the filter below)
     [InlineData("en-US", GoldenRack.RawStyle.CultureText)]
     [InlineData("pt-PT", GoldenRack.RawStyle.CultureText)] // "123,5": what a pt-PT install wrote
     [InlineData("en-US", GoldenRack.RawStyle.Qword)]
@@ -121,7 +122,8 @@ public sealed class RackSettingsGoldenTests : IDisposable
             var mismatches = GoldenRack.Mismatches(loaded);
             if (culture == "pt-PT" && style != GoldenRack.RawStyle.CultureText)
             {
-                // "123.5" under pt-PT: not a number there, so today these doubles are ignored. P6b reads invariant text first.
+                // Before P6b "123.5" under pt-PT was not a number, so these doubles were ignored; P6b reads invariant text first
+                // (see RackSettingsValidationTests), so the filter only keeps this test valid for old builds' behaviour too.
                 mismatches = mismatches.Where(m => !m.StartsWith("PosX") && !m.StartsWith("PosY") && !m.StartsWith("Width")
                     && !m.StartsWith("Height") && !m.StartsWith("IdleOpacity") && !m.StartsWith("AnimationSpeed")
                     && !m.StartsWith("MaxGrayScaleStrength") && !m.StartsWith("TitleFontSize")).ToList();
@@ -255,9 +257,9 @@ public sealed class RackSettingsGoldenTests : IDisposable
     }
 
     [Fact]
-    public void The_virtual_desktop_list_with_one_bad_item_is_dropped_whole_today_but_others_still_load()
+    public void A_virtual_desktop_list_with_a_bad_item_does_not_stop_the_other_values()
     {
-        // Documented current behaviour of the list (P6b keeps the good items). The rack itself and its other values load.
+        // What happens to the list itself is covered by RackSettingsValidationTests; the rack and its other values load.
         _reg.SeedRack("VD", new (string, object, RegistryValueKind)[]
         {
             ("Name", "VD", RegistryValueKind.String),
@@ -267,7 +269,6 @@ public sealed class RackSettingsGoldenTests : IDisposable
         });
         var rack = _reg.LoadSingle("VD");
         Assert.True(rack.IsLocked);
-        Assert.NotNull(rack); // list handling: see RackSettingsLoadQuirksToday
     }
 
     [Theory]
@@ -512,141 +513,5 @@ public sealed class RackSettingsGoldenTests : IDisposable
             Assert.Empty(GoldenRack.Mismatches(first));
             Assert.Empty(GoldenRack.Mismatches(second));
         });
-    }
-}
-
-/// <summary>
-/// Behaviour the CURRENT loader has that hardening P6b changes on purpose. Each test pins today's result and says what
-/// replaces it; in P6b this class is replaced by the validation tests (<c>RackSettingsRepositoryTests</c>).
-/// </summary>
-[Collection("Registry")]
-public sealed class RackSettingsLoadQuirksToday : IDisposable
-{
-    private readonly RackRegistryFixture _reg = new();
-
-    public void Dispose() => _reg.Dispose();
-
-    private static IEnumerable<(string, object, RegistryValueKind)> Rack(string name, params (string, object, RegistryValueKind)[] more)
-        => new (string, object, RegistryValueKind)[]
-        {
-            ("Name", name, RegistryValueKind.String),
-            ("Folder", Path.GetTempPath(), RegistryValueKind.String),
-        }.Concat(more);
-
-    // INTENTIONAL CHANGE in P6b: one rack that makes the reader throw aborts the whole load (and, because the same
-    // try also creates the windows, no rack of the session is shown). P6b skips only that rack and audits it.
-    [Fact]
-    public void Today_one_rack_that_makes_the_reader_throw_stops_all_the_racks_after_it()
-    {
-        // Registry keys come back in name order: "A-*" first, then the poisoned one, then "Z-*".
-        _reg.SeedRack("A-good", Rack("A-good"));
-        // A NUL inside the folder text makes Path.GetFullPath throw in the post pass.
-        _reg.SeedRack("B-poison", Rack("B-poison", ("Folder", "C:\\a\0b", RegistryValueKind.String)));
-        _reg.SeedRack("Z-good", Rack("Z-good"));
-
-        _reg.Controller.Instances.Clear();
-        var error = Record.Exception(() => _reg.Controller.LoadInstancesFromRegistry(false, false));
-
-        Assert.NotNull(error);                                                      // InitInstances' try/catch swallows it and shows no window
-        Assert.Equal(new[] { "A-good" }, _reg.Controller.Instances.Select(r => r.Name).ToArray());   // Z-good never loaded
-    }
-
-    // INTENTIONAL CHANGE in P6b: loading writes back while it reads, because the rack being filled is a persisting
-    // Instance. The value KIND flips (REG_DWORD -> REG_SZ) and doubles are rewritten in the current culture's text.
-    [Fact]
-    public void Today_loading_rewrites_values_it_just_read()
-    {
-        RackRegistryFixture.WithCulture("pt-PT", () =>
-        {
-            _reg.SeedRack("RW", new (string, object, RegistryValueKind)[]
-            {
-                ("Name", "RW", RegistryValueKind.String),     // Name first: later values are written back
-                ("Folder", Path.GetTempPath(), RegistryValueKind.String),
-                ("IconSize", 64, RegistryValueKind.DWord),
-                ("PosX", "123.5", RegistryValueKind.String),  // invariant text; pt-PT cannot read it (see the golden test)
-                ("Width", "321,75", RegistryValueKind.String),
-                ("IsLocked", "True", RegistryValueKind.String),
-            });
-
-            _reg.LoadSingle("RW");
-
-            Assert.Equal((RegistryValueKind.String, "64"), (_reg.RawRack("RW", "IconSize").Kind!.Value, _reg.RawRack("RW", "IconSize").Data));
-            Assert.Equal("321,75", _reg.RawRack("RW", "Width").Data);                 // rewritten with the pt-PT comma
-        });
-    }
-
-    // INTENTIONAL CHANGE in P6b: the bulk writer stores doubles with the current culture, so a pt-PT install writes "123,5".
-    [Fact]
-    public void Today_the_bulk_writer_writes_doubles_in_the_current_culture()
-    {
-        RackRegistryFixture.WithCulture("pt-PT", () =>
-        {
-            _reg.Controller.WriteInstanceToKey(GoldenRack.Build());
-            Assert.Equal("123,5", _reg.RawRack(GoldenRack.Name, "PosX").Data);
-        });
-    }
-
-    // INTENTIONAL CHANGE in P6b: an undefined enum number is applied; NaN and Infinity are applied; out-of-range numbers are applied.
-    [Fact]
-    public void Today_nonsense_numbers_and_enums_are_applied_as_they_are()
-    {
-        _reg.SeedRack("Wild", Rack("Wild",
-            ("TitleTextAlignment", "7", RegistryValueKind.String),
-            ("PosX", "NaN", RegistryValueKind.String),
-            ("PosY", "1e999", RegistryValueKind.String),
-            ("IdleOpacity", "5", RegistryValueKind.String),
-            ("Opacity", "9999", RegistryValueKind.String),
-            ("SortBy", "-4", RegistryValueKind.String)));
-
-        var rack = _reg.LoadSingle("Wild");
-
-        Assert.Equal(7, (int)rack.TitleTextAlignment);
-        Assert.True(double.IsNaN(rack.PosX));
-        Assert.True(double.IsPositiveInfinity(rack.PosY));
-        Assert.Equal(5.0, rack.IdleOpacity);
-        Assert.Equal(9999, rack.Opacity);
-        Assert.Equal(-4, rack.SortBy);
-    }
-
-    // INTENTIONAL CHANGE in P6b: one unusable item drops the whole list; P6b keeps the good items.
-    [Fact]
-    public void Today_one_bad_virtual_desktop_item_drops_the_whole_list()
-    {
-        _reg.SeedRack("VD", Rack("VD", ("ShowOnVirtualDesktops", "1,x,3", RegistryValueKind.String)));
-        Assert.Null(_reg.LoadSingle("VD").ShowOnVirtualDesktops);
-    }
-
-    // INTENTIONAL CHANGE in P6b: a rack without a Name value gets no identity at all (empty key location).
-    [Fact]
-    public void Today_a_rack_without_a_Name_value_has_an_empty_name()
-    {
-        _reg.SeedRack("NoName", new (string, object, RegistryValueKind)[]
-        {
-            ("Folder", Path.GetTempPath(), RegistryValueKind.String),
-            ("PosX", "10", RegistryValueKind.String),
-        });
-        var rack = Assert.Single(_reg.Load());
-        Assert.Equal("", rack.Name);
-        Assert.Equal("", rack.GetKeyLocation());
-    }
-
-    // INTENTIONAL CHANGE in P6b: the global defaults are read in one try, so the first bad value skips every later default.
-    [Fact]
-    public void Today_one_bad_global_default_skips_all_the_ones_after_it()
-    {
-        _reg.SeedRoot("IdleOpacity", "not a number");   // first in the list
-        _reg.SeedRoot("IconSize", "48");                // last in the list
-
-        var rack = new Instance("empty", false);
-
-        Assert.Equal(32, rack.IconSize);                // 48 was never applied
-    }
-
-    // INTENTIONAL CHANGE in P6b: the global IconSize is applied without the 16-256 clamp the setter has.
-    [Fact]
-    public void Today_a_global_icon_size_is_not_clamped()
-    {
-        _reg.SeedRoot("IconSize", "5000");
-        Assert.Equal(5000, new Instance("empty", false).IconSize);
     }
 }

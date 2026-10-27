@@ -117,14 +117,10 @@ namespace Racks
             var titles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                using var instances = Registry.CurrentUser.OpenSubKey($@"Software\{InstanceController.appName}\Instances");
-                if (instances == null) return titles;
-                foreach (var name in instances.GetSubKeyNames())
-                {
-                    using var rack = instances.OpenSubKey(name);
-                    if (rack?.GetValue("Folder") is string folder && rack.GetValue("TitleText") is string title)
+                // Validated values from the settings store; racks it cannot load are simply not named.
+                foreach (var rack in Instance.Store.LoadAll().Racks)
+                    if (rack.Settings.Folder is { } folder && rack.Settings.TitleText is { } title)
                         titles[folder] = title;
-                }
             }
             catch { }
             return titles;

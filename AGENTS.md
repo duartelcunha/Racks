@@ -12,7 +12,7 @@ touches moves, deletes, imports, the registry or the updater).
 - Do not add features while hardening. One phase = one PR; say what was refactored, which risk went down and which tests were added.
 - Destructive file operations go through the file gateway (`FileOperationBroker`, a facade over the internal `SafeMove`/`SafeDelete`; enforced by `FileMutationGuardTests`). No raw `File.Move`/`Directory.Delete` elsewhere.
 - Presentation reaches the shell (change notifications, desktop icons, workspace folder) only through `ShellOperationGateway.Default` (enforced by `PresentationBoundaryTests`).
-- Presentation reads and writes app-wide registry values (switches, one-shot markers) only through `AppSettings` / `MigrationMarkers` (`Racks.Infrastructure.Registry`; enforced by `RegistryAccessGuardTests`). Per-rack values stay in `Instance`/`InstanceController` until P6.
+- Presentation reads and writes app-wide registry values (switches, one-shot markers) only through `AppSettings` / `MigrationMarkers` (`Racks.Infrastructure.Registry`; enforced by `RegistryAccessGuardTests`). Per-rack values and the global style defaults go through `RackSettingsRepository` (one `RackSettingsSchema` table; `Instance.Store` is the replaceable default, tests redirect `InstanceController.appName` with `RackRegistryFixture`).
 - Never relax the update path: it is fail-closed (signed manifest, host/path allowlist, size, SHA-256).
 - Persisted or imported values are validated before use. Regexes built from them go through `SafeRegex`.
 - Every refactor ships regression tests. Tests that read source text are replaced by behavior tests *before* the code they watch moves.

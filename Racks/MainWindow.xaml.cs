@@ -357,7 +357,7 @@ namespace Racks
                         if (inst == null) continue;
                         inst.isWindowClosing = true;
                         var win = _controller._subWindows.FirstOrDefault(w => w.Instance == inst);
-                        try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(inst.GetKeyLocation(), false); } catch { }
+                        Instance.Store.Delete(inst.Name);
                         if (win != null) { try { win.Close(); } catch { } _controller.RemoveInstance(inst, win); }
                         else _controller.Instances.Remove(inst);
                     }

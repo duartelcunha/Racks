@@ -31,8 +31,9 @@ There is no DI container. `App.OnStartup` wires services by hand; the legacy sta
    outside it, except those listed in `Guards/fs-allowlist.json` (the list only shrinks; after P2 it holds only Racks-owned state).
 2. **The registry is read and written through typed access.** App-wide switches and one-shot markers (loose values under
    `HKCU\SOFTWARE\Racks`) go through `Infrastructure/Registry/AppSettings` and `MigrationMarkers` (P5); the per-rack
-   schema + repository is P6. A bad value is never applied: the documented default is used and the field, raw value,
-   reason and fallback are written to `audit.log` once per name.
+   values and the global style defaults go through `RackSettingsRepository`, driven by one `RackSettingsSchema` (P6). A
+   bad value is never applied: the documented default is used and the field, raw value, reason and fallback are written
+   to `audit.log` (once per name for app-wide values, once per value and load for racks).
 3. **Presentation does not touch the registry, mutate files, call shell notifications or the updater.** Shell
    change notifications, desktop-icon hiding/arranging and the workspace folder go through
    `Infrastructure/Shell/ShellOperationGateway.Default`; `Guards/PresentationBoundaryTests` allows zero direct
@@ -43,7 +44,7 @@ There is no DI container. `App.OnStartup` wires services by hand; the legacy sta
    allowlist, the size and the SHA-256 all check out. See `docs/SECURITY-INVARIANTS.md` (INV-UPDATE-1).
 5. **Imports are validated before any state is written** and a bad file leaves the current layout untouched.
 
-Rules 1, 2 (app-wide values), 3 (shell and registry parts; updater comes later) and parts of 5 are enforced by tests in `test/Racks.Tests/Guards/`, which work as ratchets: the
+Rules 1, 2, 3 (shell and registry parts; updater comes later) and parts of 5 are enforced by tests in `test/Racks.Tests/Guards/`, which work as ratchets: the
 numbers in `Guards/baseline.json` may only go down.
 
 ## Where things live today
@@ -51,10 +52,11 @@ numbers in `Guards/baseline.json` may only go down.
 - **Window hosting.** `MainWindow` is a hidden host: tray icon, global hotkeys, IPC (`WM_RACKS_*`), update
   checks and Magic Organize. `RackWindow*` (partial class) is one rack. Both are larger than they should be and
   are being split (phases P7, P8).
-- **Persistence.** `Core/InstanceController` loads/saves racks under `HKCU\SOFTWARE\Racks\Instances\<name>`;
-  `Core/Instance` writes through on every property change; global switches and migration markers live under
-  `HKCU\SOFTWARE\Racks` and are read and written only through `Infrastructure/Registry` (below). Layout export/import is
-  `Util/RackLayoutIO`.
+- **Persistence.** `Core/InstanceController` asks the settings repository for the racks under
+  `HKCU\SOFTWARE\Racks\Instances\<name>` and runs the post pass (Desktop-rack detection, the two one-shot migrations,
+  the folder-missing flag, then the windows); `Core/Instance` writes through `Instance.Store` on every property change.
+  Global switches and migration markers live under `HKCU\SOFTWARE\Racks` and are read and written only through
+  `Infrastructure/Registry` (below). Layout export/import is `Util/RackLayoutIO` (its own registry access is P9).
 - **App-wide registry values.** `Infrastructure/Registry/` (namespace `Racks.Infrastructure.Registry`): `IRegistryRoot` (read /
   write / delete values under one key; `HkcuRegistryRoot` is the real one and follows `InstanceController.appName`, tests
   use a throwaway `Software\RacksTests-<guid>` key or a failing root), `AppSettings` (`Default`: start on login incl.
@@ -62,8 +64,19 @@ numbers in `Guards/baseline.json` may only go down.
   corner, auto update, read-only blur background, `MainHwnd`) and `MigrationMarkers` (`Default`: the six one-shot
   markers). Stored forms are unchanged (REG_SZ `True`/`False`; `MainHwnd` is REG_SZ decimal; marker `_MigratedFromDeskFrame`
   is REG_SZ `1`). `Guards/RegistryAccessGuardTests` ratchets direct registry access in presentation files
-  (`Guards/registry-presentation-allowlist.json`; what is left is per-rack and belongs to P6/P8). Do not name a test
+  (`Guards/registry-presentation-allowlist.json`, empty since P6). Do not name a test
   namespace `Racks.Tests.Registry`: it would shadow `Microsoft.Win32.Registry` in sibling test namespaces.
+- **Per-rack registry values (P6).** Same namespace. `RackSettingsSchema` is the ONE table of the 67 persisted values (plus the
+  discarded legacy `MoveFilesOnDrop`): name, kind, default, limits (reject or clamp), enum type, import-accepted, global-default.
+  `RackLayoutIO`'s allow-list, the loader, the writers and the 32 global defaults all derive from it. `RackSettings` is the typed
+  DTO (nullable: null = nothing usable stored, the rack keeps its default). `RackSettingsValidator` parses strictly (invariant
+  then current-culture numbers, finite only, defined enums, `SafeWpfValues` for fonts and colors, list items kept one by one).
+  `RackSettingsMapper` copies between the DTO and `Instance` through its safe setters under `SuspendPersistence`, so a load never
+  writes. `RackSettingsRepository` (`Default`, behind `IRackSettingsStore`; `IRackRegistry`/`HkcuRackRegistry` is the seam for
+  `Instances\*`, `IRegistryRoot` for the root) offers `LoadAll()` (a `try` per rack), `ReadGlobalStyleDefaults()` (each of the
+  32 on its own), `Save`, `SaveField`, `SaveGlobalDefault`, `Delete` and `ResetGlobalStyleDefaults`; none throws. `Instance.Store`
+  is the static default that tests replace. Every refused value is one `SettingFallback` audit record (rack, field, raw value to
+  200 characters, reason, fallback); a failed write is a `SettingWriteFailed` record.
 - **Moving files.** `Infrastructure/FileSystem/FileOperationBroker` over the internal primitives `Util/SafeMove`
   (canonicalization, protected roots, cross-volume copy-then-delete) and `Util/SafeDelete` (reparse-point-aware
   tree delete, Recycle Bin), `Rack/WorkspaceReturn` (back to Desktop),

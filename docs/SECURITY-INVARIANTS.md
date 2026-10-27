@@ -36,7 +36,8 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   partilhado com `tools/RacksSigner`)*
 - **INV-IMPORT-1** Input importado é validado antes de virar estado persistido: allowlist de nomes
   de valor, tipos/ranges validados, `Folder`/`BackgroundImagePath` canonicalizados e a rejeitar
-  UNC/sistema/traversal, e `rack.Name` só um segmento de chave seguro. *(teste)* ✅ Aplicado
+  UNC/sistema/traversal, e `rack.Name` só um segmento de chave seguro. A allowlist deriva de
+  `RackSettingsSchema` (INV-REG-2), a mesma tabela que o leitor usa. *(teste)* ✅ Aplicado
   (2026-10, `RackLayoutIO.ParseAndValidate`): allowlist de nomes+tipos comparada sem distinguir
   maiúsculas (o registo também não distingue), nomes reescritos na grafia canónica, duas grafias do
   mesmo nome rejeitadas, nomes desconhecidos descartados, `MultiString` só para `LastAccessedFiles`/
@@ -130,7 +131,9 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   `Nothing_outside_SafeMove_deletes_folders_recursively`)*
 - **INV-IDS-1** Identificadores persistidos são leaf names por contrato: no load, descartar entradas
   onde `Path.GetFileName(name) != name`; após cada `Path.Combine` com dados guardados, afirmar que o
-  path resolvido fica sob a raiz esperada. *(teste)*
+  path resolvido fica sob a raiz esperada. O nome de uma rack (que é uma chave do registo) é validado no load
+  e em cada escrita ou remoção por `RackSettingsSchema.IsValidRackName` (um segmento, sem `\` nem `/`, nem `.`/`..`,
+  até 255 caracteres): o mesmo critério do import (INV-REG-2). *(teste)*
 - **INV-FS-1** Toda a operação destrutiva sobre ficheiros do utilizador (mover, renomear, apagar,
   Reciclagem, criar pasta) passa por `Infrastructure/FileSystem/FileOperationBroker`: valida nomes e
   paths (`PathPolicy`), verifica pastas protegidas e aliases (via `SafeMove`/`SafeDelete`, que são
@@ -219,18 +222,39 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   *(teste: `RoutingPolicyTests`, `AutoRouteServiceTests`, `DesktopRouterTests`, `AutoRouteRegexSetterTests`)*
 
 - **INV-REG-1** Os valores globais do Racks no registo (`HKCU\SOFTWARE\Racks`: interruptores, marcadores de
-  migraÃ§Ã£o, `MainHwnd`) sÃ³ se leem e escrevem por `Infrastructure/Registry` (`AppSettings`,
-  `MigrationMarkers`); a apresentaÃ§Ã£o nÃ£o abre o registo (o que sobra, por rack, vive em
-  `Guards/registry-presentation-allowlist.json` e acaba em P6/P8). Um interruptor Ã© texto `True`/`False`
-  (REG_SZ); um valor em falta dÃ¡ o valor por omissÃ£o sem ruÃ­do (`IcePhysics` liga por omissÃ£o, o resto desligado);
-  um valor de tipo errado, lixo ou um registo ilegÃ­vel dÃ¡ o valor por omissÃ£o e **um** registo `SettingFallback` no
-  `audit.log` por nome (campo, valor em bruto encurtado, motivo, valor usado); nunca Ã© aplicado. Uma escrita
+  migração, `MainHwnd`) só se leem e escrevem por `Infrastructure/Registry` (`AppSettings`,
+  `MigrationMarkers`); a apresentação não abre o registo (a lista `Guards/registry-presentation-allowlist.json` está vazia desde P6). Um interruptor é texto `True`/`False`
+  (REG_SZ); um valor em falta dá o valor por omissão sem ruído (`IcePhysics` liga por omissão, o resto desligado);
+  um valor de tipo errado, lixo ou um registo ilegível dá o valor por omissão e **um** registo `SettingFallback` no
+  `audit.log` por nome (campo, valor em bruto encurtado, motivo, valor usado); nunca é aplicado. Uma escrita
   falhada devolve `false` e deixa um registo `SettingWriteFailed` (a interface segue como antes). Os
-  formatos gravados nÃ£o mudam (um build antigo lÃª o que este escreve): `MainHwnd` Ã© REG_SZ decimal, nÃ£o QWORD.
-  O esquema por rack (`Instances\*`) entra em P6. *(teste: `AppSettingsTests`, `MigrationMarkersTests`,
-  `SettingsAuditRecordTests`, `RegistryAccessGuardTests`; raiz de registo descartÃ¡vel
+  formatos gravados não mudam (um build antigo lê o que este escreve): `MainHwnd` é REG_SZ decimal, não QWORD.
+  O esquema por rack (`Instances\*`) é INV-REG-2. *(teste: `AppSettingsTests`, `MigrationMarkersTests`,
+  `SettingsAuditRecordTests`, `RegistryAccessGuardTests`; raiz de registo descartável
   `Software\RacksTests-<guid>`, nunca a chave Run real)*
 
+
+- **INV-REG-2** Os valores guardados por rack (`HKCU\SOFTWARE\Racks\Instances\<rack>`) e os 32 estilos
+  globais por omissão (raiz `HKCU\SOFTWARE\Racks`) só se leem e escrevem por
+  `Infrastructure/Registry/RackSettingsRepository`, a partir de **uma só tabela**, `RackSettingsSchema`
+  (nome, tipo, limites, valor por omissão, se o import o aceita, se é estilo global). Essa tabela deriva a lista
+  de importação (`RackLayoutIO`), o leitor, os escritores e a leitura dos estilos globais. No load cada valor
+  passa por `RackSettingsValidator` **antes** de chegar ao modelo e um valor inválido **nunca é aplicado**: números
+  em texto invariante primeiro e depois na cultura atual (`0.5` e `0,5` lêem-se em qualquer cultura), NaN/Infinity/
+  overflow recusados, limites por campo (`IconSize` 16-256 e `GridSize` 2-256 são cortados como os setters; os
+  outros números fora do intervalo são recusados e vale o valor por omissão), booleanos só `True`/`False`, enums só
+  membros definidos, fontes e cores só pelo `SafeWpfValues`, caminhos sem caracteres de controlo, nome da rack um
+  único segmento seguro. Listas ficam com os itens bons (um item mau é descartado). Cada rack é lida no seu próprio
+  `try`: **uma rack má nunca impede as outras**. Uma rack com `Name` inseguro é **saltada** e os seus dados ficam
+  intactos no registo (nunca apagados); sem `Name` usa-se o nome da chave. **Carregar nunca escreve** no registo (o
+  `Instance` é preenchido sob `SuspendPersistence`); as únicas escritas após um load são as duas migrações de uma
+  vez. Cada valor recusado, cortado ou descartado é **um** registo `SettingFallback` no `audit.log` (rack, campo,
+  valor em bruto até 200 caracteres, motivo, valor usado); um valor simplesmente em falta não gera registo. Uma
+  escrita falhada devolve `false` e deixa um registo `SettingWriteFailed`; nada disto lança para a interface. Os tipos
+  de valor gravados mantêm-se (inteiros REG_DWORD, interruptores `True`/`False`, listas como antes); os números
+  decimais passam a ser gravados em texto invariante. *(teste: `RackSettingsGoldenTests`, `RackSettingsValidationTests`,
+  `RackSettingsRepositoryTests`, `RackSettingsSchemaTests`; raiz descartável `Software\RacksTests-<guid>`, nunca
+  a chave real)*
 ---
 
 ## Achados

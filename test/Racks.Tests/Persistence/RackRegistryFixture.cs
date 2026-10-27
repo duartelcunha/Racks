@@ -2,6 +2,8 @@ using System.IO;
 using System.Globalization;
 using System.Reflection;
 using Microsoft.Win32;
+using Racks.Infrastructure.Registry;
+using Racks.Tests.Fakes;
 
 namespace Racks.Tests.Persistence;
 
@@ -15,19 +17,30 @@ namespace Racks.Tests.Persistence;
 public sealed class RackRegistryFixture : IDisposable
 {
     private readonly string _previousAppName = InstanceController.appName;
+    private readonly IRackSettingsStore _previousStore = Instance.Store;
 
     public string RootName { get; } = "RacksTests-" + Guid.NewGuid().ToString("N");
     public InstanceController Controller { get; }
+
+    /// <summary>Every audit record the settings layer writes while this fixture is alive.</summary>
+    public RecordingAuditSink Audit { get; } = new();
+
+    /// <summary>The settings store of this fixture (the real registry code over the throwaway root, audit recorded here).</summary>
+    public RackSettingsRepository Repository { get; }
 
     public RackRegistryFixture()
     {
         InstanceController.appName = RootName;
         Controller = new InstanceController { isInitializingInstances = true };
         Racks.MainWindow._controller = Controller;
+        Repository = new RackSettingsRepository(HkcuRackRegistry.ForApp(), HkcuRegistryRoot.ForApp(), Audit,
+            () => Registry.CurrentUser.OpenSubKey(RootPath, writable: true));
+        Instance.Store = Repository;
     }
 
     public void Dispose()
     {
+        Instance.Store = _previousStore;
         InstanceController.appName = _previousAppName;
         Racks.MainWindow._controller = null!;
         try { Registry.CurrentUser.DeleteSubKeyTree($@"SOFTWARE\{RootName}", throwOnMissingSubKey: false); } catch { }
@@ -61,6 +74,13 @@ public sealed class RackRegistryFixture : IDisposable
     public (object? Data, RegistryValueKind? Kind) RawRack(string keyName, string valueName)
     {
         using var key = Registry.CurrentUser.OpenSubKey(RackPath(keyName));
+        object? data = key?.GetValue(valueName);
+        return data == null ? (null, null) : (data, key!.GetValueKind(valueName));
+    }
+
+    public (object? Data, RegistryValueKind? Kind) RawRoot(string valueName)
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(RootPath);
         object? data = key?.GetValue(valueName);
         return data == null ? (null, null) : (data, key!.GetValueKind(valueName));
     }

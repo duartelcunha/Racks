@@ -20,10 +20,13 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 - **A bad auto-route rule can no longer stall Racks.** In the rule dialog, a pattern that is not valid, or that takes too long on a test name, is refused with a message and the previous rule stays. A rule that was already saved is never changed or deleted; if it turns out to be unusable, that rack simply does not auto-route and the reason is written to `audit.log`.
 - **Magic Organize in "Folders" mode** created desktop folders from the raw group name. Names with characters Windows does not allow (or `..`, or a reserved name) are now turned into a plain folder name, like in "Racks" mode.
 
+- **One damaged rack no longer stops the others.** If the saved settings of one rack contained something Racks could not read, the racks after it were not loaded at all and no rack was shown. Now each rack is read on its own: the damaged value is ignored (that setting keeps its normal default), the other racks and the other settings of that rack load as usual, and a line in `audit.log` says which value was ignored and why. A rack whose saved name is unsafe is skipped (its saved data stays untouched), and a rack with no saved name uses its registry key name.
+
 ### Changed
 - In a virtual rack, an item dragged out with a Move that Explorer completes as a copy (another drive) is no longer deleted from the rack's folder when it is the only copy of that file; the original stays in the rack until you remove it, so you may see it twice. Racks now only removes its own shortcuts and extra names of a file.
 - The uninstaller also removes `audit.log`, like `crash.log`.
 - A setting in the registry that Racks cannot use (wrong type or unreadable) now falls back to its default and leaves one line in `audit.log`; before, it was ignored silently. Nothing you saved is changed.
+- Rack settings are checked when they load: numbers that are not numbers (`NaN`, infinity) or are far outside what the settings window allows, unknown alignment values and similar are ignored and logged instead of being applied. Numbers are now saved with a dot whatever your Windows language (older versions saved a comma on some systems); both are read. Loading no longer rewrites your saved settings. If you go back to an older Racks version, decimal values saved with a dot may be ignored by it on a system that uses a decimal comma.
 - The installer is per-user only. The unsupported "install for all users" choice is gone. If you installed that way, uninstall that copy from Apps & Features after updating.
 
 ## [1.4.0] - 2026-10-10

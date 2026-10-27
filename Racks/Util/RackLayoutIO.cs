@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using Microsoft.Win32;
+using Racks.Infrastructure.Registry;
 
 namespace Racks.Util
 {
@@ -135,7 +136,7 @@ namespace Racks.Util
                     if (!_allowedValues.TryGetValue(kv.Key ?? "", out var spec)) continue; // unknown: dropped
                     if (!seen.Add(spec.Name))
                         throw new InvalidDataException($"Layout rack '{rack.Name}' sets '{spec.Name}' more than once.");
-                    if (spec.Kind == ValueKind.MultiString)
+                    if (spec.Kind == ImportSection.MultiString)
                         throw new InvalidDataException($"Layout rack '{rack.Name}' has '{spec.Name}' in the wrong section.");
 
                     // JSON null is skipped, as before. Anything else must be a JSON scalar; paths
@@ -146,20 +147,20 @@ namespace Racks.Util
                     if (e.ValueKind == JsonValueKind.Null) continue;
                     // An empty font or color is what a cleared settings box exports: the rack
                     // keeps its default, as it would on load.
-                    if (spec.Kind is ValueKind.FontFamily or ValueKind.Color
+                    if (spec.Kind is ImportSection.FontFamily or ImportSection.Color
                         && e.ValueKind == JsonValueKind.String && string.IsNullOrEmpty(e.GetString())) continue;
-                    bool ok = spec.Kind == ValueKind.Scalar
+                    bool ok = spec.Kind == ImportSection.Scalar
                         ? e.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False
                         : e.ValueKind == JsonValueKind.String;
                     if (!ok)
                         throw new InvalidDataException($"Layout rack '{rack.Name}' has an invalid {spec.Name}.");
                     string? s = e.ValueKind == JsonValueKind.String ? e.GetString() : null;
-                    if (spec.Kind == ValueKind.Path && IsNetworkOrDevicePath(s))
+                    if (spec.Kind == ImportSection.Path && IsNetworkOrDevicePath(s))
                         throw new InvalidDataException(NetworkPathMessage(rack.Name, spec.Name, s!));
-                    if ((spec.Kind == ValueKind.Path && !IsSafeImportedPath(s))
-                        || (spec.Kind == ValueKind.RackName && !IsValidRackName(s))
-                        || (spec.Kind == ValueKind.FontFamily && !SafeWpfValues.IsSafeFontFamily(s))
-                        || (spec.Kind == ValueKind.Color && !SafeWpfValues.IsSafeColor(s)))
+                    if ((spec.Kind == ImportSection.Path && !IsSafeImportedPath(s))
+                        || (spec.Kind == ImportSection.RackName && !IsValidRackName(s))
+                        || (spec.Kind == ImportSection.FontFamily && !SafeWpfValues.IsSafeFontFamily(s))
+                        || (spec.Kind == ImportSection.Color && !SafeWpfValues.IsSafeColor(s)))
                         throw new InvalidDataException($"Layout rack '{rack.Name}' has an unsafe {spec.Name}: '{Shorten(s)}'.");
 
                     clean.Values[spec.Name] = e;
@@ -168,7 +169,7 @@ namespace Racks.Util
                 foreach (var kv in rack.MultiStringValues ?? new Dictionary<string, string[]>())
                 {
                     if (!_allowedValues.TryGetValue(kv.Key ?? "", out var spec)) continue; // unknown: dropped
-                    if (spec.Kind != ValueKind.MultiString)
+                    if (spec.Kind != ImportSection.MultiString)
                         throw new InvalidDataException($"Layout rack '{rack.Name}' has '{spec.Name}' in the wrong section.");
                     if (!seen.Add(spec.Name))
                         throw new InvalidDataException($"Layout rack '{rack.Name}' sets '{spec.Name}' more than once.");
@@ -182,57 +183,24 @@ namespace Racks.Util
             return result;
         }
 
-        // A rack name is used verbatim as a registry subkey: it must be one safe segment.
-        private static bool IsValidRackName(string? name)
-            => !string.IsNullOrWhiteSpace(name)
-               && name.IndexOf('\\') < 0
-               && name.IndexOf('/') < 0
-               && name != "." && name != ".."
-               && name.Length <= 255;
+        // A rack name is used verbatim as a registry subkey: it must be one safe segment (the rule of the schema).
+        private static bool IsValidRackName(string? name) => RackSettingsSchema.IsValidRackName(name);
 
-        private enum ValueKind { Scalar, Path, RackName, FontFamily, Color, MultiString }
+        private readonly record struct ValueSpec(string Name, ImportSection Kind);
 
-        private readonly record struct ValueSpec(string Name, ValueKind Kind);
-
-        // Every per-rack value the app reads back (InstanceController.InitInstances) and nothing
-        // else. Keys are case-insensitive; ValueSpec.Name is the canonical spelling written.
+        // Every per-rack value the app reads back and nothing else: derived from RackSettingsSchema, the one table
+        // the loader and the writers use, so a new setting cannot be known to one and forgotten by the other.
+        // Keys are case-insensitive; ValueSpec.Name is the canonical spelling written.
         private static readonly Dictionary<string, ValueSpec> _allowedValues = BuildAllowList();
 
-        // For the guard test that keeps this list equal to what InitInstances reads.
+        // For the tests that keep this list equal to the schema.
         internal static IEnumerable<string> AllowedValueNames => _allowedValues.Values.Select(v => v.Name);
 
         private static Dictionary<string, ValueSpec> BuildAllowList()
         {
             var map = new Dictionary<string, ValueSpec>(StringComparer.OrdinalIgnoreCase);
-            void Add(ValueKind kind, params string[] names)
-            {
-                foreach (var n in names) map.Add(n, new ValueSpec(n, kind));
-            }
-            Add(ValueKind.Path, "Folder", "BackgroundImagePath");
-            Add(ValueKind.RackName, "Name");
-            Add(ValueKind.MultiString, "LastAccessedFiles", "CustomOrderFiles");
-            // WPF resolves these through parsers that can open a URI (INV-IMPORT-3).
-            Add(ValueKind.FontFamily, "TitleFontFamily", "ItemFontFamily");
-            Add(ValueKind.Color,
-                "TitleBarColor", "TitleTextColor", "BorderColor", "ListViewBackgroundColor",
-                "ActiveBackgroundColor", "ActiveBorderColor", "ActiveTitleTextColor",
-                "ListViewFontColor", "ListViewFontShadowColor");
-            Add(ValueKind.Scalar,
-                "PosX", "PosY", "Width", "Height", "IconSize", "IdleOpacity", "AnimationSpeed",
-                "MaxGrayScaleStrength", "GrayScaleEnabled", "GrayScaleEnabled_InactiveOnly",
-                "Minimized", "ShowHiddenFiles",
-                "LastAccesedToFirstRow", "EnableCustomItemsOrder", "ShowFileExtension",
-                "ShowFileExtensionIcon", "ShowHiddenFilesIcon", "ShowDisplayName", "IsLocked",
-                "ShowInGrid", "AutoExpandonCursor", "ShowShortcutArrow", "FolderOpenInsideFrame",
-                "HideTitleBarIconsWhenInactive", "SnapWidthToIconWidth",
-                "SnapWidthToIconWidth_PlusScrollbarWidth", "CheckFolderSize", "LinkOnDrop",
-                "MoveFilesOnDrop", "SnapToGrid", "GridSize", "AutoRouteRegex", "PinToTop",
-                "IsTransparent", "DropShadowEnabled", "GradientBackgroundEnabled", "DisableAnimations",
-                "IsDesktopFilterRack", "AssignedFiles", "TitleText",
-                "TitleTextAlignment", "BorderEnabled", "ActiveBorderEnabled",
-                "ActiveBackgroundEnabled", "ActiveTitleTextEnabled", "FileFilterRegex",
-                "FileFilterHideRegex", "Opacity", "SortBy", "FolderOrder", "ShowOnVirtualDesktops",
-                "TitleFontSize");
+            foreach (var d in RackSettingsSchema.All.Where(d => d.ImportAccepted))
+                map.Add(d.Name, new ValueSpec(d.Name, d.ImportSection));
             return map;
         }
 

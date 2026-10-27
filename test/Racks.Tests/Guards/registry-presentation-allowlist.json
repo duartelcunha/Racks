@@ -1,8 +1,3 @@
 {
-  "presentationReferences": {
-    "Racks/App.xaml.cs": { "count": 1, "why": "ReadRackTitlesByFolder reads Instances/*/Folder and TitleText for the uninstall report: per-rack persistence, moves with the rack repository in P6 and the App bootstrap split in P8." },
-    "Racks/MainWindow.xaml.cs": { "count": 1, "why": "Removing a rack deletes its Instances/<name> subkey (DeleteSubKeyTree): per-rack persistence, P6." },
-    "Racks/RackWindow.Menu.cs": { "count": 1, "why": "Removing a rack on the Desktop deletes its Instances/<name> subkey (DeleteSubKeyTree): per-rack persistence, P6." },
-    "Racks/SettingsWindow.xaml.cs": { "count": 2, "why": "\"Reset default style\" opens the Racks root key and hands it to DefaultStyleReset (the global rack style defaults are P6). The settings export runs reg.exe, which this guard cannot see." }
-  }
+  "presentationReferences": {}
 }

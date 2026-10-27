@@ -173,9 +173,7 @@ namespace Racks
                     "Your existing racks and your other settings are not changed.",
                     "Reset default style", "Reset", "Cancel")) return;
 
-            using RegistryKey? key = Registry.CurrentUser.OpenSubKey($"Software\\{InstanceController.appName}", writable: true);
-            if (key == null) return;
-            Racks.Core.DefaultStyleReset.Run(key);
+            Instance.Store.ResetGlobalStyleDefaults();
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
