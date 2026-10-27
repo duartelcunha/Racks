@@ -92,7 +92,7 @@ namespace Racks
             try { versionHeader.ToolTip = $"Racks {Process.GetCurrentProcess().MainModule?.FileVersionInfo.FileVersion}"; }
             catch { versionHeader.ToolTip = "Racks"; }
             _controller = new InstanceController();
-            _controller.InitInstances();
+            _controller.InitInstances(); // must not pump messages: rack services are null until ComposeRackServices
 
             ComposeRackServices();
             StartAutoRouting();
@@ -372,10 +372,10 @@ namespace Racks
 
         protected override void OnClosed(EventArgs e)
         {
-            _doubleClickHide.Dispose();
+            _doubleClickHide?.Dispose(); // null-safe: the ctor may have thrown before ComposeRackServices
             _desktopRouter?.Dispose();
             _autoRouteService?.Dispose();
-            _hotCorner.Dispose();
+            _hotCorner?.Dispose();
             _hotkeys.UnregisterAll();
             base.OnClosed(e);
         }

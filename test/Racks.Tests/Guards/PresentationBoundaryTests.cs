@@ -112,6 +112,8 @@ public class PresentationBoundaryTests
         // The one timer left is the tray-icon retry; polling (the hot corner) is a service with an injected scheduler.
         Assert.True(Regex.Matches(code, @"\bDispatcherTimer\b").Count <= 1, "MainWindow may own at most the tray retry timer.");
     }
+
+    [Fact]
     public void The_MainWindow_scanner_catches_what_it_claims_to()
     {
         string Hit(string snippet) => string.Join("|", MainWindowForbidden.Where(f => f.Pattern.IsMatch(StripComments(snippet))).Select(f => f.Why));

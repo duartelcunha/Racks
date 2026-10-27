@@ -9,7 +9,9 @@ exists to keep every dangerous operation in a few audited places.
 
 Folders were not moved to match these names. The table maps today's folders to layers; new code goes where
 the last column says. A dependency may only point **down** the table (Presentation can use Application, never
-the reverse).
+the reverse). One deliberate exception: interfaces that a use case needs (hook, hotkey, pointer probe) live in
+`Racks/UseCases/` and their Windows implementations in `Racks/Infrastructure/` implement them, so Infrastructure
+may reference those interfaces (dependency inversion), never the use-case logic.
 
 | Layer | What it may do | Folders today | New code goes in |
 |---|---|---|---|
