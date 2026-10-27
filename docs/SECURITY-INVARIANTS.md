@@ -139,13 +139,38 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   Falhas esperadas são um estado (`Rejected`/`Skipped`/`Failed`), nunca uma exceção. *(teste: `FileMutationGuardTests` falha se um ficheiro fora do gateway tiver mais chamadas
   `File.`/`Directory.` Move/Delete/Copy/CreateDirectory/SetAttributes/Replace/Write*/AppendAllText ou
   `.MoveTo(` do que `Guards/fs-allowlist.json` permite, e se algo fora do gateway referir
-  `SafeMove.`/`SafeDelete.`; `FileOperationBrokerTests`, `FileAuditSinkTests`)* Parcial: a allowlist
-  ainda tem 12 ficheiros (45 chamadas) por migrar na P2; só pode descer. Limites conhecidos do guard (não
+  `SafeMove.`/`SafeDelete.`; `FileOperationBrokerTests`, `FileAuditSinkTests`,
+  `BrokerEmptyDirUnlinkShortcutTests`, `ProtectedAncestorTests`)* Na P2 tudo o que toca em dados do
+  utilizador passou pelo broker: além de mover/renomear/apagar, o broker tem `DeleteEmptyDirectory` (uma
+  pasta vazia, nunca recursivo, recusa pastas protegidas, ligações e pastas com qualquer coisa dentro),
+  `Unlink` (só remove um *nome*: junção/symlink, ou um nome extra de hardlink cujo conteúdo continua
+  acessível por outro nome; recusa pasta real, ficheiro com um só nome e reparse points que não são
+  ligações, como placeholders do OneDrive) e `DeleteRacksShortcut` (só ficheiros simples `.lnk`/`.url` até 1 MiB,
+  diretamente dentro da pasta indicada pelo chamador e que não seja protegida; não há prova de que o Racks
+  criou o ficheiro, por isso o chamador passa a pasta de uma sandbox de rack). Migrados: o atalho órfão de uma rack
+  virtual, a pasta de rack esvaziada no Desktop, o nome de hardlink do workspace (`WorkspaceReturn`), as
+  pastas vazias do desfazer do Magic Organize, as junções do `RackMirror` e, no `UninstallCleanup`, os
+  renames (`MoveSameVolume`), os desligamentos de junções/hardlinks (`Unlink`) e a remoção de pastas vazias
+  (`DeleteEmptyDirectory`). A allowlist tem agora 9 ficheiros (32 chamadas, antes 12 ficheiros e 45), todos
+  estado do próprio Racks (logs, pasta `RacksWorkspace` e `desktop.ini`, pasta-raiz das junções, sandboxes
+  vazias em `VirtualFrames`, relatório/nota do uninstall, ficheiro temporário do updater, export do
+  layout) ou uma cópia sem apagar (o `.url` do `ShortcutFactory`); só pode descer. Limites conhecidos do guard (não
   vê chamadas por variável como `info.Delete()`, `File.Create`/`FileStream`, chamadas Win32/shell,
   `Process.Start`, nem código em `tools/`) estão no cabeçalho do teste; o guard impede o desvio fácil,
   não substitui a revisão. O guard exige contagem *igual* à da allowlist (a mais ou a menos falha).
-  Limites herdados do `SafeMove`: (1) a proteção é por igualdade com a pasta protegida, por isso um
-  caminho que *contém* uma pasta protegida (por exemplo `C:\Users`) não é recusado (P2); (2) sobre SMB o
+  Proteção por contenção (P2): `Move`, `MoveSameVolume`, `Rename`, `DeleteTree` e `DeleteToRecycleBin`
+  recusam também uma origem que seja ANTECESSORA de uma pasta protegida (`%USERPROFILE%\AppData`,
+  `C:\Users`, a raiz do OneDrive quando o Desktop/Documentos estão redirecionados para lá, a raiz de uma
+  partilha UNC onde estão), com o texto "folder that contains a protected system folder (...)". A
+  comparação é sobre caminhos canónicos com prefixo e barra final, por isso `C:\Users\a` não é antecessor de
+  `C:\Users\ab`; pastas *dentro* de uma pasta protegida (um ficheiro no Desktop, `Documentos\Projetos`, o
+  workspace, as sandboxes) continuam permitidas. Num `Rename` ou `Unlink` olha-se para o item em si, não para
+  o alvo: cada pasta protegida é comparada na forma resolvida, na forma "pai resolvido + nome próprio" (o
+  caminho de uma junção que realocou o Desktop/Documentos/AppData para outro disco) e na forma que o
+  Windows devolve, e um nome 8.3 do item é expandido; por isso a junção que *é* a pasta protegida
+  recusa-se, e uma ligação qualquer que apenas aponta para ela (numa rack) renomeia-se e desliga-se.
+  Limites herdados do `SafeMove`: (1) a proteção por contenção só vê as pastas da lista protegida; uma pasta
+  de utilizador fora dela (por exemplo uma pasta de projetos) continua a ser movível por desenho; (2) sobre SMB o
   `GetFinalPathNameByHandle` devolve a forma UNC, por isso `\\localhost\C$\Users\eu\Desktop` NÃO é
   reconhecido como o Desktop; o `PathPolicy` recusa por isso partilhas administrativas (`X$`, `ADMIN$`),
   com o custo de uma rack não poder mover ficheiros para uma partilha administrativa de outra máquina.

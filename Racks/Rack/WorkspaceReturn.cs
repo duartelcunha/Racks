@@ -25,7 +25,9 @@ public static class WorkspaceReturn
             && new FileInfo(from).Length == new FileInfo(wanted).Length)
         {
             // Ctrl+drop left the original on the Desktop and a second name here: same data.
-            try { File.Delete(from); return wanted; } catch { return null; }
+            return FileOperationBroker.Default.Unlink(from, "return from workspace: drop the duplicate name (the Desktop name keeps the data)").Succeeded
+                ? wanted
+                : null;
         }
 
         string target = wanted;

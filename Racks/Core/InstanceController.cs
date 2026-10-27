@@ -25,13 +25,15 @@ public class InstanceController
         appName,
         "VirtualFrames");
 
-    public static bool IsInsideVirtualFramesRoot(string path)
+    public static bool IsInsideVirtualFramesRoot(string path) => IsInsideRoot(path, VirtualFramesRoot);
+
+    internal static bool IsInsideRoot(string path, string rootPath)
     {
         if (string.IsNullOrEmpty(path)) return false;
         try
         {
             string full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
-            string root = Path.GetFullPath(VirtualFramesRoot).TrimEnd(Path.DirectorySeparatorChar);
+            string root = Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar);
             return full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(full, root, StringComparison.OrdinalIgnoreCase);
         }

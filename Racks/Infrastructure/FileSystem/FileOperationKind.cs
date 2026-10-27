@@ -8,4 +8,7 @@ public enum FileOperationKind
     DeleteToRecycleBin,
     DeleteTree,
     CreateDirectory,
+    DeleteEmptyDirectory,
+    Unlink,
+    DeleteRacksShortcut,
 }

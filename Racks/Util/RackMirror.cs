@@ -93,10 +93,10 @@ namespace Racks.Util
             {
                 try
                 {
-                    if (!JunctionHelper.IsReparsePoint(existing)) continue;
-                    if (Directory.Exists(existing)) Directory.Delete(existing, recursive: false);
-                    else File.Delete(existing);
-                    removed++;
+                    if (!JunctionHelper.IsLink(existing)) continue;
+                    if (Racks.Infrastructure.FileSystem.FileOperationBroker.Default
+                            .Unlink(existing, "rack mirror: remove a junction Racks created").Succeeded)
+                        removed++;
                 }
                 catch { /* best-effort */ }
             }

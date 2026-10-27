@@ -101,13 +101,10 @@ namespace Racks
 
                     // Virtual (shortcut) rack: if Explorer moved the shortcut out, remove the
                     // orphan from our sandbox.
-                    if (effect == DragDropEffects.Move && Instance.IsShortcutsOnly && !string.IsNullOrEmpty(Instance.Folder))
+                    // Only for a sandbox folder: a duplicated Desktop rack is shortcuts-only too, but its folder is the real Desktop.
+                    if (effect == DragDropEffects.Move)
                     {
-                        string shortcutPath = System.IO.Path.Combine(Instance.Folder, fileItem.Name);
-                        if (System.IO.File.Exists(shortcutPath))
-                        {
-                            try { System.IO.File.Delete(shortcutPath); } catch { }
-                        }
+                        Racks.Rack.OrphanShortcutCleanup.RemoveForRack(Instance.IsShortcutsOnly, Instance.Folder, fileItem.Name);
                     }
                 }
             }

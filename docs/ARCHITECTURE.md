@@ -28,7 +28,7 @@ There is no DI container. `App.OnStartup` wires services by hand; the legacy sta
    facade over the internal `SafeMove` and `SafeDelete`). It validates names and paths (`PathPolicy`),
    canonicalizes, rejects protected roots, never follows reparse points blindly and writes one audit record per
    call (`%AppData%\Racks\audit.log`). `Guards/FileMutationGuardTests` fails on raw `File`/`Directory` mutations
-   outside it, except those listed in `Guards/fs-allowlist.json` (the list only shrinks; P2 shrinks it).
+   outside it, except those listed in `Guards/fs-allowlist.json` (the list only shrinks; after P2 it holds only Racks-owned state).
 2. **The registry is read and written through a typed schema + repository** (phase P6). A bad value is rejected,
    logged with field, raw value, reason and fallback, and never applied.
 3. **Presentation does not touch the registry, mutate files, call shell notifications or the updater.**

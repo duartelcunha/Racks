@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Racks.Util
 {
@@ -69,7 +70,7 @@ namespace Racks.Util
                 return Result.Rejected;
             }
 
-            if (IsProtectedPath(src, out string kind))
+            if (IsProtectedOrAncestorPath(src, out string kind))
             {
                 reason = $"\"{TryGetLeafName(src)}\" is a {kind} — refusing to move.";
                 return Result.Rejected;
@@ -198,32 +199,127 @@ namespace Racks.Util
         }
 
         internal static bool IsProtectedPath(string path, out string kind)
-            => IsProtectedCanonical(Canonicalize(path), out kind);
+            => MatchProtected(Canonicalize(path), ProtectedRoots(), includeAncestors: false, out kind);
 
-        // For operations that act on the item ITSELF and never on what it points to (renaming a
-        // junction or symlink): canonicalize the parent folder, keep the leaf as it is, and compare
-        // that. A Ctrl+dropped reference to Documents is a link inside a rack and is not Documents;
+        // Like IsProtectedPath, but ALSO true for a path that CONTAINS a protected folder (an ancestor):
+        // %USERPROFILE%\AppData, C:\Users, the OneDrive root when Desktop/Documents are redirected into it.
+        // Moving or deleting such a folder takes the protected folder with it, so equality is not enough.
+        internal static bool IsProtectedOrAncestorPath(string path, out string kind)
+            => MatchProtected(Canonicalize(path), ProtectedRoots(), includeAncestors: true, out kind);
+
+        // For operations that act on the item ITSELF and never on what it points to (renaming or
+        // unlinking a junction or symlink): canonicalize the parent folder, keep the leaf as it is, and
+        // compare that. A Ctrl+dropped reference to Documents is a link inside a rack and is not Documents;
         // the real Documents folder still matches.
         internal static bool IsProtectedLink(string path, out string kind)
+            => MatchProtected(CanonicalizeLink(path), ProtectedRoots(), includeAncestors: false, out kind);
+
+        // IsProtectedLink plus the ancestor rule of IsProtectedOrAncestorPath.
+        internal static bool IsProtectedOrAncestorLink(string path, out string kind)
+            => MatchProtected(CanonicalizeLink(path), ProtectedRoots(), includeAncestors: true, out kind);
+
+        // The item's own path: the parent folder resolved, the leaf kept (a link is not followed). An 8.3
+        // spelling of the leaf is expanded to the long name (GetLongPathName does not follow links).
+        private static string CanonicalizeLink(string path)
         {
             string trimmed = Path.TrimEndingDirectorySeparator(path);
             string? parent = Path.GetDirectoryName(trimmed);
             string leaf = Path.GetFileName(trimmed);
-            if (string.IsNullOrEmpty(parent) || string.IsNullOrEmpty(leaf)) return IsProtectedPath(path, out kind);
+            if (string.IsNullOrEmpty(parent) || string.IsNullOrEmpty(leaf)) return Canonicalize(path);
             string canonicalParent = Canonicalize(parent).TrimEnd(Path.DirectorySeparatorChar);
-            return IsProtectedCanonical(canonicalParent + Path.DirectorySeparatorChar + leaf, out kind);
+            return ExpandShortName(canonicalParent + Path.DirectorySeparatorChar + leaf);
         }
 
-        private static bool IsProtectedCanonical(string full, out string kind)
+        private static string ExpandShortName(string path)
+        {
+            try
+            {
+                var sb = new StringBuilder(1024);
+                uint n = GetLongPathNameW(path, sb, (uint)sb.Capacity);
+                if (n > 0 && n < sb.Capacity) return StripPrefix(sb.ToString());
+            }
+            catch { }
+            return path;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern uint GetLongPathNameW(string lpszShortPath, StringBuilder lpszLongPath, uint cchBuffer);
+
+        // Test seam: extra folders treated as protected on THIS thread only (the broker runs synchronously
+        // on the caller's thread), so parallel tests cannot see each other's roots.
+        [ThreadStatic] private static List<string>? t_extraProtectedFolders;
+
+        internal static IDisposable UseProtectedFoldersForTest(params string[] folders)
+        {
+            t_extraProtectedFolders = [.. folders];
+            return new ExtraRootsScope();
+        }
+
+        private sealed class ExtraRootsScope : IDisposable
+        {
+            public void Dispose() => t_extraProtectedFolders = null;
+        }
+
+        // The protected folders, already canonicalized, each with the label shown to the user.
+        // Callers canonicalize (resolve 8.3 short names, \\?\ prefixes, subst drives, junctions and
+        // symlinks) BEFORE comparing. A literal string compare could be bypassed by an alias of a
+        // protected folder (an 8.3 name, or a junction whose target is the Desktop), letting SafeMove
+        // move/delete the real protected folder. Limit: over SMB GetFinalPathNameByHandle returns the
+        // UNC form, so an admin-share spelling of a local folder (\\localhost\C$\Users\me\Desktop) does
+        // NOT match; the broker's PathPolicy refuses admin shares for that reason.
+        //
+        // Each folder is listed in every spelling a caller may compare against: fully resolved (what a
+        // path-following check sees), with only its parent resolved and the leaf kept (what an item-itself
+        // check sees: when Desktop/Documents/AppData were relocated with a junction, the junction's own path
+        // is that form and the resolved form is its target), and as the raw string Windows reports.
+        private static List<(string Path, string Kind)> ProtectedRoots()
+        {
+            var raw = new List<(string Path, string Kind)>();
+            foreach (var sf in _protectedSpecialFolders)
+            {
+                string sfPath;
+                try { sfPath = Environment.GetFolderPath(sf); }
+                catch { continue; }
+                if (string.IsNullOrEmpty(sfPath)) continue;
+                raw.Add((sfPath, $"protected system folder ({sf})"));
+            }
+
+            // Downloads isn't in the SpecialFolder enum, so add the standard path.
+            try
+            {
+                string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                raw.Add((Path.Combine(profile, "Downloads"), "user folder (Downloads)"));
+            }
+            catch { }
+
+            if (t_extraProtectedFolders != null)
+                foreach (var extra in t_extraProtectedFolders) raw.Add((extra, "protected test folder"));
+
+            var roots = new List<(string Path, string Kind)>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (path, kind) in raw)
+            {
+                foreach (var form in Spellings(path))
+                    if (!string.IsNullOrEmpty(form) && seen.Add(kind + "|" + form)) roots.Add((form, kind));
+            }
+            return roots;
+        }
+
+        private static IEnumerable<string> Spellings(string path)
+        {
+            yield return Canonicalize(path);
+            yield return CanonicalizeLink(path);
+            string? full = null;
+            try { full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar); } catch { }
+            if (full != null) yield return full;
+        }
+
+        // Pure (no I/O): is the canonical path <full> a drive root, equal to one of the canonical
+        // <roots>, or (when asked) a folder that CONTAINS one of them? The containment test is a prefix
+        // test on a trailing separator, so "C:\Users\a" is not an ancestor of "C:\Users\ab\Desktop".
+        internal static bool MatchProtected(string full, IReadOnlyList<(string Path, string Kind)> roots, bool includeAncestors, out string kind)
         {
             kind = "";
-            // The caller canonicalized (resolved 8.3 short names, \\?\ prefixes, subst drives,
-            // junctions/symlinks) BEFORE comparing. A literal string compare could be bypassed by an
-            // alias of a protected folder (an 8.3 name, or a junction whose target is the Desktop),
-            // letting SafeMove move/delete the real protected folder. Limit: over SMB
-            // GetFinalPathNameByHandle returns the UNC form, so an admin-share spelling of a local
-            // folder (\\localhost\C$\Users\me\Desktop) does NOT match; the broker's PathPolicy
-            // refuses admin shares for that reason.
             if (string.IsNullOrEmpty(full)) return false;
 
             // Drive root: "C:" or "C:\".
@@ -233,31 +329,29 @@ namespace Racks.Util
                 return true;
             }
 
-            foreach (var sf in _protectedSpecialFolders)
+            foreach (var (rootPath, rootKind) in roots)
             {
-                string sfPath;
-                try { sfPath = Environment.GetFolderPath(sf); }
-                catch { continue; }
-                if (string.IsNullOrEmpty(sfPath)) continue;
-                if (string.Equals(full, Canonicalize(sfPath), StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrEmpty(rootPath)) continue;
+                if (string.Equals(full, rootPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    kind = $"protected system folder ({sf})";
+                    kind = rootKind;
                     return true;
                 }
             }
 
-            // Downloads isn't in the SpecialFolder enum, so check the standard path.
-            try
+            if (includeAncestors)
             {
-                string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                string downloads = Path.Combine(profile, "Downloads");
-                if (string.Equals(full, Canonicalize(downloads), StringComparison.OrdinalIgnoreCase))
+                string prefix = full.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                foreach (var (rootPath, rootKind) in roots)
                 {
-                    kind = "user folder (Downloads)";
-                    return true;
+                    if (string.IsNullOrEmpty(rootPath)) continue;
+                    if (rootPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        kind = "folder that contains a " + rootKind;
+                        return true;
+                    }
                 }
             }
-            catch { }
 
             return false;
         }

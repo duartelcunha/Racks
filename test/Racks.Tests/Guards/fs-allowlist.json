@@ -1,16 +1,13 @@
 {
   "rawMutations": {
-    "Racks/Core/DesktopIconManager.cs": { "count": 7, "why": "Creates and styles the RacksWorkspace folder, its hidden icon and desktop.ini and writes the library file: the app's own folder, not user data. Moves to the broker or a shell gateway in P2/P3." },
-    "Racks/Core/MagicOrganizeUndo.cs": { "count": 1, "why": "Directory.Delete(f) of a folder Magic Organize created, only when it is empty (non-recursive). P2 moves it to the broker." },
-    "Racks/Rack/WorkspaceReturn.cs": { "count": 1, "why": "File.Delete of the workspace hardlink of a Ctrl+dropped file (the Desktop name keeps the same data). P2 moves it to the broker." },
-    "Racks/RackWindow.DragDrop.cs": { "count": 3, "why": "Deletes the shortcut Racks itself created in a virtual rack after Explorer moved it out (1), and creates the VirtualFrames root and a new rack sandbox (2). P2 moves them to the broker." },
-    "Racks/RackWindow.Menu.cs": { "count": 1, "why": "Directory.Delete(folder, false) of a rack folder on the Desktop that was just emptied (non-recursive, fails if anything is left). P2 moves it to the broker." },
+    "Racks/Core/DesktopIconManager.cs": { "count": 7, "why": "Creates and styles the RacksWorkspace folder (Racks' own folder), its hidden icon and desktop.ini, and writes the library file. Never touches a user file. Shell gateway work is P3." },
+    "Racks/RackWindow.DragDrop.cs": { "count": 2, "why": "CreateDirectory of the VirtualFrames root and of a new rack sandbox under %AppData%\\Racks: Racks-owned state, created empty, never a user folder." },
     "Racks/Util/CrashLog.cs": { "count": 3, "why": "Appends to and rotates the app's own logs (crash.log, audit.log) under AppData. Not user data." },
     "Racks/Util/JunctionHelper.cs": { "count": 5, "why": "Creates the junction directory and removes it again on failure, plus its debug log. Operates on directories Racks just created." },
     "Racks/Util/RackLayoutIO.cs": { "count": 1, "why": "Writes the exported layout JSON to the file the user picked in the save dialog (a write, not a delete). P9 reviews it with the import/export rework." },
-    "Racks/Util/RackMirror.cs": { "count": 4, "why": "Maintains the junction mirror folder under AppData (create root, remove stale reparse points only, non-recursive). The app's own folder, not user data. P2 reviews it." },
-    "Racks/Util/ShortcutFactory.cs": { "count": 1, "why": "Copies a dropped .url shortcut file into the rack under a unique name (File.Copy never overwrites). P2 moves it to the broker." },
-    "Racks/Util/UninstallCleanup.cs": { "count": 15, "why": "Rename-only return of user files on uninstall plus cleanup of the app's own folders (INV-UNINSTALL-1). Runs in a separate process; P2 moves the moves to MoveSameVolume and shrinks this." },
+    "Racks/Util/RackMirror.cs": { "count": 2, "why": "CreateDirectory of the mirror root %USERPROFILE%\\Racks (Racks' own folder, created empty; the junctions inside go through FileOperationBroker.Unlink)." },
+    "Racks/Util/ShortcutFactory.cs": { "count": 1, "why": "Copies a dropped .url file into the rack under a unique name: File.Copy never overwrites and the source is left where it was. A copy, not a move or a delete." },
+    "Racks/Util/UninstallCleanup.cs": { "count": 8, "why": "Only Racks' own files and folders in the uninstall process: its report, the kept-files note, desktop.ini and the icon, the Quick Access library file, and CreateDirectory of the workspace and of a missing Desktop. All moves, unlinks and folder removals of user data go through the broker (INV-UNINSTALL-1)." },
     "Racks/Util/Updater.cs": { "count": 3, "why": "Creates the private installer file and deletes the files and folder of its own per-run temp directory (Racks-update-<guid>). Not user data; P10 reworks the updater." }
   },
   "primitiveReferences": {}

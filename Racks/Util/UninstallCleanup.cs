@@ -1,4 +1,5 @@
 using System.IO;
+using Racks.Infrastructure.FileSystem;
 
 namespace Racks.Util;
 
@@ -57,6 +58,10 @@ public static class UninstallCleanup
     internal const string WorkspaceIcon = ".RacksIcon.ico";
     internal const string KeptNoteName = "Racks - files not returned.txt";
 
+    // Every move, unlink and folder removal of USER data goes through the broker (INV-FS-1) and leaves an
+    // audit record. The rest of this class touches only Racks' own files (report, note, desktop.ini, library).
+    private static FileOperationBroker Broker => FileOperationBroker.Default;
+
     public static CleanupReport Run(
         CleanupPaths paths,
         IReadOnlyDictionary<string, string>? sandboxTitles = null,
@@ -68,7 +73,7 @@ public static class UninstallCleanup
         foreach (var entry in Entries(paths.Workspace))
         {
             if (IsRacksOwnedFile(Path.GetFileName(entry))) continue;
-            ReturnToDesktop(entry, paths.Desktop, report);
+            ReturnToDesktop(entry, paths.Desktop, report, "uninstall");
         }
 
         // 2. Files moved into per-rack sandboxes under %AppData%\Racks\VirtualFrames.
@@ -77,12 +82,12 @@ public static class UninstallCleanup
         {
             if (JunctionHelper.IsReparsePoint(sandbox) || !Directory.Exists(sandbox))
             {
-                ReturnToDesktop(sandbox, paths.Desktop, report);
+                ReturnToDesktop(sandbox, paths.Desktop, report, "uninstall");
                 continue;
             }
             foreach (var entry in Entries(sandbox))
-                ReturnToDesktop(entry, paths.Desktop, report);
-            if (!TryDeleteEmptyDirectory(sandbox)) leftoverSandboxes.Add(sandbox);
+                ReturnToDesktop(entry, paths.Desktop, report, "uninstall");
+            if (!TryDeleteEmptyDirectory(sandbox, "uninstall")) leftoverSandboxes.Add(sandbox);
         }
 
         // 3. Sandboxes that still hold something move next to the workspace leftovers, named
@@ -94,7 +99,12 @@ public static class UninstallCleanup
                 Directory.CreateDirectory(paths.Workspace);
                 string title = TitleFor(sandbox, sandboxTitles);
                 string dest = FreePath(paths.Workspace, RackMirror.Sanitize(title), isDirectory: true);
-                Directory.Move(sandbox, dest);
+                var moved = Broker.MoveSameVolume(sandbox, dest, "uninstall: keep a rack folder that could not be emptied, next to the workspace");
+                if (!moved.Completed)
+                {
+                    report.Errors.Add($"{sandbox}: {moved.Reason}");
+                    report.KeptFolders.Add(sandbox);
+                }
             }
             catch (Exception ex)
             {
@@ -102,7 +112,7 @@ public static class UninstallCleanup
                 report.KeptFolders.Add(sandbox);
             }
         }
-        TryDeleteEmptyDirectory(paths.VirtualFramesRoot);
+        TryDeleteEmptyDirectory(paths.VirtualFramesRoot, "uninstall");
 
         // 4. The workspace itself: gone if empty, otherwise a normal visible folder with a note.
         FinishWorkspace(paths.Workspace, report);
@@ -110,7 +120,7 @@ public static class UninstallCleanup
         // 5. Shell integration Racks created: Quick Access pin, mirror junctions, library.
         if (touchShell) RackMirror.UnpinFromQuickAccess();
         RackMirror.RemoveJunctions(paths.MirrorRoot);
-        TryDeleteEmptyDirectory(paths.MirrorRoot);
+        TryDeleteEmptyDirectory(paths.MirrorRoot, "uninstall");
         try { if (File.Exists(paths.LibraryFile)) File.Delete(paths.LibraryFile); }
         catch (Exception ex) { report.Errors.Add($"{paths.LibraryFile}: {ex.Message}"); }
 
@@ -133,22 +143,24 @@ public static class UninstallCleanup
     {
         var report = new CleanupReport();
         foreach (var entry in Entries(folder))
-            ReturnToDesktop(entry, desktop, report);
-        if (!TryDeleteEmptyDirectory(folder)) report.KeptFolders.Add(folder);
+            ReturnToDesktop(entry, desktop, report, "remove rack");
+        if (!TryDeleteEmptyDirectory(folder, "remove rack")) report.KeptFolders.Add(folder);
         return report;
     }
 
-    private static void ReturnToDesktop(string entry, string desktop, CleanupReport report)
+    // context: "uninstall" or "remove rack", the start of every audit reason written from here.
+    private static void ReturnToDesktop(string entry, string desktop, CleanupReport report, string context)
     {
         string name = Path.GetFileName(entry);
         try
         {
             // A junction or symlink is only a pointer (Link on drop). The data lives at the target.
-            if (JunctionHelper.IsReparsePoint(entry))
+            // (Another kind of reparse point, such as a cloud placeholder, is real data: it is renamed below.)
+            if (JunctionHelper.IsLink(entry))
             {
-                if (Directory.Exists(entry)) Directory.Delete(entry, recursive: false);
-                else File.Delete(entry);
-                report.Unlinked++;
+                var unlinked = Broker.Unlink(entry, context + ": unlink a Ctrl+dropped link (the data stays at its target)");
+                if (unlinked.Succeeded) report.Unlinked++;
+                else Keep(report, $"{name}: {unlinked.Reason}");
                 return;
             }
 
@@ -157,8 +169,9 @@ public static class UninstallCleanup
             // A hard link with another name elsewhere: the data survives under that name.
             if (!isDirectory && HardlinkHelper.GetLinkCount(entry) > 1)
             {
-                File.Delete(entry);
-                report.Unlinked++;
+                var unlinked = Broker.Unlink(entry, context + ": remove an extra hard link name (the data stays under its other name)");
+                if (unlinked.Succeeded) report.Unlinked++;
+                else Keep(report, $"{name}: {unlinked.Reason}");
                 return;
             }
 
@@ -173,18 +186,18 @@ public static class UninstallCleanup
             {
                 string dest = Path.Combine(desktop, CandidateName(name, isDirectory, attempt));
                 if (File.Exists(dest) || Directory.Exists(dest)) continue;
-                try
+
+                // Rename only, never overwrite, never a cross-volume copy.
+                var moved = Broker.MoveSameVolume(entry, dest, context + ": give the item back to the Desktop");
+                if (moved.Completed)
                 {
-                    if (isDirectory) Directory.Move(entry, dest);
-                    else File.Move(entry, dest, overwrite: false);
                     report.Returned++;
                     report.ReturnedPaths.Add(dest);
                     return;
                 }
-                catch (IOException) when (File.Exists(dest) || Directory.Exists(dest))
-                {
-                    // Something took the name between the check and the move. Try the next one.
-                }
+                if (moved.Status == OperationStatus.Skipped) continue; // something took the name since the check: try the next one
+                Keep(report, $"{name}: {moved.Reason}");
+                return;
             }
             Keep(report, $"{name}: no free name on the Desktop.");
         }
@@ -247,7 +260,7 @@ public static class UninstallCleanup
         if (remaining.Count == 0)
         {
             try { File.Delete(Path.Combine(workspace, KeptNoteName)); } catch { }
-            TryDeleteEmptyDirectory(workspace);
+            TryDeleteEmptyDirectory(workspace, "uninstall");
             return;
         }
 
@@ -300,15 +313,23 @@ public static class UninstallCleanup
         catch { return new(); }
     }
 
-    private static bool TryDeleteEmptyDirectory(string dir)
+    private static bool TryDeleteEmptyDirectory(string dir, string context)
     {
         try
         {
             if (!Directory.Exists(dir)) return true;
             if (Directory.EnumerateFileSystemEntries(dir).Any()) return false;
-            new DirectoryInfo(dir).Attributes = FileAttributes.Directory;
-            Directory.Delete(dir, recursive: false);
-            return true;
+
+            string reason = context + ": remove an empty folder";
+            var result = Broker.DeleteEmptyDirectory(dir, reason);
+            if (result.Status == OperationStatus.Failed)
+            {
+                // A read-only/hidden/system folder (the workspace is one) can't be removed as it is. It is
+                // empty, so clearing its attributes loses nothing; then try once more.
+                new DirectoryInfo(dir).Attributes = FileAttributes.Directory;
+                result = Broker.DeleteEmptyDirectory(dir, reason);
+            }
+            return result.Succeeded;
         }
         catch { return false; }
     }
