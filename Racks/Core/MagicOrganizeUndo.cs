@@ -52,7 +52,7 @@ namespace Racks.Core
 
                     if (Racks.Infrastructure.FileSystem.FileOperationBroker.Default.Move(m.NewPath, m.OriginalPath, "magic organize: undo").Completed)
                     {
-                        Racks.Util.Interop.NotifyShellMove(m.NewPath, m.OriginalPath, Directory.Exists(m.OriginalPath));
+                        Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyItemMoved(m.NewPath, m.OriginalPath, Directory.Exists(m.OriginalPath));
                         restored++;
                     }
                 }

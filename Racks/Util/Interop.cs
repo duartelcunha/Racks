@@ -109,12 +109,7 @@ namespace Racks.Util
         // Without this, after we move a file off the Desktop, Explorer's view caches
         // the icon for several seconds and the user sees a "ghost" of the old file.
         [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        public static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
-
-        public static void RefreshDesktop()
-        {
-            SHChangeNotify(0x08000000, 0x0000, IntPtr.Zero, IntPtr.Zero); // SHCNE_ALLEVENTS
-        }
+        internal static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
 
         public const int SHCNE_RENAMEITEM = 0x00000001;
         public const int SHCNE_CREATE = 0x00000002;
@@ -133,7 +128,7 @@ namespace Racks.Util
         // batch. NotifyShellMove fires the "this got renamed/moved" event for a single
         // path. NotifyShellUpdateDir refreshes a folder view (use on the source parent
         // after a batch so the Desktop redraws without F5).
-        public static void NotifyShellMove(string oldPath, string newPath, bool isDirectory)
+        internal static void NotifyShellMove(string oldPath, string newPath, bool isDirectory)
         {
             try
             {
@@ -149,7 +144,7 @@ namespace Racks.Util
             catch { /* notification is best-effort; never fail the move because of it */ }
         }
 
-        public static void NotifyShellUpdateDir(string folderPath)
+        internal static void NotifyShellUpdateDir(string folderPath)
         {
             if (string.IsNullOrEmpty(folderPath)) return;
             try

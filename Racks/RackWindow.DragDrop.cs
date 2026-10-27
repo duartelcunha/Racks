@@ -401,7 +401,7 @@ namespace Racks
 
                     if (Instance.IsDesktopFilterRack)
                     {
-                        destinationDir = DesktopIconManager.RacksWorkspacePath;
+                        destinationDir = Racks.Infrastructure.Shell.ShellOperationGateway.Default.WorkspacePath;
                     }
 
                     string destinationPath = Path.Combine(destinationDir, Path.GetFileName(file));
@@ -458,7 +458,7 @@ namespace Racks
                                 var moveResult = Infrastructure.FileSystem.FileOperationBroker.Default.Move(file, destinationPath, "drop into desktop rack");
                                 if (moveResult.Completed)
                                 {
-                                    Util.Interop.NotifyShellMove(file, destinationPath, isDirectory: srcIsDir);
+                                    Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyItemMoved(file, destinationPath, isDirectory: srcIsDir);
                                     ReassignDesktopFileToThisRack(destinationPath);
                                     droppedPaths.Add(destinationPath);
                                 }
@@ -482,7 +482,7 @@ namespace Racks
                                 var moveResult = Infrastructure.FileSystem.FileOperationBroker.Default.Move(file, destinationPath, "drop into rack");
                                 if (moveResult.Completed)
                                 {
-                                    Util.Interop.NotifyShellMove(file, destinationPath, isDirectory: srcIsDir);
+                                    Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyItemMoved(file, destinationPath, isDirectory: srcIsDir);
                                     droppedPaths.Add(destinationPath);
                                 }
                                 else
@@ -520,7 +520,7 @@ namespace Racks
 
                 foreach (var parent in sourceParents)
                 {
-                    Util.Interop.NotifyShellUpdateDir(parent);
+                    Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyDirectoryChanged(parent);
                 }
 
                 // Surface any guard-rail messages from the file broker in a single dialog
@@ -577,8 +577,8 @@ namespace Racks
                     string moveReason = moveResult.Reason;
                     if (moveResult.Completed)
                     {
-                        Util.Interop.NotifyShellMove(firstDroppedFile, dest, isDirectory: srcIsDir);
-                        Util.Interop.NotifyShellUpdateDir(Path.GetDirectoryName(firstDroppedFile)!);
+                        Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyItemMoved(firstDroppedFile, dest, isDirectory: srcIsDir);
+                        Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyDirectoryChanged(Path.GetDirectoryName(firstDroppedFile)!);
                     }
                     else
                     {
