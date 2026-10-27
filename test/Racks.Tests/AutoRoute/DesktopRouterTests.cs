@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using Racks.UseCases.AutoRoute;
 using Racks.Infrastructure.FileSystem;
@@ -9,7 +10,7 @@ namespace Racks.Tests.AutoRoute;
 
 // The thin watcher: debounce, de-duplication and recovery from watcher errors. Time is a ManualScheduler, the UI
 // thread is "run it now", and the FileSystemWatcher comes from a factory, so nothing here waits or watches the
-// real Desktop.
+// real Desktop. Events of those watchers are parked, never run (see Post).
 public sealed class DesktopRouterTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "racks-router-" + Guid.NewGuid().ToString("N"));
@@ -17,6 +18,12 @@ public sealed class DesktopRouterTests : IDisposable
     private readonly ManualScheduler _clock = new();
     private readonly List<string> _routed = [];
     private readonly List<FileSystemWatcher> _watchers = [];
+    // The real watchers raise Created/Renamed on thread-pool threads. Production posts them to the UI thread, so the router is
+    // single-threaded; here "post" only parks them (nobody drains the queue), because every test drives Enqueue and the clock
+    // itself. Running them inline made a late real event re-queue a file from a pool thread while the test thread was asserting.
+    private readonly ConcurrentQueue<Action> _posted = new();
+    private void Post(Action action) => _posted.Enqueue(action);
+
     private int _factoryCalls;
     private Func<string, FileSystemWatcher>? _factoryOverride;
 
@@ -42,7 +49,7 @@ public sealed class DesktopRouterTests : IDisposable
     }
 
     private DesktopRouter NewRouter()
-        => new(batch => _routed.AddRange(batch), _desktop, _clock, a => a(), Factory);
+        => new(batch => _routed.AddRange(batch), _desktop, _clock, Post, Factory);
 
     private static readonly TimeSpan Debounce = DesktopRouter.DebounceWindow;
     private static readonly TimeSpan Restart = DesktopRouter.RestartDelay;
@@ -110,7 +117,7 @@ public sealed class DesktopRouterTests : IDisposable
     {
         int calls = 0;
         using var router = new DesktopRouter(batch => { calls++; if (calls == 1) throw new IOException("boom"); _routed.AddRange(batch); },
-            _desktop, _clock, a => a(), Factory);
+            _desktop, _clock, Post, Factory);
         router.Enqueue(Path.Combine(_desktop, "a.pdf"));
         _clock.Advance(Debounce);
         router.Enqueue(Path.Combine(_desktop, "b.pdf"));
@@ -122,7 +129,7 @@ public sealed class DesktopRouterTests : IDisposable
     public void One_window_is_one_batch()
     {
         var batches = new List<int>();
-        using var router = new DesktopRouter(batch => batches.Add(batch.Count), _desktop, _clock, a => a(), Factory);
+        using var router = new DesktopRouter(batch => batches.Add(batch.Count), _desktop, _clock, Post, Factory);
         router.Enqueue(Path.Combine(_desktop, "a.pdf"));
         router.Enqueue(Path.Combine(_desktop, "b.pdf"));
         router.Enqueue(Path.Combine(_desktop, "c.pdf"));
@@ -352,7 +359,7 @@ public sealed class DesktopRouterTests : IDisposable
         using var service = new AutoRouteService(
             new AutoRouteHost(() => [rack], _ => { }, () => Path.Combine(_root, "ws")),
             _clock, broker: new FileOperationBroker(audit), shell: new ShellOperationGateway(new ShellBackend()), audit: audit);
-        using var router = new DesktopRouter(service.ProcessBatch, _desktop, _clock, a => a(), Factory);
+        using var router = new DesktopRouter(service.ProcessBatch, _desktop, _clock, Post, Factory);
 
         string partial = Path.Combine(_desktop, "report.pdf.crdownload");
         File.WriteAllText(partial, "half");
