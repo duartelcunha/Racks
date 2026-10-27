@@ -235,7 +235,7 @@ public static class GoldenRack
             ["ListViewFontColor"] = "#8899AA",
             ["ListViewFontShadowColor"] = "#99AABB",
             // lists
-            ["AssignedFiles"] = new List<string> { "a.txt", @"sub dir\c.pdf" },
+            ["AssignedFiles"] = new List<string> { "a.txt", "sub dir c.pdf" },
             ["ShowOnVirtualDesktops"] = new[] { 1, 3 },
             ["LastAccessedFiles"] = new List<string> { "x.txt", "y.txt" },
             ["CustomOrderFiles"] = new List<Tuple<string, string>> { Tuple.Create("a.txt", "1"), Tuple.Create("b.txt", "2") },

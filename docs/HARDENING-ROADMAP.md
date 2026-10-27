@@ -9,8 +9,8 @@ which tests were added.
 
 - **Current phase:** P11 (adversarial filesystem tests and the Windows regression pass, plus four small follow-ups), in
   review; P10 (update path split) is its base.
-- **Next step:** P12, dependency notes/updates and dead code. Before it, decide what to do with the P11 findings F1 to F7
-  (see "P11 in short"): none is a regression, F2 and F3 are the ones worth a small phase of their own.
+- **Next step:** P12, dependency notes/updates and dead code. Before it, decide what to do with the open P11 findings
+  F1 and F4 to F8 (see "P11 in short"; F2, F3 and F7 were closed in the P11c commit): none is a regression, F1 is the one worth a phase of its own.
   `MainWindow._controller` is still a public static (20 uses, of which `InstanceController.RefreshMirror` is the only
   one outside presentation). The file allowlist (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned
   state; its numbers only go down.
@@ -449,7 +449,8 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
   recommendation (see the P6 follow-up above). Two internal seams were added to make the rest testable and nothing else changed there:
   `DesktopIconManager.Setup(workspace, icon, libraries, desktop)` (what `Initialize()` does, with the four places passed in) and
   `RackMirror.Rebuild(racks, mirrorRoot)`.
-- **Findings** (each is pinned by a test, named `Known_gap_...` except F6 and F8, so a fix has to flip it on purpose; none is fixed in P11):
+- **Findings.** F2, F3 and F7 were fixed in a third commit (P11c, below). The others are not fixed in P11; each is pinned by a test
+  (named `Known_gap_...` except F6 and F8), so a fix has to flip it on purpose:
   - **F1, medium (function, no data loss):** a FOLDER move to another volume never reaches the copy+delete fallback. .NET's
     `Directory.Move` throws an `IOException` whose HResult is not `ERROR_NOT_SAME_DEVICE`, so `IsCrossVolumeError` never matches and the
     user's drop is refused ("Failed to move"; source untouched, nothing created). File moves across drives work because the OS copies
@@ -457,16 +458,17 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
     decide by comparing the volume roots before the move (as `SameVolume` in the broker does), route to `CopyThenDelete` followed by a
     completeness check (`CopyLooksComplete`) and only then the delete. Know before enabling: the copy skips links (the pointer is lost,
     never its target) and stops at 64 levels deep (refused whole, nothing changed).
-  - **F2, low likelihood, high impact (data loss):** moving a file to a destination called `NUL` (`...\dest\NUL`) pours the file into the
-    NUL device: source gone, nothing at the destination, broker says `Failed`. `PathPolicy.ValidateFullPath` does not check the
-    destination's leaf for device names (`ValidateLeafName` does, but only typed names go through it). CON, AUX, COM1, LPT1 and `nul.txt`
-    behave as plain names on this Windows (build 26300); older Windows may differ (not verified). The leaf comes from an existing item,
-    so it needs a file really called `NUL` (made through `\\?\`). Fix: validate the final segment of source and destination paths.
-  - **F3, medium (needs a hostile or hand-edited value):** `AssignedFiles` containing `.` makes `WorkspaceReturn.ToDesktop` move the
-    WHOLE workspace folder onto the Desktop as `. (from Racks)` when the rack is removed (`Path.GetFileName(".") == "."` passes the
-    "is a plain name" check; `".."` is stopped by the broker). Nothing is lost, but every desktop rack loses its files from view until
-    they are moved back. Neither the registry loader nor the layout import checks `AssignedFiles` items. Fix: `PathPolicy.ValidateLeafName`
-    in `WorkspaceReturn` and at the call site, and drop bad items at load/import (INV-IDS-1).
+  - ~~**F2, low likelihood, high impact (data loss):** moving a file to a destination called `NUL` pours the file into the NUL device.~~
+    **Fixed in P11c:** `FileOperationBroker.Move`/`MoveSameVolume` now judge the destination's final segment with
+    `PathPolicy.ValidateLeafName` right after the path check and before anything is touched ("Destination name: ..." in the reason):
+    device names with or without an extension (NUL, CON, PRN, AUX, COM0-9, LPT0-9, CONIN$), a trailing dot or space and data streams are
+    `Rejected`. Only the last segment is checked, so legitimate parents and every internal name (`name (from Racks 12).txt`) are
+    unaffected. `Rename` and `CreateDirectory` already did this.
+  - ~~**F3, medium:** `AssignedFiles` containing `.` made `WorkspaceReturn` move the whole workspace onto the Desktop.~~
+    **Fixed in P11c:** `WorkspaceReturn.ToDesktop` and the remove-rack loop require `PathPolicy.ValidateLeafName(name).Ok`; the loader
+    and the layout import (`RackSettingsValidator.ParsePipeList`) drop the items that fail it and keep the good ones, as a
+    `SettingFallback` audit record on load and a dropped-value entry on import (the stored text is left as it is). One golden
+    fixture value changed because it was not a leaf name: `sub dir\c.pdf` became `sub dir c.pdf`.
   - **F4, low:** a workspace file with another hard link elsewhere and the same LENGTH as an unrelated Desktop file of the same name is
     taken for the Ctrl+drop duplicate and dropped instead of returned. No byte is lost (its data stays under the other name) but it does
     not come back. Fix: the file-identity check already listed above (volume serial + file index).
@@ -474,15 +476,18 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
     name under a workspace that is a junction whose target vanished reads as "moved away" and its claim is dropped on a drag-out.
   - **F6, cosmetic:** a second uninstall run returns the "files not returned" note written by the first run to the Desktop as if it were a
     user file (`UninstallCleanup` step 1 skips only `desktop.ini` and the icon).
-  - **F7, low:** the Desktop library file is built by string interpolation; a Desktop or workspace path with `&` or `<` (a user called
-    `Tom & Jerry`) makes `DesktopWorkspace.library-ms` invalid XML, so the library does not show. Nothing else is affected.
+  - ~~**F7, low:** the Desktop library file is built by string interpolation; a path with `&` or `<` made `DesktopWorkspace.library-ms`
+    invalid XML.~~ **Fixed in P11c:** both paths go through `SecurityElement.Escape`.
   - **F8, informational:** `SafeMove.Canonicalize` of a destination that does not exist yet does not resolve its parent through a
     junction, so "destination inside source, through a junction alias" is not seen by the preflight; the operating system refuses the
     move and the broker reports `Failed` instead of `Rejected`. Nothing moved (tested).
-- Tests: 1669 to 1824 passed (6 skipped: the 4 old ones plus 2 new `[SymlinkFact]` tests that need the right to create symbolic links),
+- **P11c** (F2, F3, F7): the three fixes above, with their tests flipped from `Known_gap_...` to real expectations: 18 destination-name
+  cases (device names, trailing dot/space, data streams) plus ordinary and `(from Racks N)` names, a trailing separator, odd parent
+  names, `Rename`/`CreateDirectory`; 13 loader cases and the layout import for `AssignedFiles` items; the XML-escape case.
+- Tests: 1669 to 1874 passed (6 skipped: the 4 old ones plus 2 new `[SymlinkFact]` tests that need the right to create symbolic links),
   0 failed. P11a added 108 (106 run here; SafeDelete 18, SafeMove 31, claims and return 36, uninstall and mirror 23), P11b 49 (copy
   cleanup 7, single preflight 3, rack folder removal 8, workspace set-up 10, mirror rebuild 11, drive-root rack 10). The Adversarial set
-  was run 10 times in a row and the whole suite three times after P11b with no flake.
+  was run 10 times in a row and the whole suite three times after P11b and again after P11c with no flake. P11c added 50 (1824 to 1874).
 - Not done on purpose: the audit background queue, a handle-based `Unlink`, a link-aware `Move` for Ctrl+dropped links, the
   virtual-rack cross-volume copy-then-recycle and the `WorkspaceReturn` file-identity check stay as follow-ups above. The real app,
   `Test-Racks.ps1` and the dev-tools e2e were not run; the rack-removal dialog is covered through `RackFolderRemoval` (the decision and the

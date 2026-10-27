@@ -109,14 +109,14 @@ namespace Racks.Core
       <isDefaultSaveLocation>true</isDefaultSaveLocation>
       <isSupported>false</isSupported>
       <simpleLocation>
-        <url>{desktopPath}</url>
+        <url>{System.Security.SecurityElement.Escape(desktopPath)}</url>
       </simpleLocation>
     </searchConnectorDescription>
     <searchConnectorDescription>
       <isDefaultNonOwnerSaveLocation>false</isDefaultNonOwnerSaveLocation>
       <isSupported>false</isSupported>
       <simpleLocation>
-        <url>{workspacePath}</url>
+        <url>{System.Security.SecurityElement.Escape(workspacePath)}</url>
       </simpleLocation>
     </searchConnectorDescription>
   </searchConnectorDescriptionList>

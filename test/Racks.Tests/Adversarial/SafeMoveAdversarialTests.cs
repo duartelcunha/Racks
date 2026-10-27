@@ -249,46 +249,107 @@ public sealed class SafeMoveAdversarialTests : AdversarialTree
         Assert.Equal("mine", File.ReadAllText(src));
     }
 
-    [Fact]
-    public void Known_gap_a_destination_named_NUL_swallows_the_file()
+    [Theory]
+    [InlineData("NUL")]
+    [InlineData("nul")]
+    [InlineData("nul.txt")]
+    [InlineData("CON")]
+    [InlineData("PRN")]
+    [InlineData("AUX")]
+    [InlineData("aux.log")]
+    [InlineData("COM0")]
+    [InlineData("COM1")]
+    [InlineData("com9.dat")]
+    [InlineData("LPT0")]
+    [InlineData("LPT1")]
+    [InlineData("lpt9.txt")]
+    [InlineData("CONIN$")]
+    [InlineData("NUL .txt")]
+    [InlineData("trailing.")]
+    [InlineData("trailing ")]
+    [InlineData("stream.txt:ads")]
+    public void A_destination_name_that_is_a_device_or_otherwise_not_a_plain_name_is_refused_before_anything_is_touched(string name)
     {
-        // FINDING P11-F2 (data loss, low likelihood): PathPolicy.ValidateFullPath checks the destination path
-        // but not its leaf for a reserved device name, and File.Move to "dest\NUL" writes the file into the NUL
-        // device: the source is gone and nothing exists at the destination. The broker does say Failed ("can't
-        // be found"), but the bytes are lost. Only NUL does this on this Windows (CON, COM1... behave as plain
-        // names here). A leaf comes from an existing item's own name, so it needs a file that really is called
-        // NUL (made through the \\?\ spelling); Rename and typed names are already protected by
-        // ValidateLeafName. Pinned so the fix is deliberate: once the broker refuses it, flip this to
-        // "Rejected and the source is still there".
-        string src = Write(P("src.txt"), "gone for good");
+        // P11 finding F2: Windows pours a file moved to "dest\NUL" into the NUL device and it is gone.
+        string src = Write(P("src.txt"), "must not vanish");
+        string folder = Write(P("srcfolder", "inner.txt"), "inner");
         Dir("dest");
+        var before = Snapshot(Root);
 
-        var r = Broker.Move(src, P("dest", "NUL"), "test NUL");
+        var file = Broker.Move(src, P("dest", name), "test device name");
+        var sameVolume = Broker.MoveSameVolume(src, P("dest", name), "test device name");
+        var dir = Broker.Move(Path.GetDirectoryName(folder)!, P("dest", name), "test device name folder");
 
-        Assert.NotEqual(OperationStatus.Succeeded, r.Status);
-        Assert.False(File.Exists(src));
-        Assert.False(File.Exists(P("dest", "NUL")));
+        foreach (var r in new[] { file, sameVolume, dir })
+        {
+            Assert.Equal(OperationStatus.Rejected, r.Status);
+            Assert.StartsWith("Destination", r.Reason);
+        }
+        Assert.Equal(before, Snapshot(Root));
+        Assert.Equal("must not vanish", File.ReadAllText(src));
+    }
+
+    [Fact]
+    public void A_destination_in_a_folder_whose_own_name_looks_odd_is_not_judged_only_its_final_name_is()
+    {
+        // The check is on the last segment only: a parent folder the caller chose is not "validated" away.
+        string src = Write(P("src.txt"), "mine");
+        Dir("nul-folder.d");
+        Dir("my.folder.name");
+
+        var a = Broker.Move(src, P("nul-folder.d", "src.txt"), "test odd parent");
+        var b = Broker.Move(P("nul-folder.d", "src.txt"), P("my.folder.name", "src (from Racks 12).txt"), "test candidate name");
+
+        Assert.True(a.Succeeded, a.Reason);
+        Assert.True(b.Succeeded, b.Reason);
+        Assert.Equal("mine", File.ReadAllText(P("my.folder.name", "src (from Racks 12).txt")));
     }
 
     [Theory]
-    [InlineData("CON")]
-    [InlineData("AUX")]
-    [InlineData("COM1")]
-    [InlineData("LPT1")]
-    [InlineData("nul.txt")]
-    public void A_reserved_device_name_as_the_destination_never_swallows_the_source(string deviceName)
+    [InlineData("report (from Racks).docx")]
+    [InlineData("report (from Racks 1000).docx")]
+    [InlineData("[brackets] 'quotes' 100% & more.txt")]
+    [InlineData("emoji \U0001F4C1.txt")]
+    [InlineData("nul-device-is-not-nul.txt")]
+    [InlineData("console.txt")]
+    [InlineData("auxiliary")]
+    [InlineData(".hidden")]
+    [InlineData("a.b.c.d")]
+    public void Ordinary_destination_names_still_move_fine(string name)
     {
-        string src = Write(P("src.txt"), "must not vanish");
+        string src = Write(P("src.txt"), "content");
         Dir("dest");
 
-        var r = Broker.Move(src, P("dest", deviceName), "test device name");
+        var r = Broker.Move(src, P("dest", name), "test normal name");
 
-        // Whatever the broker answers, the file's bytes must still be reachable: at the source (refused)
-        // or under the destination name (moved), never poured into a device.
-        bool atSource = File.Exists(src) && File.ReadAllText(src) == "must not vanish";
-        bool atDest = File.Exists(P("dest", deviceName)) && File.ReadAllText(P("dest", deviceName)) == "must not vanish";
-        Assert.True(atSource || atDest, $"status {r.Status}: {r.Reason}");
-        if (r.Status == OperationStatus.Succeeded) Assert.True(atDest);
+        Assert.True(r.Succeeded, r.Reason);
+        Assert.Equal("content", File.ReadAllText(P("dest", name)));
+    }
+
+    [Fact]
+    public void A_folder_destination_with_a_trailing_separator_is_judged_by_its_name()
+    {
+        Write(P("srcdir", "x.txt"), "x");
+        Dir("dest");
+
+        var bad = Broker.Move(P("srcdir"), P("dest", "NUL") + Path.DirectorySeparatorChar, "test trailing separator");
+        var good = Broker.Move(P("srcdir"), P("dest", "moved") + Path.DirectorySeparatorChar, "test trailing separator");
+
+        Assert.Equal(OperationStatus.Rejected, bad.Status);
+        Assert.True(good.Succeeded, good.Reason);
+    }
+
+    [Fact]
+    public void Rename_and_CreateDirectory_refuse_the_same_names()
+    {
+        string src = Write(P("src.txt"), "mine");
+
+        foreach (var name in new[] { "NUL", "aux.log", "COM1", "trailing.", "a:b" })
+        {
+            Assert.Equal(OperationStatus.Rejected, Broker.Rename(src, name, "test rename").Status);
+            Assert.Equal(OperationStatus.Rejected, Broker.CreateDirectory(P(name), "test create").Status);
+        }
+        Assert.Equal("mine", File.ReadAllText(src));
     }
 
     // ---- names and lengths -----------------------------------------------------------------

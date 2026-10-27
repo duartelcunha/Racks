@@ -321,51 +321,24 @@ public sealed class WorkspaceReturnAdversarialTests : AdversarialTree
     [InlineData("\\\\server\\share\\evil.txt")]
     [InlineData("evil.txt:stream")]
     [InlineData("")]
-    public void A_name_that_is_a_path_returns_nothing_and_moves_nothing(string name)
+    [InlineData(".")]       // the workspace itself: used to be moved whole onto the Desktop as ". (from Racks)" (P11 F3)
+    [InlineData("..")]
+    [InlineData("NUL")]
+    [InlineData("aux.log")]
+    [InlineData("trailing.")]
+    [InlineData("trailing ")]
+    public void A_name_that_is_not_a_plain_name_returns_nothing_and_moves_nothing(string name)
     {
         // The target exists at the place the path would reach, so a regression would move it.
         Write(P("evil.txt"), "outside");
         Write(Path.Combine(Workspace, "b.txt"), "inside");
         Write(Path.Combine(Workspace, "evil.txt"), "inside evil");
+        Write(P("sibling", "other.txt"), "other");
         var before = Snapshot(Root);
 
         Assert.Null(Return(name));
 
         Assert.Equal(before, Snapshot(Root));
-    }
-
-    [Fact]
-    public void The_dot_dot_name_does_not_move_the_workspace_parent()
-    {
-        // Path.GetFileName("..") is ".." and Path.Combine(workspace, "..") exists, so the caller's "is it a plain
-        // name" check lets it through: only the broker (which refuses ".." segments) stands in the way.
-        Write(Path.Combine(Workspace, "keep.txt"), "keep");
-        Write(P("sibling", "other.txt"), "other");
-        var before = Snapshot(Root);
-
-        Assert.Null(Return(".."));
-
-        Assert.Equal(before, Snapshot(Root));
-    }
-
-    [Fact]
-    public void Known_gap_the_single_dot_name_moves_the_whole_workspace_folder_to_the_Desktop()
-    {
-        // FINDING P11-F3 (medium, needs a hostile or hand-edited AssignedFiles value): the caller's check is
-        // Path.GetFileName(name) == name, which "." passes, and neither the registry loader nor the layout import
-        // validates AssignedFiles items as names. Path.Combine(workspace, ".") is the workspace itself, the
-        // Desktop already has a "." (the Desktop), so the candidate ". (from Racks)" is free and the broker moves
-        // the WHOLE WORKSPACE (every desktop rack's files) onto the Desktop under that name. Nothing is lost and
-        // it is reversible by hand, but every desktop rack then shows its files as missing. Fix, not done here:
-        // WorkspaceReturn (and the call site) should require PathPolicy.ValidateLeafName(name).Ok. Pinned so the
-        // fix is deliberate: it must flip to "Null and the workspace is untouched".
-        Write(Path.Combine(Workspace, "keep.txt"), "keep");
-
-        var back = Return(".");
-
-        Assert.Equal(Path.Combine(Desktop, ". (from Racks)"), back);
-        Assert.False(Directory.Exists(Workspace));
-        Assert.Equal("keep", File.ReadAllText(Path.Combine(back!, "keep.txt")));
     }
 
     [Fact]

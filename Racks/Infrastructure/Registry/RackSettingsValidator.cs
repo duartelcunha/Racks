@@ -237,10 +237,16 @@ public static class RackSettingsValidator
             : new ParseResult(ParseStatus.Changed, pairs, $"{dropped} of {lines.Length} item(s) have no ',' and were dropped", $"kept {pairs.Count} item(s)");
     }
 
+    // The pipe list is AssignedFiles: each item is a file name a desktop rack claims, and later becomes a path under the
+    // workspace (INV-IDS-1). An item that is not a plain leaf name ("." and "..", a path, a drive or data stream, a
+    // device name, a trailing dot) is dropped here and the good items are kept; the stored text is left as it is.
     private static ParseResult ParsePipeList(RegistryValue raw)
     {
         if (!TryText(raw, out string text)) return WrongType(raw);
-        return new ParseResult(ParseStatus.Accepted, text.Split('|', StringSplitOptions.RemoveEmptyEntries).ToList());
+        var items = text.Split('|', StringSplitOptions.RemoveEmptyEntries).ToList();
+        var good = items.Where(i => Racks.Infrastructure.FileSystem.PathPolicy.ValidateLeafName(i).Ok).ToList();
+        if (good.Count == items.Count) return new ParseResult(ParseStatus.Accepted, items);
+        return new ParseResult(ParseStatus.Changed, good, $"{items.Count - good.Count} of {items.Count} item(s) are not plain file names and were dropped", $"kept {good.Count} item(s)");
     }
 
     private static ParseResult ParseIntList(RegistryValue raw)

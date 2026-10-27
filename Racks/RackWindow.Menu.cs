@@ -615,7 +615,7 @@ namespace Racks
                             // name by contract. Skip anything with a separator or ".." so a
                             // hand-edited/imported value can't Path.Combine its way out of the
                             // workspace and move an arbitrary file to the desktop.
-                            if (string.IsNullOrEmpty(fileName) || System.IO.Path.GetFileName(fileName) != fileName)
+                            if (!Infrastructure.FileSystem.PathPolicy.ValidateLeafName(fileName).Ok)
                                 continue;
                             var back = Rack.WorkspaceReturn.ToDesktop(Racks.Infrastructure.Shell.ShellOperationGateway.Default.WorkspacePath, desktopPath, fileName);
                             if (back != null) returnedToDesktop.Add(back);

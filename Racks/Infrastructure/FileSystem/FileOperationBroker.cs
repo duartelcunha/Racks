@@ -125,6 +125,12 @@ public sealed class FileOperationBroker
         var vd = PathPolicy.ValidateFullPath(dest);
         if (!vd.Ok) return Make(ctx, OperationStatus.Rejected, "Destination: " + vd.Reason, src, dest);
 
+        // The destination's own name is judged like a typed one (INV-FS-2), before anything is touched: Windows
+        // writes a file moved to "dest\NUL" into the NUL device and it is gone. Only the final segment is checked;
+        // the folders above it are whatever the caller chose.
+        var vl = PathPolicy.ValidateLeafName(Path.GetFileName(Path.TrimEndingDirectorySeparator(dest)));
+        if (!vl.Ok) return Make(ctx, OperationStatus.Rejected, "Destination name: " + vl.Reason, src, dest);
+
         return MoveChecked(ctx, src, dest, i.SameVolumeRenameOnly);
     }
 

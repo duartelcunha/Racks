@@ -151,25 +151,25 @@ public sealed class DesktopIconManagerSetupTests : AdversarialTree
         Run(workspace, IconSource(), Libraries, Desktop);
 
         Assert.True(File.Exists(Path.Combine(workspace, "desktop.ini")));
-        Assert.Contains(workspace, File.ReadAllText(Path.Combine(Libraries, "DesktopWorkspace.library-ms")));
+        var urls = XDocument.Load(Path.Combine(Libraries, "DesktopWorkspace.library-ms")).Descendants()
+            .Where(e => e.Name.LocalName == "url").Select(e => e.Value).ToList();
+        Assert.Equal(new[] { Desktop, workspace }, urls);
     }
 
     [Fact]
-    public void Known_gap_a_path_with_an_ampersand_makes_the_library_file_invalid_xml()
+    public void A_path_with_an_ampersand_or_angle_bracket_still_gives_a_valid_library_file()
     {
-        // FINDING P11-F7 (low): the library XML is built by string interpolation, so a Desktop or workspace path
-        // that contains & or < (a user called "Tom & Jerry") produces a file Explorer cannot read. Nothing is lost
-        // and nothing else fails; the "Desktop (Workspace)" library just does not show. Pinned; the fix is to
-        // XML-escape the two paths when the file is built.
+        // P11 finding F7: the two paths are XML-escaped when the library file is built (a user called "Tom & Jerry").
         Directory.CreateDirectory(Libraries);
-        string desktop = P("Tom & Jerry", "Desktop");
+        string desktop = P("Tom & Jerry <x>", "Desktop");
 
         Run(Workspace, IconSource(), Libraries, desktop);
 
         string text = File.ReadAllText(Path.Combine(Libraries, "DesktopWorkspace.library-ms"));
-        Assert.Contains("Tom & Jerry", text);
-        Assert.ThrowsAny<System.Xml.XmlException>(() => XDocument.Parse(text));
-        Assert.True(File.Exists(Path.Combine(Workspace, "desktop.ini")), "the rest of the set-up is not affected");
+        Assert.Contains("Tom &amp; Jerry &lt;x&gt;", text);
+        var urls = XDocument.Parse(text).Descendants().Where(e => e.Name.LocalName == "url").Select(e => e.Value).ToList();
+        Assert.Equal(new[] { desktop, Workspace }, urls);
+        Assert.True(File.Exists(Path.Combine(Workspace, "desktop.ini")));
     }
 }
 
