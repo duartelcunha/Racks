@@ -33,8 +33,7 @@ The codebase is reviewed against a set of security invariants documented in
 ## How the guards are enforced
 
 Tests in `test/Racks.Tests/Guards/` fail the build if the code drifts from these rules: `FileMutationGuardTests` (raw file
-mutations outside the gateway, with an exact-count allowlist that only goes down), `PresentationBoundaryTests` (windows do not touch
-the shell, the registry or the updater directly), `RegistryAccessGuardTests` (presentation does not open the registry) and
+mutations outside the gateway, with an exact-count allowlist that only goes down), `PresentationBoundaryTests` (presentation files do not reference the shell helpers; `MainWindow.xaml.cs` also has no file, registry, updater, hook or hotkey code), `RegistryAccessGuardTests` (presentation does not open the registry) and
 `ArchitectureRatchetTests` (size ratchets). They are text scanners with known blind spots (Win32/COM calls, calls through a
 variable, tools/); `docs/SECURITY-INVARIANTS.md` lists what each one sees and misses, and every finding that is still open or accepted
 (for example folder moves across drives, the shell-verb gate, the audit log policy) is in its section "Riscos aceites e abertos".

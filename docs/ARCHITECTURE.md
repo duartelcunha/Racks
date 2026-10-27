@@ -58,7 +58,7 @@ was not worth the churn; the guards (below) fence the ones that matter. Do not a
    the 32 global style defaults go through `RackSettingsRepository`, driven by one table, `RackSettingsSchema`. A bad value
    is never applied: the documented default is used and the field, raw value, reason and fallback are written to
    `audit.log`.
-3. **Presentation does not touch the registry, mutate files, call shell notifications or the updater.** Shell change
+3. **Presentation does not touch the registry, call shell notifications or reach the updater, and does not mutate files except through the broker** (the rack windows call `FileOperationBroker.Default`; `RackWindow.DragDrop.cs` also has 2 allowlisted `CreateDirectory` calls for Racks-owned sandbox folders). Shell change
    notifications, desktop-icon hiding/arranging and the workspace folder go through
    `Infrastructure/Shell/ShellOperationGateway.Default`. The shell context menu, window geometry/style Win32 calls,
    `Process.Start` and the tray control stay in presentation on purpose.
@@ -76,7 +76,7 @@ All in `test/Racks.Tests/Guards/`. The three JSON files are copied to the test o
 
 | Guard | What it enforces | Number today | What it cannot see |
 |---|---|---|---|
-| `FileMutationGuardTests` + `fs-allowlist.json` | exact count of raw file mutations per file (more or fewer fails); `SafeMove.`/`SafeDelete.` only inside `Infrastructure/FileSystem/` | **11 files, 36 calls** (`DesktopIconManager` 7, `UninstallCleanup` 8, `JunctionHelper` 5, `CrashLog` 3, `LayoutFileWriter` 3, `RackWindow.DragDrop` 2, `RackMirror` 2, `RecoveryFolder` 2, `UpdateCleanupService` 2, `ShortcutFactory` 1, `InstallerExecutor` 1); all Racks-owned state or a non-destructive copy | calls through a variable, Win32/COM, processes, shell verbs, reflection, `tools/` |
+| `FileMutationGuardTests` + `fs-allowlist.json` | exact count of raw file mutations per file (more or fewer fails); `SafeMove.`/`SafeDelete.` only inside `Infrastructure/FileSystem/` | **11 files, 36 calls** (`DesktopIconManager` 7, `UninstallCleanup` 8, `JunctionHelper` 5, `CrashLog` 3, `LayoutFileWriter` 3, `RackWindow.DragDrop` 2, `RackMirror` 2, `RecoveryFolder` 2, `UpdateCleanupService` 2, `ShortcutFactory` 1, `InstallerExecutor` 1); Racks-owned state, the user-chosen export target (`LayoutFileWriter`) or a non-destructive copy | calls through a variable, Win32/COM, processes, shell verbs, reflection, `tools/` |
 | `PresentationBoundaryTests` | zero references in presentation files to `NotifyShell*`, `SHChangeNotify`, `DesktopIcons.`, `DesktopIconPositioner`, `DesktopIconManager`; `MainWindow.xaml.cs` has no file, registry, updater, hook, hotkey or cursor code and at most one `DispatcherTimer` | **0** (no baseline file) | new `[DllImport]`/COM in presentation, `Process.Start`, files outside the presentation list |
 | `RegistryAccessGuardTests` + `registry-presentation-allowlist.json` | exact count of registry references per presentation file | **0** (empty list since P6) | `reg.exe`/PowerShell processes, reflection, helpers outside presentation |
 | `ArchitectureRatchetTests` + `baseline.json` | size ratchets | `rackWindowLines` **561**, `rackWindowPartMaxLines` **911**, `rackWindowTotalLines` **5925**, `mainWindowLines` **404** (one file), `mainWindowMethodMaxLines` **59**, `appLines` **38** (one file), `controllerUsages` **20**, `xamlLiterals` **119** | quality or coupling; only lines and counts |
@@ -234,4 +234,4 @@ The filesystem regression pass is `test/Racks.Tests/Adversarial/` (`dotnet test 
 the normal suite): hostile paths, links, locked files and name clashes on real NTFS in temp folders, with the internal seams
 `SafeMove.UseProtectedFoldersForTest` and `SafeMove.UseBeforeCopyHookForTest`, `DesktopIconManager.Setup` and
 `RackMirror.Rebuild(racks, mirrorRoot)`. Tests that need a second drive, symlink rights, 8.3 names or a SendTo folder are skipped
-with a message (6 skipped today). Classes that call `AuditLog.Use` share the xunit collection `AuditLog`.
+with a message (the skipped count varies by machine, 1 to 14: symlink rights, second drive, short names, SendTo, ReleaseGate). Classes that call `AuditLog.Use` share the xunit collection `AuditLog`.

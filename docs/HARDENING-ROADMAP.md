@@ -24,7 +24,7 @@ the repository. Sections: [Where we are](#where-we-are), [The plan in one page](
 - **Baseline (P0):** `dotnet test` = 493 passed, 1 skipped (`Category=ReleaseGate`, only runs in the release workflow), 0
   failed; the build had 2 distinct warnings; `dotnet format whitespace --verify-no-changes` was failing on the base branch
   (trailing spaces in `RackWindow.DragDrop.cs`), fixed in P0.
-- **End of P13:** `dotnet test Racks.sln -c Release` = **1868 passed, 6 skipped, 0 failed**; build 0 warnings.
+- **End of P13:** `dotnet test Racks.sln -c Release` = **1874 tests, 0 failed; the skipped count varies by machine (1 to 14: symlink rights, second drive, short names, SendTo, ReleaseGate)**; build 0 warnings.
 
 ## The plan in one page
 
@@ -75,15 +75,15 @@ Titles are abbreviated; all are stacked in this order.
 | P13 | Final documentation sync (this change): invariants index and risks, architecture, README, CONTRIBUTING, SECURITY, notices, changelog, this roadmap | #54 | `hardening/p13-final-docs` | `hardening/p12-deps-deadcode` | in review |
 
 Test count per phase (passed / skipped): P0 493 / 1; P7 1320 / 4; P8 1376 / 4; P9 1536 / 4; P10 1651 / 4; P11 1868 / 6 (the
-4 old skips plus 2 symlink tests that need the right to create symbolic links); P12 and P13 1868 / 6.
+4 old skips plus 2 symlink tests that need the right to create symbolic links); P12 and P13 1874 tests (the skipped count varies by machine).
 
 ## Final numbers
 
-- **Tests:** 1868 passed, 6 skipped, 0 failed (`dotnet test Racks.sln -c Release`). The adversarial filesystem set
+- **Tests:** 1874 tests, 0 failed; the skipped count varies by machine (1 to 14: symlink rights, second drive, short names, SendTo, ReleaseGate) (`dotnet test Racks.sln -c Release`). The adversarial filesystem set
   (`dotnet test --filter "Category=Adversarial"`) takes about 3 s alone.
 - **Build:** 0 warnings (was 2 at P0, 8 before P12).
 - **File-mutation allowlist** (`Guards/fs-allowlist.json`): **11 files, 36 calls**, all Racks-owned state or a non-destructive
-  copy (was 45 calls in 12 files before P2; 32 in 9 after P2; 36 in 10 after P9, the one increase, for the atomic export and the
+  copy (it went 44 -> 45 during the P1 review, when the guard became stricter, and 32 -> 36 in P9; was 45 calls in 12 files before P2; 32 in 9 after P2; 36 in 10 after P9, the one increase, for the atomic export and the
   recovery folder; 36 in 11 after P10, when `Util/Updater.cs` 3 became `InstallerExecutor` 1 and `UpdateCleanupService` 2).
 - **Presentation boundary:** 0 direct shell references; registry allowlist in presentation: 0 (empty).
 - **Size ratchets** (`Guards/baseline.json`): `rackWindowLines` 561, `rackWindowPartMaxLines` 911, `rackWindowTotalLines` 5925,
@@ -142,6 +142,16 @@ differs.
     the Desktop (never overwritten; name clashes get "(from Racks)"), `audit.log` and `crash.log` are gone,
     `%AppData%\Racks\recovery` stays if it existed, and the farewell animation plays.
 
+11. **Upgrade in place.** Over a real 1.4.0 install with existing racks, on a pt-PT machine: install this build; the racks load
+    unchanged and `audit.log` has no fallback noise (P6 changed the loader and the save format, see R-15).
+12. **Drag-out variants.** From a Desktop rack; from a virtual rack to another drive (expect the R-07 duplicate); a folder; and
+    dropping a folder from another drive into a rack (expect the R-01 refusal, nothing moved).
+13. **Remove-rack variants.** A virtual rack with a file open (the rack is kept, with a message); a folder rack on the Desktop.
+14. **Ctrl+drop links.** Hardlink, junction and shortcut; then remove the rack and uninstall: the links are removed and the
+    targets are intact.
+15. **One real update install** from the previous signed build to a signed staging build: launch, shutdown, the single-instance
+    lock is released, relaunch, and `%TEMP%\Racks-update-*` is cleaned. Do it before the next release at the latest.
+
 Then run the automated pass if the machine can be driven: `.\test\Test-Racks.ps1` and `.\tools\dev-tools.ps1 e2e`.
 
 ## Merge order
@@ -163,7 +173,7 @@ base being `feature/scandi-branding-and-stability`, which has no PR of its own a
 
 1. `git fetch --all`, then `git switch hardening/p13-final-docs` (the tip of the chain; or `main` once everything is merged).
 2. Read, in this order: `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY-INVARIANTS.md` (index, guards, risks), this file.
-3. Run the commands under "Commands" (all must be green: 1868 passed, 6 skipped, build 0 warnings).
+3. Run the commands under "Commands" (all must be green: 1874 tests, 0 failed; the skipped count varies by machine (1 to 14: symlink rights, second drive, short names, SendTo, ReleaseGate); build 0 warnings).
 4. Pick work from the risks table in `SECURITY-INVARIANTS.md`; the suggested next phases are R-01, R-06, R-13. One risk = one
    PR on top of the chain's tip, with the test that flips (a `Known_gap_...` test is meant to be changed on purpose when its
    gap is fixed).
@@ -629,7 +639,7 @@ dotnet restore Racks.sln
 dotnet format whitespace --verify-no-changes
 dotnet build Racks.sln -c Release
 git diff --exit-code -- Racks/Properties/Lang.Designer.cs
-dotnet test Racks.sln -c Release --no-build        # 1868 passed, 6 skipped at the end of P13
+dotnet test Racks.sln -c Release --no-build        # 1874 tests, 0 failed; the skipped count varies by machine (1 to 14: symlink rights, second drive, short names, SendTo, ReleaseGate)
 dotnet publish Racks/Racks.csproj -c Release -r win-x64 --self-contained false
 gitleaks detect --no-banner
 ```

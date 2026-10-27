@@ -26,7 +26,10 @@ depending on the rack type, it is either **moved into a private sandbox** or the
   hidden `%UserProfile%\RacksWorkspace` folder and "claims" them so they show in the rack and are
   hidden from the desktop. Removing a rack returns everything to the Desktop.
 - **Folder rack** ("New folder rack"): bound to a real folder on disk. The rack is a live
-  window onto that folder; nothing is moved. Deleting the rack never touches the folder.
+  window onto that folder; a drop moves the item into that folder. Removing the rack leaves
+  the folder alone, except when the folder sits directly on the Desktop: then its contents are
+  moved out to the Desktop and the emptied folder is deleted (kept, with a message, if
+  something could not be moved).
 
 ## What it does
 

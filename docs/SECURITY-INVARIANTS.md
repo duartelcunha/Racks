@@ -60,7 +60,7 @@ conta, falha fechado). Cada um tem o cabeçalho do teste com a lista completa; a
   `DeviceIoControl` em `JunctionHelper`, `IPersistFile.Save` em `ShellLinkHelper`, `SHFileOperation` em
   `SafeDelete`), processos (`mklink` via `cmd`), a pasta de download do updater
   (`new DirectoryInfo(dir).Create(security)`), `new DirectoryInfo(..).Attributes =` no `UninstallCleanup`,
-  verbos do menu de shell (cortar/colar/apagar corridos pelo Explorer), reflexão e `tools/`. Também **não prova**
+  verbos do menu de shell (cortar/colar/apagar corridos pelo Explorer), o **drag-out com Move** (`RackWindow.DragDrop.cs` e `RackWindow.Items.cs`: o Explorer, como alvo do drop, move ou apaga o ficheiro do utilizador por si, fora do broker e do guard), o `reg.exe` do "exportar definições" em `SettingsWindow.xaml.cs` (processo com `UseShellExecute` falso e uma string de argumentos; o `/y` sobrescreve o ficheiro escolhido pelo utilizador), reflexão e `tools/`. Também **não prova**
   que as entradas da allowlist são só estado do próprio Racks: isso está no campo `why` de cada uma e na revisão.
 - **`PresentationBoundaryTests`** (apresentação não toca no shell). Zero referências, em `MainWindow*`,
   `RackWindow*`, `SettingsWindow*`, `RackSettingsDialog*`, `AboutWindow*`, `HelpWindow*`, `QuickFinderWindow*`,
@@ -261,8 +261,7 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   essa chamada criou (P11b; `CopyFallbackCleanupTests`, `SafeMoveCopyFallbackTests`). Lacunas: R-01 (uma
   pasta noutro volume é recusada, não copiada), R-07 (numa rack virtual o original fica, duplicado, em vez de
   ser reciclado) e R-17 (Reciclagem desligada).
-- **INV-PATH-1** Canonicalizar antes de comparar paths (via `GetFinalPathNameByHandle` /
-  `File.ResolveLinkTarget`); recusar mover um path cujo final difere do literal, salvo mover o
+- **INV-PATH-1** Canonicalizar antes de comparar paths (via `GetFinalPathNameByHandle`); recusar mover um path cujo final difere do literal, salvo mover o
   próprio reparse point não-recursivamente. *(teste: `SafeMoveAdversarialTests`, `ProtectedAncestorTests`,
   `ProtectedLinkRootTests`, `PathPolicyTests`)* Limites: R-08, R-09 e R-05.
 - **INV-DELETE-2** Os deletes recursivos de árvores de racks vivem em `Util/SafeDelete` (`internal`), chamado
@@ -306,7 +305,7 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
 - **INV-PROC-1** Nunca passar strings externas por `cmd.exe /c` concatenado; usar `ArgumentList`
   ou a API nativa. ✅ Aplicado (Lote D): o único `cmd.exe` é o `mklink /J` de `Util/JunctionHelper`, com
   `ProcessStartInfo.ArgumentList`; os restantes `Process.Start` abrem um caminho ou URL com `UseShellExecute`
-  (sem `cmd`). Sem guard: revisão (R-22).
+  (sem `cmd`). Exceção a ter presente: o "exportar definições" de `SettingsWindow.xaml.cs` lança o `reg.exe` com `UseShellExecute` falso e uma string de argumentos (não `ArgumentList`); o `/y` sobrescreve o ficheiro que o utilizador escolheu. Sem guard: revisão (R-22).
 - **INV-UNINSTALL-1** O uninstall nunca apaga dados de utilizador. `Racks.exe --uninstall-cleanup`
   (chamado pelo `[Code]` do `installer/Racks.iss` em `usUninstall`, antes de o Inno apagar ficheiros)
   devolve ao Desktop tudo o que está em `RacksWorkspace` e `%AppData%\Racks\VirtualFrames`: só
@@ -360,7 +359,7 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   (`DeleteEmptyDirectory`). A allowlist tem agora **11 ficheiros (36 chamadas)**; era 32 em 9 ficheiros até à P9, antes 12 ficheiros e 45
   (`DesktopIconManager` 7, `RackWindow.DragDrop` 2, `CrashLog` 3, `JunctionHelper` 5, `LayoutFileWriter` 3,
   `RecoveryFolder` 2, `RackMirror` 2, `ShortcutFactory` 1, `UninstallCleanup` 8, `InstallerExecutor` 1,
-  `UpdateCleanupService` 2). Todas são, por revisão e pelo `why` de cada uma, estado do próprio Racks (logs,
+  `UpdateCleanupService` 2). Todas são, por revisão e pelo `why` de cada uma, estado do próprio Racks, ou o alvo do export escolhido pelo utilizador (`LayoutFileWriter`) (logs,
   pasta `RacksWorkspace` e `desktop.ini`, pasta-raiz das junções, sandboxes vazias em `VirtualFrames`,
   relatório/nota do uninstall, pasta de download do updater, export do layout e pasta de recuperação) ou uma
   cópia sem apagar (o `.url` do `ShortcutFactory`); só pode descer. Única subida,
@@ -443,7 +442,7 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
 
 - **INV-REG-1** Os valores globais do Racks no registo (`HKCU\SOFTWARE\Racks`: interruptores, marcadores de
   migração, `MainHwnd`) só se leem e escrevem por `Infrastructure/Registry` (`AppSettings`,
-  `MigrationMarkers`); a apresentação não abre o registo (a lista `Guards/registry-presentation-allowlist.json` está vazia desde P6). Um interruptor é texto `True`/`False`
+  `MigrationMarkers`); a apresentação não abre o registo. **Duas exceções, fora de `Infrastructure/Registry`:** `InstanceController.MigrateLegacyRegistry` (`Core/InstanceController.cs`) copia em bruto a árvore da chave legada `DeskFrame`, e `Core/DefaultStyleReset.Run(RegistryKey)` apaga os estilos globais (só é chamado a partir do `RackSettingsRepository`); ver R-29 (a lista `Guards/registry-presentation-allowlist.json` está vazia desde P6). Um interruptor é texto `True`/`False`
   (REG_SZ); um valor em falta dá o valor por omissão sem ruído (`IcePhysics` liga por omissão, o resto desligado);
   um valor de tipo errado, lixo ou um registo ilegível dá o valor por omissão e **um** registo `SettingFallback` no
   `audit.log` por nome (campo, valor em bruto encurtado, motivo, valor usado); nunca é aplicado. Uma escrita
@@ -508,13 +507,14 @@ hardening ou são o custo de uma escolha documentada. A coluna "Origem" diz onde
 | R-19 | **O instalador não tem assinatura Authenticode e o updater não verifica editor.** O Windows SmartScreen avisa na primeira execução. A proveniência vem só do manifesto assinado (ECDSA P-256) com a chave do dono. | Média | Quando houver certificado (ver "Code-signing"): assinar o instalador e acrescentar uma verificação Authenticode + editor no updater, como segunda camada. Não é preciso para a segurança atual. | INV-UPDATE-1 |
 | R-20 | **Resíduos do updater.** Instalações ≤ 1.4.0 têm o updater antigo (sem assinaturas) até atualizarem; a chave privada no Credential Manager é legível por qualquer processo do mesmo utilizador na máquina que assina; a assinatura só vale o que vale a revisão do dono (assinar sem rever um commit malicioso produz um instalador assinado). | Média (aceite) | O processo de `docs/RELEASING.md` (tag assinada, signer fixado, confirmação depois da lista de alterações); manter a máquina de assinatura limpa. | H1; QA 2026-10 F2/F3 |
 | R-21 | **Testes que ainda leem texto de código-fonte** (scanners, não testes de comportamento): `SafeSvgTests` (contra `SvgDocument.Open/FromSvg`), `SafeWpfValuesTests` (contra `new FontFamily(`), `UninstallCleanupTests.Nothing_outside_SafeMove_deletes_folders_recursively`, os quatro guards e `ReleaseScriptTests` (docs/scripts). São guardas de bordo, não substituem comportamento; contornam-se com um nome diferente. | Baixa | Manter só como guardas; qualquer regra nova nasce como teste de comportamento. | CONTRIBUTING |
-| R-22 | **O que fica fora do broker e dos guards:** Win32/COM (`HardlinkHelper`, `JunctionHelper`/`mklink`, `ShellLinkHelper`, `SHFileOperation` em `SafeDelete`), os verbos do menu de shell corridos pelo Explorer, `Process.Start`, e o código de `tools/`. Foram revistos à mão; um novo de qualquer destes tipos tem de ser revisto à mão. | Média (processo) | Revisão obrigatória de qualquer `[DllImport]`, COM ou `Process` novo; ver CONTRIBUTING. | Cabeçalhos dos guards |
+| R-22 | **O que fica fora do broker e dos guards:** Win32/COM (`HardlinkHelper`, `JunctionHelper`/`mklink`, `ShellLinkHelper`, `SHFileOperation` em `SafeDelete`), os verbos do menu de shell corridos pelo Explorer, o drag-out com Move (o Explorer, como alvo do drop, move ou apaga o ficheiro por si: `RackWindow.DragDrop.cs`, `RackWindow.Items.cs`), o `reg.exe` do "exportar definições" (`SettingsWindow.xaml.cs`, `/y` sobrescreve o ficheiro escolhido), `Process.Start`, e o código de `tools/`. Foram revistos à mão; um novo de qualquer destes tipos tem de ser revisto à mão. | Média (processo) | Revisão obrigatória de qualquer `[DllImport]`, COM ou `Process` novo; ver CONTRIBUTING. | Cabeçalhos dos guards |
 | R-23 | **Sem guard contra `new Regex(` sem timeout.** O timeout por omissão do AppDomain apanha o que escapar, mas a regra INV-REGEX-1 depende da revisão. | Baixa | Um guard com contagem exata, como o `FileMutationGuardTests`, se aparecer um caso. | INV-REGEX-1 |
 | R-24 | **Auto-route, o que não faz de propósito:** sem varrimento inicial do Desktop ao arrancar (só depois de um `Error` do watcher), o watcher ignora pastas (filtro `FileName`), uma cópia grande que demore mais de cerca de 30 s fica no Desktop com um registo, ficheiros só-online da cloud são deixados, e a recusa do editor de regras não mostra mensagem (a regra anterior fica). | Baixa | Aceitar; reavaliar se aparecerem queixas. | P4; INV-ROUTE-1 |
 | R-25 | **Manias do P7 mantidas (não se corrigem num refactor):** a segunda mensagem de ecrã testa `0x001C` (que é `WM_ACTIVATEAPP`, não `0x001A`); o Magic Organize pergunta `Directory.Exists(source)` DEPOIS de mover, por isso uma pasta movida é anunciada ao shell como ficheiro; sem Explorer o hit-test do desktop compara 0 com 0 e passa; os handlers dos interruptores do tray correm duas vezes por mensagem `WM_RACKS_TOGGLE_*` (idempotentes). | Baixa | Corrigir uma a uma, cada uma com o seu teste. | P7; `TrayToggleServiceTests` |
 | R-26 | **Subchaves dentro de uma rack no registo** não são copiadas pelo snapshot do import nem comparadas na conferência do restauro (a app não escreve nenhuma). | Baixa | Nenhuma, a não ser que a app passe a escrever subchaves. | INV-IMPORT-2 |
 | R-27 | **Dívida de arquitetura, não de segurança:** `MainWindow._controller` continua um `static` público (20 usos; `InstanceController.RefreshMirror` é o único fora da apresentação) e `RackWindow*` (cerca de 5900 linhas em partials) ainda é grande. As catraias impedem que cresçam. | Info | Passar dependências por construtor, rack a rack, descendo `controllerUsages`. | `ArchitectureRatchetTests` |
 | R-28 | **Verificação manual pendente.** Nas fases P5 a P12 ninguém correu a app real, `test/Test-Racks.ps1` nem `tools/dev-tools.ps1 e2e` (matam o Racks em execução e mexem no Desktop real); o arranque, o tray, os hotkeys, o hook do rato, as caixas de diálogo e o instalador só estão cobertos pela lógica por trás deles. | Média (processo) | A lista de verificação manual do dono em `docs/HARDENING-ROADMAP.md`, antes de fundir a cadeia de PRs. | Roadmap |
+| R-29 | **Duas exceções ao acesso tipado ao registo:** `InstanceController.MigrateLegacyRegistry` (`Core/InstanceController.cs`) faz uma cópia em bruto da árvore da chave legada `DeskFrame`, e `Core/DefaultStyleReset.Run(RegistryKey)` só é chamado a partir do `RackSettingsRepository`. Nenhum é apresentação, por isso os guards não os veem. | Baixa | Mover a migração legada para `Infrastructure/Registry` (atrás de `IRackRegistry`), com teste sobre o registo descartável. | INV-REG-1 |
 
 ## Achados
 
@@ -563,7 +563,7 @@ contactar esse host. → INV-IMPORT-4.
 
 ## Verificação
 
-Verificação manual de 2026-07 (histórica, antes da P0): métodos de segurança exercitados contra o **`Racks.dll` real** (não mirrors), 12/12 pass. Desde então a verificação é a suite de testes (`dotnet test Racks.sln -c Release`: 1868 passam, 6 saltam, 0 falham no fim da P13):
+Verificação manual de 2026-07 (histórica, antes da P0): métodos de segurança exercitados contra o **`Racks.dll` real** (não mirrors), 12/12 pass. Desde então a verificação é a suite de testes (`dotnet test Racks.sln -c Release`: 1874 testes, 0 falham; o número de saltados varia com a máquina, de 1 a 14: direito de symlinks, 2.º disco, nomes curtos, SendTo, ReleaseGate):
 SafeRegex (ReDoS limitado a ~250ms), SafeMove (recusa Desktop + o seu alias 8.3 canonicalizado;
 move ficheiro normal), SafeDelete (apaga árvore com junction, alvo do junction sobrevive),
 SafeDelete.ToRecycleBin (envia para a Reciclagem; hoje `FileOperationBroker.DeleteToRecycleBin`), o import de layouts (`RackLayoutIO.Import` na altura; hoje `LayoutService.ImportFile`) (rejeita nome/Folder com
