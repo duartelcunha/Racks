@@ -137,7 +137,7 @@ jobs:
       - name: Upload unsigned Racks.exe
         id: unsigned-exe
         if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unsigned-racks-exe-${{ steps.ver.outputs.version }}
           path: publish/Racks.exe
@@ -188,7 +188,7 @@ jobs:
       - name: Upload unsigned installer
         id: unsigned-setup
         if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unsigned-racks-setup-${{ steps.ver.outputs.version }}
           path: signing-input/Racks-Setup.exe
@@ -277,7 +277,7 @@ jobs:
 
       - name: Upload build output
         id: upload
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-${{ steps.ver.outputs.version }}
           path: dist/
