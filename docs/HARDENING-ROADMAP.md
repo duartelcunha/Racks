@@ -1,44 +1,184 @@
-# Hardening roadmap (resume point)
+# Hardening roadmap (closed out at P13)
 
 Goal: move Racks from "works" to "high confidence" for a Windows desktop app that moves real user files.
-Order: **file safety first, then architecture, then tests.** No new features while this runs.
+Order was: **file safety first, then architecture, then tests.** No new features while this ran.
 Each phase is one PR, stacked on the previous one, and says what was refactored, which risk went down and
 which tests were added.
 
+This file is self-contained: another person or agent can resume from it without any chat or any file outside
+the repository. Sections: [Where we are](#where-we-are), [The plan in one page](#the-plan-in-one-page),
+[Phases and PRs](#phases-and-prs), [Final numbers](#final-numbers), [What remains open](#what-remains-open),
+[Manual verification checklist](#manual-verification-checklist-for-the-owner), [Merge order](#merge-order),
+[How to resume](#how-to-resume), then the per-phase notes (P1 to P12) as history.
+
 ## Where we are
 
-- **Current phase:** P12 (dependency notes, patch bumps, dead code, old warnings), in review; P11 (adversarial filesystem
-  tests) is its base.
-- **Next step:** P13, final docs. Before it, decide what to do with the open P11 findings
-  F1 and F4 to F8 (see "P11 in short"; F2, F3 and F7 were closed in the P11c commit): none is a regression, F1 is the one worth a phase of its own.
-  `MainWindow._controller` is still a public static (20 uses, of which `InstanceController.RefreshMirror` is the only
-  one outside presentation). The file allowlist (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned
-  state; its numbers only go down.
-- **Base branch:** `feature/scandi-branding-and-stability` (4 commits not yet on `main`). Phase branches are
-  `hardening/pN-<name>`; each PR targets the previous phase's branch until the base lands on `main`.
-- **Baseline (P0):** `dotnet test` = 493 passed, 1 skipped (`Category=ReleaseGate`, only runs in the release
-  workflow), 0 failed. Build has 2 distinct pre-existing warnings (`RackWindow._lastBorder` unused,
-  `ArchitectureRatchetTests` nullability). `dotnet format whitespace --verify-no-changes` was failing on the base
-  branch (trailing spaces in `RackWindow.DragDrop.cs`); fixed in P0.
+- **Status:** P0 to P13 are done and in review as PRs #41 to #54 (#54 is this documentation sync, the last phase), on
+  branch `hardening/p13-final-docs` (stacked on `hardening/p12-deps-deadcode`). **Nothing of this is on `main` yet.**
+- **Next step:** the owner runs the manual checklist below, then merges the chain in order (see "Merge order"). The
+  work that remains after that is not part of the plan; it is the list in `docs/SECURITY-INVARIANTS.md`, section
+  "Riscos aceites e abertos" (R-01 to R-28). Of those, R-01 (a folder move to another volume is refused), R-06 (a rack on a
+  drive root is lost on restart) and R-13 (a startup failure leaves a windowless process) are the ones worth a phase of their own.
+- **Base branch:** `feature/scandi-branding-and-stability` (4 commits on top of `main`; `main` is an ancestor of it). Phase
+  branches are `hardening/pN-<name>`; each PR targets the previous phase's branch until the base lands on `main`.
+- **Baseline (P0):** `dotnet test` = 493 passed, 1 skipped (`Category=ReleaseGate`, only runs in the release workflow), 0
+  failed; the build had 2 distinct warnings; `dotnet format whitespace --verify-no-changes` was failing on the base branch
+  (trailing spaces in `RackWindow.DragDrop.cs`), fixed in P0.
+- **End of P13:** `dotnet test Racks.sln -c Release` = **1874 tests, 0 failed; the skipped count varies by machine (1 to 14: symlink rights, second drive, short names, SendTo, ReleaseGate)**; build 0 warnings.
 
-## Phases
+## The plan in one page
 
-| # | Phase | Status |
-|---|---|---|
-| P0 | Base, `ARCHITECTURE.md`, `AGENTS.md`, this file | in review |
-| P1 | `FileOperationBroker` (facade over `SafeMove`/`SafeDelete`), `PathPolicy`, `AuditLog`, file-mutation guard; fix inline rename and Magic Organize folder names | in review |
-| P2 | Route the remaining raw file mutations through the broker; shrink the allowlist; refuse ancestors of protected folders | in review |
-| P3 | `ShellOperationGateway` (shell change notifications, desktop icons) | in review |
-| P4 | `AutoRouteService` + `RoutingPolicy`, testable `DesktopRouter`, watcher hardening | in review |
-| P5 | Typed `AppSettings` and `MigrationMarkers` for root registry values | in review |
-| P6 | `RackSettingsSchema` + validator + repository (golden fixtures first) | in review |
-| P7 | Decompose `MainWindow` (Magic Organize, hot corner, double-click hide, hotkeys, tray switches, update glue, display debounce) | in review |
-| P8 | Decompose `App` (bootstrap, migrations, crash reporting, uninstall mode) | in review |
-| P9 | Layout import/export: parser, validator, policy, executor | in review |
-| P10 | `UpdateService` split (behavior tests first; stays fail-closed) | in review |
-| P11 | Adversarial test gaps and Windows regression pass | in review |
-| P12 | Dependency notes/updates and dead code | in review |
-| P13 | Final docs: `SECURITY-INVARIANTS.md`, `ARCHITECTURE.md`, README, CHANGELOG | todo |
+(The original plan lived outside the repository; this is everything of it that still matters.)
+
+- **Principle:** the risk is data loss in the filesystem, shell and registry, not the network. So: first make every
+  destructive file operation go through one audited gateway, then split the big classes behind interfaces, then fill
+  the test gaps. No new features, no mass `catch {}` cleanups, no mass `Debug.WriteLine` conversion.
+- **Rules for every phase:** one phase = one PR, stacked; behavior tests before moving the code they watch (a test that
+  reads source text is replaced by a behavior test first); saved racks must load identically (golden fixtures written by the
+  old code); `Guards/*.json` ratchets only go down, in the same PR that lowers them; the update path stays fail-closed;
+  every PR says what was refactored, which risk went down and which tests were added, plus the local checks it ran.
+- **Phase goals:** P0 map and notes; P1 `FileOperationBroker` + `PathPolicy` + audit + guard; P2 route the remaining
+  raw mutations and refuse ancestors of protected folders; P3 `ShellOperationGateway`; P4 `AutoRouteService` +
+  `RoutingPolicy` and a hardened watcher; P5 typed `AppSettings`/`MigrationMarkers`; P6 `RackSettingsSchema` + validator +
+  repository; P7 decompose `MainWindow`; P8 decompose `App`; P9 layout import/export split with limits and recoverable
+  rollback; P10 `UpdateService` split; P11 adversarial filesystem tests on real NTFS; P12 dependencies and dead code; P13
+  documentation sync.
+- **Constraints kept throughout:** `UpdateManifest.cs` and `UpdateTrust.cs` keep their paths (`tools/RacksSigner` and the
+  release scripts link them); `release.yml` expects exactly one `Category=ReleaseGate` test; the `MainHwnd` registry value
+  (REG_SZ, decimal) and the `WM_RACKS_*` messages are used by `tools/*E2ERunner.ps1`.
+- **Done means** (all met, with the open items listed in the invariants file): no user-data filesystem mutation outside the
+  broker (a guard fails otherwise); presentation does not touch the registry, file mutation, shell notifications or the updater;
+  all registry reads/writes go through the schema and repository, and bad values are never applied and always logged;
+  auto-route, import and update have a validated policy and adversarial tests, and the update path is still fail-closed;
+  `MainWindow` and `App` carry no domain logic (ratchets); the invariants and architecture docs match the code.
+
+## Phases and PRs
+
+All PRs are open (none merged). Each PR's base is the previous phase's branch; P0's base is the feature branch above.
+Titles are abbreviated; all are stacked in this order.
+
+| # | Phase | PR | Branch | Base | Status |
+|---|---|---|---|---|---|
+| P0 | Base, `ARCHITECTURE.md`, `AGENTS.md`, this file | #41 | `hardening/p0-base` | `feature/scandi-branding-and-stability` | in review |
+| P1 | `FileOperationBroker`, `PathPolicy`, `AuditLog`, file-mutation guard; fix inline rename and Magic Organize folder names | #42 | `hardening/p1-file-broker` | `hardening/p0-base` | in review |
+| P2 | Route the remaining raw file mutations through the broker; shrink the allowlist; refuse ancestors of protected folders | #43 | `hardening/p2-route-raw-fs` | `hardening/p1-file-broker` | in review |
+| P3 | `ShellOperationGateway` (shell notifications, desktop icons) | #44 | `hardening/p3-shell-gateway` | `hardening/p2-route-raw-fs` | in review |
+| P4 | `AutoRouteService` + `RoutingPolicy`, testable `DesktopRouter`, watcher hardening | #45 | `hardening/p4-auto-route` | `hardening/p3-shell-gateway` | in review |
+| P5 | Typed `AppSettings` and `MigrationMarkers` | #46 | `hardening/p5-app-settings` | `hardening/p4-auto-route` | in review |
+| P6 | `RackSettingsSchema` + validator + repository (golden fixtures first) | #47 | `hardening/p6-rack-settings` | `hardening/p5-app-settings` | in review |
+| P7 | Decompose `MainWindow` (Magic Organize, hot corner, double-click hide, hotkeys, tray switches, update glue, display debounce) | #48 | `hardening/p7-mainwindow` | `hardening/p6-rack-settings` | in review |
+| P8 | Decompose `App` (bootstrap, migrations, crash reporting, uninstall mode) | #49 | `hardening/p8-app-bootstrap` | `hardening/p7-mainwindow` | in review |
+| P9 | Layout import/export: parser, validator, policy, executor | #50 | `hardening/p9-layout-import` | `hardening/p8-app-bootstrap` | in review |
+| P10 | `UpdateService` split (behavior tests first; stays fail-closed) | #51 | `hardening/p10-update-service` | `hardening/p9-layout-import` | in review |
+| P11 | Adversarial filesystem tests and the fixes they justified (P11a tests, P11b follow-ups, P11c F2/F3/F7) | #52 | `hardening/p11-adversarial-tests` | `hardening/p10-update-service` | in review |
+| P12 | Dependency notes, patch bumps (Microsoft.ML 5.0.1, Svg 3.4.8), dead code, zero warnings, two flaky tests fixed | #53 | `hardening/p12-deps-deadcode` | `hardening/p11-adversarial-tests` | in review |
+| P13 | Final documentation sync (this change): invariants index and risks, architecture, README, CONTRIBUTING, SECURITY, notices, changelog, this roadmap | #54 | `hardening/p13-final-docs` | `hardening/p12-deps-deadcode` | in review |
+
+Test count per phase (passed / skipped): P0 493 / 1; P7 1320 / 4; P8 1376 / 4; P9 1536 / 4; P10 1651 / 4; P11 1868 / 6 (the
+4 old skips plus 2 symlink tests that need the right to create symbolic links); P12 and P13 1874 tests (the skipped count varies by machine).
+
+## Final numbers
+
+- **Tests:** 1874 tests, 0 failed; the skipped count varies by machine (1 to 14: symlink rights, second drive, short names, SendTo, ReleaseGate) (`dotnet test Racks.sln -c Release`). The adversarial filesystem set
+  (`dotnet test --filter "Category=Adversarial"`) takes about 3 s alone.
+- **Build:** 0 warnings (was 2 at P0, 8 before P12).
+- **File-mutation allowlist** (`Guards/fs-allowlist.json`): **11 files, 36 calls**, all Racks-owned state or a non-destructive
+  copy (it went 44 -> 45 during the P1 review, when the guard became stricter, and 32 -> 36 in P9; was 45 calls in 12 files before P2; 32 in 9 after P2; 36 in 10 after P9, the one increase, for the atomic export and the
+  recovery folder; 36 in 11 after P10, when `Util/Updater.cs` 3 became `InstallerExecutor` 1 and `UpdateCleanupService` 2).
+- **Presentation boundary:** 0 direct shell references; registry allowlist in presentation: 0 (empty).
+- **Size ratchets** (`Guards/baseline.json`): `rackWindowLines` 561, `rackWindowPartMaxLines` 911, `rackWindowTotalLines` 5925,
+  `mainWindowLines` 404, `mainWindowMethodMaxLines` 59, `appLines` 38, `controllerUsages` 20, `xamlLiterals` 119.
+- **Dependencies:** no vulnerable package (`dotnet list package --vulnerable --include-transitive` on Racks, Racks.Tests and
+  RacksSigner); only test tooling is outdated on purpose (`Microsoft.NET.Test.Sdk` 17.14.1, `xunit.runner.visualstudio` 3.1.4).
+  `THIRD-PARTY-NOTICES.md` lists every package that ships (checked against the Release build's `Racks.deps.json`; closed in P13).
+
+## What remains open
+
+Not repeated here. Everything open or accepted, with severity and recommendation, is in
+[`SECURITY-INVARIANTS.md`](SECURITY-INVARIANTS.md), section **"Riscos aceites e abertos"** (R-01 to R-28): the open P11
+findings (F1, F4, F5, F6, F8), drive-root racks, the virtual-rack cross-volume duplicate, link-aware Move/Delete,
+the `WorkspaceReturn` identity check, the audit log (synchronous I/O, retention), handle-based `Unlink`, the shell
+verb gate (M3), the windowless process after a startup failure, the numeric windows in `RackSettingsSchema`, the downgrade
+caveat, what the guards cannot see, and the manual verification that no phase could do.
+
+Not in that list because it is not a risk: `gitleaks`/CodeQL in Actions, `Directory.Packages.props`, converting every
+`catch {}` and `Debug.WriteLine` (out of scope on purpose), and a `Microsoft.NET.Test.Sdk` 18 / `xunit.runner.visualstudio`
+4 upgrade.
+
+## Manual verification checklist (for the owner)
+
+No phase from P5 to P12 started the real app, `test/Test-Racks.ps1` or `tools/dev-tools.ps1 e2e` (they kill the running
+Racks and drive the real Desktop), so the real startup, tray, hotkeys, mouse hook, dialogs and installer are covered only
+by the logic behind them. Do this once on the tip of the chain (P13 or the merged `main`), on a machine where it is fine
+to move a few files, ideally a throwaway Windows profile for the last step. Stop and report at the first thing that
+differs.
+
+1. **Start and tray.** Build and run (`dotnet run --project Racks/Racks.csproj`) or install the build. Racks starts with
+   no crash toast and no `crash.log`; the tray icon appears; right-click it and the menu opens; start a second copy: it
+   exits at once (single instance).
+2. **Hotkeys.** `Ctrl+Shift+N` makes a new rack; `Ctrl+Shift+Space` opens Quick Finder, typing narrows the list, `Enter` opens
+   an item; if another app owns a hotkey you see a notification, not a crash.
+3. **Rack lifecycle.** Add a rack (tray menu), drag a file from a folder into it (the file moves in), rename the item with
+   `F2` (try a plain name; try `..\x` and `a:b`: both must be refused with a message and nothing moves), drag the file
+   back out to the Desktop (one file, no duplicate), then remove the rack (the files are on the Desktop).
+4. **Auto-route.** Give a rack the name pattern `\.pdf$`. Save a PDF on the Desktop: it appears in the rack. Download
+   something in the browser: while it is `.crdownload`/`.part` it stays on the Desktop and moves when the browser
+   renames it. A bad pattern in the rule dialog is refused with a message. `%AppData%\Racks\audit.log` has a line
+   per decision.
+5. **Magic Organize and undo.** Run it on a Desktop with a few files in "Racks" mode, confirm, check the racks; undo;
+   the files are back and the racks are gone. Repeat once in "Folders" mode.
+6. **Layout export and import.** Tray menu, "Export racks...": save to a file (the file appears). Change a rack. "Import racks..."
+   (it replaces all current racks) with that file: the old state returns and any value left out is listed in the message.
+   Then import a text file that is not a layout: a message, and nothing changes.
+7. **Settings toggles.** Flip each tray/Settings switch and check the effect: ice physics, hide desktop icons (and that the
+   icons come back on exit), double-click wallpaper to hide/show, hot corner, lock all racks, theme submenu, language
+   preview (`RACKS_LANG`).
+8. **Start on login.** Turn it on: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` has a `Racks` value; turn it off: the
+   value is gone. Sign out and in once with it on.
+9. **Update check without installing.** Tray menu, "Check for updates" (and, in Settings, "Auto update" on then restart). Expected
+   on a build with the real key: "up to date" or an offer; do not press Install. Anything else is a bug report. Nothing may
+   run from `%TEMP%\Racks-update-*`.
+10. **Uninstall (throwaway profile only).** Install, put a file in a rack, uninstall from Apps and Features. The file is on
+    the Desktop (never overwritten; name clashes get "(from Racks)"), `audit.log` and `crash.log` are gone,
+    `%AppData%\Racks\recovery` stays if it existed, and the farewell animation plays.
+
+11. **Upgrade in place.** Over a real 1.4.0 install with existing racks, on a pt-PT machine: install this build; the racks load
+    unchanged and `audit.log` has no fallback noise (P6 changed the loader and the save format, see R-15).
+12. **Drag-out variants.** From a Desktop rack; from a virtual rack to another drive (expect the R-07 duplicate); a folder; and
+    dropping a folder from another drive into a rack (expect the R-01 refusal, nothing moved).
+13. **Remove-rack variants.** A virtual rack with a file open (the rack is kept, with a message); a folder rack on the Desktop.
+14. **Ctrl+drop links.** Hardlink, junction and shortcut; then remove the rack and uninstall: the links are removed and the
+    targets are intact.
+15. **One real update install** from the previous signed build to a signed staging build: launch, shutdown, the single-instance
+    lock is released, relaunch, and `%TEMP%\Racks-update-*` is cleaned. Do it before the next release at the latest.
+
+Then run the automated pass if the machine can be driven: `.\test\Test-Racks.ps1` and `.\tools\dev-tools.ps1 e2e`.
+
+## Merge order
+
+The PRs are stacked: **#41 -> #42 -> ... -> #54**, each PR's base being the previous branch, and #41's
+base being `feature/scandi-branding-and-stability`, which has no PR of its own and is 4 commits ahead of `main`.
+
+1. Open (or merge directly) the feature branch into `main` first, because `main` is an ancestor of it. Until then every
+   PR targets another branch, not `main`.
+2. Merge **in order**, #41 first. When a merged branch is deleted, GitHub retargets the PR that was based on it; if it
+   does not, use `gh pr edit <n> --base <branch>` (or retarget in the UI) before merging the next. Do not squash out of
+   order: a squash rewrites the base and the next PR will show the previous phase's commits again.
+3. Checks: the required ones on `main` are `pr-title` and `gitleaks`; the full local list is under "Commands" below, and each
+   PR body lists the commands it ran.
+4. After the last merge, delete the merged `hardening/*` branches, tag nothing (a release is a separate process:
+   `docs/RELEASING.md`), and move the "Where we are" section of this file to "done".
+
+## How to resume
+
+1. `git fetch --all`, then `git switch hardening/p13-final-docs` (the tip of the chain; or `main` once everything is merged).
+2. Read, in this order: `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/SECURITY-INVARIANTS.md` (index, guards, risks), this file.
+3. Run the commands under "Commands" (all must be green: 1874 tests, 0 failed; the skipped count varies by machine (1 to 14: symlink rights, second drive, short names, SendTo, ReleaseGate); build 0 warnings).
+4. Pick work from the risks table in `SECURITY-INVARIANTS.md`; the suggested next phases are R-01, R-06, R-13. One risk = one
+   PR on top of the chain's tip, with the test that flips (a `Known_gap_...` test is meant to be changed on purpose when its
+   gap is fixed).
+5. Keep the rules: broker for files, `AppSettings`/`RackSettingsRepository` for the registry, `ShellOperationGateway` for the
+   shell, behavior tests, ratchets only go down, the update path stays fail-closed. `CONTRIBUTING.md` has the PR sections.
 
 ### P1 in short (what changed)
 
@@ -80,7 +220,7 @@ which tests were added.
   renames it back like any item; the mirror leaves it); a file in a virtual rack that is the only name of its
   data is no longer deleted as an "orphan shortcut"; a protected, non-empty or linked folder is no longer
   removed by the rack-folder and undo cleanups.
-- Final allowlist (was 45 calls in 12 files, now 32 calls in 9 files; every entry is Racks-owned state or a
+- Allowlist at the end of P2, historical (today's is under "Final numbers"; was 45 calls in 12 files, then 32 calls in 9 files; every entry is Racks-owned state or a
   non-destructive copy): `Core/DesktopIconManager.cs` 7, `RackWindow.DragDrop.cs` 2, `Util/CrashLog.cs` 3,
   `Util/JunctionHelper.cs` 5, `Util/RackLayoutIO.cs` 1, `Util/RackMirror.cs` 2, `Util/ShortcutFactory.cs` 1,
   `Util/UninstallCleanup.cs` 8, `Util/Updater.cs` 3.
@@ -205,14 +345,12 @@ which tests were added.
   `Folder`/`BackgroundImagePath` containing control characters are refused (a NUL in `Folder` used to abort the whole load);
   `Enum.TryParse` combinations such as `Left, Right` are refused; `IsShortcutsOnly` is no longer written to the rack key (it was
   never read back); the junk text `System.Collections.Generic.List...` is no longer written to the root by a "Default Style" instance.
-- **Culture and downgrade.** Doubles (`PosX`, `Width`, `IdleOpacity`, ...) are written as invariant text (`123.5`) whatever the culture.
-  The reader tries invariant text first, then the current culture. The real rule: **invariant text is read correctly in every culture;
-  legacy culture text (`123,5`) is read correctly only in the culture that wrote it** (an en-US machine reads `321,75` as 32175, as the
-  old reader did). A **downgrade is unsafe**: an older build on a culture whose group separator is a space (pt-PT, fr-FR) does not
-  parse `123.5` and uses the defaults; on cultures whose group separator is '.' (de-DE, es-ES, it-IT, pt-BR, nl-NL) the old parser
-  (`AllowThousands`) reads `0.4` as 4 and `321.75` as 32175, which can corrupt geometry and opacity. Recommendation: do not downgrade
-  (or re-save the racks there). Integers stay REG_DWORD (the write-through used to store them as REG_SZ), switches stay `True`/`False`,
-  lists as before; the global defaults stay REG_SZ text (an older build reads the root with a text reader).
+- **Culture and downgrade.** Doubles (`PosX`, `Width`, `IdleOpacity`, ...) are written as invariant text (`123.5`) whatever the
+  culture. The reader tries invariant text first, then the current culture: invariant text is read correctly in every culture;
+  legacy culture text (`123,5`) is read correctly only in the culture that wrote it. **A downgrade is unsafe** (an older build
+  misreads or ignores the dot numbers): do not downgrade. Details and the affected cultures: R-15 in `docs/SECURITY-INVARIANTS.md`
+  and the CHANGELOG. Integers stay REG_DWORD (the write-through used to store them as REG_SZ), switches stay `True`/`False`, lists
+  as before; the global defaults stay REG_SZ text (an older build reads the root with a text reader).
 - **Audit volume and normalisation (review fixes).** A load no longer writes normalised values back, so the same finding would repeat on every
   start: findings are logged once per process per (rack key, field, raw value). A rack whose ONLY findings are benign (a stored
   number clamped, a missing/empty `Name`) is saved once in full, explicitly, as `SettingNormalized`, so the registry is corrected
@@ -221,15 +359,8 @@ which tests were added.
   whose `Name` differs from its key in more than case gets its one-shot migrations in memory only (a write would create a
   skeleton key under that name that loads as a "folder missing" ghost).
 - Behaviour note: `ShowOnVirtualDesktops` `1,abc` now becomes `[1]` (it used to be dropped whole, meaning "all desktops").
-- Follow-up (pre-existing, not fixed): a rack whose folder is a drive root has the name `""`; it has no registry key, so it is never
-  persisted. Saving it is now a silent skip (it used to log a write failure on every change). **Investigated in P11b** (behavior
-  unchanged, `DriveRootRackTests` documents it): dropping a folder on an empty rack sets `Instance.Name = Path.GetFileName(folder)`
-  (`RackWindow.DragDrop`), which is `""` for `D:\`, `D:` and a share root such as `\\server\share`; the name is the registry key, so
-  nothing is written, nothing is logged and the rack is gone after a restart. Recommendation (a small phase, not P11): derive the
-  name through one function for all three places that set it (drop, rename, bootstrap) that falls back to the drive letter (`D`) or
-  the share name when the leaf is empty and then makes it unique among the racks, or refuse the drop with a message; either way
-  the same key must be used on every later save. Two folders with the same leaf name (`C:\a\Docs`, `D:\b\Docs`) would also get the same
-  key when bound this way (not tested).
+- Follow-up (pre-existing, not fixed): a rack whose folder is a drive root has the name `""` and is never persisted; investigated
+  in P11b (`DriveRootRackTests`). Now R-06 in `docs/SECURITY-INVARIANTS.md`.
 - Kept on purpose: the two one-shot migrations still write through the setters after a load; a full save leaves an empty
   `LastAccessedFiles`/`CustomOrderFiles` value alone while a single-value write stores the empty list (and `AssignedFiles` is removed
   when empty), exactly as before; `BackgroundImagePath` is stored as typed (the local-drive check stays where the image is loaded);
@@ -249,7 +380,7 @@ which tests were added.
   decision; `IGlobalMouseHook`, `IDesktopHitTest`), `Hotkeys/HotkeyController` (register, conflict report through a callback,
   dispatch table, unregister; `IHotkeyApi`), `Tray/TrayToggleService` (what each tray switch does once flipped, over
   `AppSettings` and the shell gateway; `IRackWindowControl`), `Updates/UpdateCheckService` (20 s background check, manual check,
-  1 min clean-up of old download folders; `Util/Updater` untouched), `Display/DisplayChangeDebouncer` (the
+  1 min clean-up of old download folders; `Util/Updater` was untouched in P7 and replaced in P10), `Display/DisplayChangeDebouncer` (the
   WM_DISPLAYCHANGE debounce).
 - Infrastructure side: `Infrastructure/Shell/GlobalMouseHook` + `DesktopHitTest` (the only code that touches H.Hooks, `WindowFromPoint`
   and UI Automation), `Win32HotkeyApi`, `ScreenHotCornerProbe`. `Core/Abstractions` gained `IRepeatingScheduler` /
@@ -344,45 +475,23 @@ which tests were added.
   message tests only); a rack key's nested subkeys (the app writes none) are not copied by the snapshot and not compared by the
   restore check.
 
-### Follow-up recorded by the P8 review (not implemented)
+### Follow-ups recorded by the reviews: where they went
 
-- **Startup failure after the single-instance name is taken.** If any step after `AcquireSingleInstance` throws, the dispatcher
-  hook marks the exception handled, WPF skips `StartupUri`, and with `ShutdownMode=OnExplicitShutdown` the process stays alive
-  with no window while still holding the mutex, so every relaunch is refused. Same behavior as before the refactor. A fix would
-  catch in `AppBootstrapService.Run`, log, and shut down (releasing the name).
+The P1, P2 and P8 reviews recorded follow-ups. The ones still open are risks in `docs/SECURITY-INVARIANTS.md` ("Riscos aceites
+e abertos"); the ones that were done are listed here.
 
-### Follow-ups recorded by the P2 review (not implemented)
-
-- **Deliberate change to revisit:** in a virtual rack a file that is the only name of its data is no longer
-  deleted as an "orphan shortcut" after an Explorer Move drag-out that crossed volumes. The original stays in the
-  rack, so the user sees a duplicate. The proper fix is the desktop-rack pattern: `CopyLooksComplete`, then
-  `DeleteToRecycleBin`.
-- `Move`/`DeleteTree`/`DeleteToRecycleBin` still judge a junction by its TARGET, so the ancestor rule refuses to
-  move or delete a Ctrl+dropped link to the OneDrive root, `C:\Users` or `AppData`. Making those link-aware (as
-  `Rename` and `Unlink` already are) is safe for `DeleteTree`/Recycle and for a same-volume `Move`.
-- ~~`RackWindow.Menu.cs` (remove rack on the Desktop) ignores the `DeleteEmptyDirectory` result: the rack is removed
-  but the folder may remain although the dialog said it would be deleted.~~ Done in P11b: `Rack/RackFolderRemoval`
-  returns the text to show once (`Lang.RemoveRack_FolderKept`) when the folder is still there; the broker's own
-  `DeleteEmptyDirectory` record is the audit trail.
-- `UninstallCleanup` and `WorkspaceReturn` treat "link count above 1" as "the data survives elsewhere" but do not
-  know where the other name lives (it could be in `$Recycle.Bin`), and `WorkspaceReturn` does not compare file
-  identity (volume serial + file index) with the Desktop file. **Confirmed by a test in P11 (F4)**: still open,
-  deliberately not implemented there.
-- `Unlink` and `DeleteEmptyDirectory` act by path after their checks; a handle-based delete closes the
-  check-to-delete window. Considered in P11 and **not implemented on purpose** (it needs a design of its own: the
-  window is two system calls wide and every failure of it is safe, because both calls refuse a non-empty folder,
-  a real folder or a file with one name).
-
-### Follow-ups recorded by the P1 review
-
-- ~~**P2:** refuse an ancestor of a protected folder~~ Done in P2 (see above).
-- ~~**P11 or later:** `SafeMove.CopyThenDelete` cleanup after a failed copy should delete only what this call
-  created.~~ Done in P11b (see "P11 in short"). Still open: the audit sink does synchronous I/O on the calling (often
-  UI) thread, so consider a background queue; reason texts are English only.
-- ~~`MoveChecked` runs `SafeMove.Check` twice.~~ Done in P11b: once, through `SafeMove.MoveAfterCheck`.
-
-Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (done).
-
+| Follow-up (review) | Outcome |
+|---|---|
+| P1: refuse an ancestor of a protected folder | Done in P2 |
+| P1: `SafeMove.CopyThenDelete` cleanup should delete only what the call created | Done in P11b |
+| P1: `MoveChecked` runs `SafeMove.Check` twice | Done in P11b (once, through `SafeMove.MoveAfterCheck`) |
+| P1: the audit sink does synchronous I/O on the calling thread; reason texts are English only | Open: R-10 |
+| P2: orphan shortcut no longer deleted in a virtual rack after a cross-volume Explorer Move | Open: R-07 |
+| P2: `Move`/`DeleteTree`/`DeleteToRecycleBin` judge a junction by its target (Ctrl+dropped links to OneDrive, `C:\Users`, `AppData`) | Open: R-08 |
+| P2: `RackWindow.Menu.cs` ignored the `DeleteEmptyDirectory` result when removing a Desktop rack | Done in P11b (`Rack/RackFolderRemoval`) |
+| P2: "link count above 1" and no file-identity check in `UninstallCleanup`/`WorkspaceReturn` | Open: R-02 (confirmed as F4 in P11) |
+| P2: `Unlink`/`DeleteEmptyDirectory` act by path after their checks | Open: R-11 (considered in P11, not done on purpose) |
+| P8: startup failure after the single-instance name is taken leaves a windowless process | Open: R-13 |
 
 ### P10 in short (what changed)
 
@@ -450,37 +559,23 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
   `DesktopIconManager.Setup(workspace, icon, libraries, desktop)` (what `Initialize()` does, with the four places passed in) and
   `RackMirror.Rebuild(racks, mirrorRoot)`.
 - **Findings.** F2, F3 and F7 were fixed in a third commit (P11c, below). The others are not fixed in P11; each is pinned by a test
-  (named `Known_gap_...` except F6 and F8), so a fix has to flip it on purpose:
-  - **F1, medium (function, no data loss):** a FOLDER move to another volume never reaches the copy+delete fallback. .NET's
-    `Directory.Move` throws an `IOException` whose HResult is not `ERROR_NOT_SAME_DEVICE`, so `IsCrossVolumeError` never matches and the
-    user's drop is refused ("Failed to move"; source untouched, nothing created). File moves across drives work because the OS copies
-    them (no verification of the copy by Racks). So the copy fallback and its new cleanup are reached only by tests today. Recommendation:
-    decide by comparing the volume roots before the move (as `SameVolume` in the broker does), route to `CopyThenDelete` followed by a
-    completeness check (`CopyLooksComplete`) and only then the delete. Know before enabling: the copy skips links (the pointer is lost,
-    never its target) and stops at 64 levels deep (refused whole, nothing changed).
-  - ~~**F2, low likelihood, high impact (data loss):** moving a file to a destination called `NUL` pours the file into the NUL device.~~
-    **Fixed in P11c:** `FileOperationBroker.Move`/`MoveSameVolume` now judge the destination's final segment with
-    `PathPolicy.ValidateLeafName` right after the path check and before anything is touched ("Destination name: ..." in the reason):
-    device names with or without an extension (NUL, CON, PRN, AUX, COM0-9, LPT0-9, CONIN$), a trailing dot or space and data streams are
-    `Rejected`. Only the last segment is checked, so legitimate parents and every internal name (`name (from Racks 12).txt`) are
-    unaffected. `Rename` and `CreateDirectory` already did this.
-  - ~~**F3, medium:** `AssignedFiles` containing `.` made `WorkspaceReturn` move the whole workspace onto the Desktop.~~
-    **Fixed in P11c:** `WorkspaceReturn.ToDesktop` and the remove-rack loop require `PathPolicy.ValidateLeafName(name).Ok`; the loader
-    and the layout import (`RackSettingsValidator.ParsePipeList`) drop the items that fail it and keep the good ones, as a
-    `SettingFallback` audit record on load and a dropped-value entry on import (the stored text is left as it is). One golden
-    fixture value changed because it was not a leaf name: `sub dir\c.pdf` became `sub dir c.pdf`.
-  - **F4, low:** a workspace file with another hard link elsewhere and the same LENGTH as an unrelated Desktop file of the same name is
-    taken for the Ctrl+drop duplicate and dropped instead of returned. No byte is lost (its data stays under the other name) but it does
-    not come back. Fix: the file-identity check already listed above (volume serial + file index).
-  - **F5, low:** `DesktopRackClaims.IsGone` treats a dangling junction as a reachable folder (`Directory.Exists` is true for it), so every
-    name under a workspace that is a junction whose target vanished reads as "moved away" and its claim is dropped on a drag-out.
-  - **F6, cosmetic:** a second uninstall run returns the "files not returned" note written by the first run to the Desktop as if it were a
-    user file (`UninstallCleanup` step 1 skips only `desktop.ini` and the icon).
-  - ~~**F7, low:** the Desktop library file is built by string interpolation; a path with `&` or `<` made `DesktopWorkspace.library-ms`
+  (named `Known_gap_...` except F6 and F8), so a fix has to flip it on purpose, and each is now a risk in
+  `docs/SECURITY-INVARIANTS.md`: **F1** a folder move to another volume is refused instead of copied (R-01, the one worth a phase of its
+  own); **F4** a hard-linked workspace file with the same length as an unrelated Desktop file is dropped, not returned (R-02);
+  **F5** a dangling junction counts as a reachable folder in `DesktopRackClaims.IsGone` (R-03); **F6** a second uninstall run returns
+  the first run's note (R-04); **F8** the preflight does not resolve a missing destination's parent through a junction (R-05).
+  - ~~**F2** moving a file to a destination called `NUL` poured the file into the NUL device.~~ **Fixed in P11c:**
+    `FileOperationBroker.Move`/`MoveSameVolume` judge the destination's final segment with `PathPolicy.ValidateLeafName` right after
+    the path check and before anything is touched ("Destination name: ..." in the reason): device names with or without an extension
+    (NUL, CON, PRN, AUX, COM0-9, LPT0-9, CONIN$), a trailing dot or space and data streams are `Rejected`. Only the last segment is
+    checked. `Rename` and `CreateDirectory` already did this.
+  - ~~**F3** `AssignedFiles` containing `.` made `WorkspaceReturn` move the whole workspace onto the Desktop.~~ **Fixed in P11c:**
+    `WorkspaceReturn.ToDesktop` and the remove-rack loop require `PathPolicy.ValidateLeafName(name).Ok`; the loader and the layout
+    import (`RackSettingsValidator.ParsePipeList`) drop the items that fail it and keep the good ones, as a `SettingFallback` audit
+    record on load and a dropped-value entry on import (the stored text is left as it is). One golden fixture value changed because it
+    was not a leaf name: `sub dir\c.pdf` became `sub dir c.pdf`.
+  - ~~**F7** the Desktop library file was built by string interpolation; a path with `&` or `<` made `DesktopWorkspace.library-ms`
     invalid XML.~~ **Fixed in P11c:** both paths go through `SecurityElement.Escape`.
-  - **F8, informational:** `SafeMove.Canonicalize` of a destination that does not exist yet does not resolve its parent through a
-    junction, so "destination inside source, through a junction alias" is not seen by the preflight; the operating system refuses the
-    move and the broker reports `Failed` instead of `Rejected`. Nothing moved (tested).
 - **P11c** (F2, F3, F7): the three fixes above, with their tests flipped from `Known_gap_...` to real expectations: 18 destination-name
   cases (device names, trailing dot/space, data streams) plus ordinary and `(from Racks N)` names, a trailing separator, odd parent
   names, `Rename`/`CreateDirectory`; 13 loader cases and the layout import for `AssignedFiles` items; the XML-escape case.
@@ -488,11 +583,11 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
   0 failed. P11a added 108 (106 run here; SafeDelete 18, SafeMove 31, claims and return 36, uninstall and mirror 23), P11b 49 (copy
   cleanup 7, single preflight 3, rack folder removal 8, workspace set-up 10, mirror rebuild 11, drive-root rack 10). The Adversarial set
   was run 10 times in a row and the whole suite three times after P11b and again after P11c with no flake. P11c added 44 (1824 to 1868).
-- Not done on purpose: the audit background queue, a handle-based `Unlink`, a link-aware `Move` for Ctrl+dropped links, the
-  virtual-rack cross-volume copy-then-recycle and the `WorkspaceReturn` file-identity check stay as follow-ups above. The real app,
-  `Test-Racks.ps1` and the dev-tools e2e were not run; the rack-removal dialog is covered through `RackFolderRemoval` (the decision and the
-  text), not by showing the window. A second fixed drive existed on the machine used (D:), so the real cross-volume tests ran there; on a
-  one-drive machine (and in CI) they show as skipped.
+- Not done on purpose (all are risks in `docs/SECURITY-INVARIANTS.md`): the audit background queue (R-10), a handle-based `Unlink`
+  (R-11), a link-aware `Move` for Ctrl+dropped links (R-08), the virtual-rack cross-volume copy-then-recycle (R-07) and the
+  `WorkspaceReturn` file-identity check (R-02). The real app, `Test-Racks.ps1` and the dev-tools e2e were not run; the rack-removal
+  dialog is covered through `RackFolderRemoval` (the decision and the text), not by showing the window. A second fixed drive existed on
+  the machine used (D:), so the real cross-volume tests ran there; on a one-drive machine (and in CI) they show as skipped.
 
 ### P12 in short (what changed)
 
@@ -500,7 +595,7 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
   exists and where it is used (all 7 app packages were checked with grep: all are used; none removed). Transitive on purpose, not
   referenced directly: Newtonsoft.Json (via Microsoft.ML), ExCSS (via Svg), Microsoft.CodeAnalysis (via Slions.VirtualDesktop).
 - Bumps, all pinned exactly: `Microsoft.ML` 5.0.0 to 5.0.1 and `Svg` 3.4.7 to 3.4.8 (build and the whole suite green, SVG tests included).
-  `THIRD-PARTY-NOTICES.md` unchanged (no package added or removed; note: it does not list Microsoft.ML, which is MIT, a gap for P13).
+  `THIRD-PARTY-NOTICES.md` was not touched in P12 (it did not list Microsoft.ML, which is MIT; closed in P13, which also lists the transitive packages that ship).
 - `dotnet list package --vulnerable --include-transitive`: none in Racks, Racks.Tests and RacksSigner. `--outdated`: only test tooling,
   `Microsoft.NET.Test.Sdk` 17.14.1 (latest 18.11.0) and `xunit.runner.visualstudio` 3.1.4 (latest 4.0.1), both left on purpose
   (major versions, no need).
@@ -521,29 +616,21 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
   the PR template no longer says the test project does not exist and asks for what was refactored, risk reduced, tests added and local checks.
 - Tests: 1868 passed, 6 skipped, 0 failed before and after (no test added or removed). Two flaky tests found in repeated runs were fixed in a follow-up commit: `SettingsAuditRecordTests.Without_an_injected_sink_...` (the process-wide audit sink also received events from parallel tests outside the AuditLog collection; the test now keeps only its own thread's events) and `RackDeletionTests.FileWatcherService_Dispose_...` (it watched the shared %TEMP% and used a blind sleep; real race too: an event already queued could reach a disposed `FileWatcherService`, now dropped by an `IsDisposed` guard; the test uses a private parent folder and a live control watcher instead of a sleep). Each class 30 runs and the whole suite 5 runs: all green.
 
-## Findings that drive the order
+## Findings that drove the order (all addressed)
 
-1. Inline rename (`RackWindow.Items.cs`) builds the target with `Path.Combine(dir, typedText)` and no validation: a name with `\` or a rooted path moves the file elsewhere.
-2. Magic Organize "folders" mode creates directories from an unsanitized cluster name.
-3. Registry load (`InstanceController.InitInstances`) uses one `try` for all racks, accepts NaN/Infinity and undefined enum values, writes doubles with the user's culture, and writes back while reading.
-4. `DesktopRouter` has no watcher `Error` handling, uses `Regex` directly, ignores partial downloads and reparse points, and `Flush` is untested.
-5. `RackLayoutIO.Import()` is untested; failures only reach `Debug.WriteLine`; no size or range limits. (Fixed in P9.)
-6. `Updater` mixes toasts with logic, has no response size cap on the catalog and `InstallUpdate` is untested. (Fixed in P10.)
-7. 185 `Debug.WriteLine` calls, none persisted.
+1. Inline rename built the target with `Path.Combine(dir, typedText)` and no validation. Fixed in P1 (INV-FS-2).
+2. Magic Organize "folders" mode created directories from an unsanitized cluster name. Fixed in P1.
+3. Registry load used one `try` for all racks, accepted NaN/Infinity and undefined enum values, wrote doubles with the user's culture and
+   wrote back while reading. Fixed in P6 (INV-REG-2); the downgrade caveat is R-15.
+4. `DesktopRouter` had no watcher `Error` handling, used `Regex` directly, ignored partial downloads and reparse points. Fixed in P4 (INV-ROUTE-1).
+5. `RackLayoutIO.Import()` was untested, failures only reached `Debug.WriteLine`, no size or range limits. Fixed in P9 (INV-IMPORT-2, -5).
+6. `Updater` mixed toasts with logic, had no response size cap on the catalog and `InstallUpdate` was untested. Fixed in P10 (INV-UPDATE-1).
+7. 185 `Debug.WriteLine` calls, none persisted. Not changed on purpose: only the broker, registry, import and update paths were audited.
 
-## Constraints to respect
+## Out of scope (follow-ups, not risks)
 
-- Replace source-text-reading tests with behavior tests **before** moving the code they watch: `InstanceKeyTests`, `RackLayoutImportValidationTests` (switch vs allow-list), `SafeWpfValuesTests`, `UpdaterConfigTests`/`UpdaterMessageTests`/`UpdaterReleaseScanTests`, `SafeSvgTests` (startup order).
-- `UpdateManifest.cs` and `UpdateTrust.cs` keep their paths (`tools/RacksSigner`, release scripts).
-- `release.yml` expects exactly one `Category=ReleaseGate` test.
-- `MainHwnd` registry value (REG_SZ, decimal) and `WM_RACKS_*` messages are used by `tools/*E2ERunner.ps1`.
-- Saved racks must load identically after the registry refactor (golden fixtures written by the old code).
-- Do not mass-convert `Debug.WriteLine` or `catch {}`; audit only the broker, registry, import and updater paths.
-
-## Out of scope (follow-ups)
-
-gitleaks/CodeQL in Actions, `Directory.Packages.props`, unresolved shell verbs still passing the delete gate
-(M3, documented), converting every `catch {}`.
+`gitleaks`/CodeQL in Actions, `Directory.Packages.props`, converting every `catch {}`, the test tooling major upgrades. The shell verb
+gate (M3) is a documented partial, R-12.
 
 ## Commands (run locally before every PR)
 
@@ -552,18 +639,10 @@ dotnet restore Racks.sln
 dotnet format whitespace --verify-no-changes
 dotnet build Racks.sln -c Release
 git diff --exit-code -- Racks/Properties/Lang.Designer.cs
-dotnet test Racks.sln -c Release --no-build
+dotnet test Racks.sln -c Release --no-build        # 1874 tests, 0 failed; the skipped count varies by machine (1 to 14: symlink rights, second drive, short names, SendTo, ReleaseGate)
 dotnet publish Racks/Racks.csproj -c Release -r win-x64 --self-contained false
 gitleaks detect --no-banner
 ```
 
-UI-touching phases (P3, P4, P7, P8) also run `test/Test-Racks.ps1` and `tools/dev-tools.ps1 e2e`, and a manual
-pass: start the app, drag a file into a rack, rename it, remove the rack, trigger an auto-route.
-
-## Done means
-
-- No user-data filesystem mutation outside the broker (a guard test fails otherwise).
-- Presentation does not touch the registry, file mutation, shell notifications or the updater (ratchets at zero or justified).
-- All registry reads/writes go through the schema + repository; bad values are never applied and always logged.
-- Auto-route, import and update have a validated policy and adversarial tests; the update path is still fail-closed.
-- `MainWindow` and `App` carry no domain logic (ratchets); invariants and architecture docs match the code.
+UI-touching phases also run `test/Test-Racks.ps1` and `tools/dev-tools.ps1 e2e`, and the manual pass above (start the app, drag a
+file into a rack, rename it, remove the rack, trigger an auto-route).
