@@ -25,7 +25,7 @@ namespace Racks.Tests.Guards;
 /// <c>File.Open</c>/<c>FileStream</c> with the mode passed in a variable; Win32 and COM calls
 /// (HardlinkHelper <c>CreateHardLinkW</c>, JunctionHelper <c>DeviceIoControl</c>, ShellLinkHelper
 /// <c>IPersistFile.Save</c>, <c>SHFileOperation</c> in SafeDelete); processes (JunctionHelper <c>mklink</c>
-/// via cmd); Updater's <c>new DirectoryInfo(dir).Create(security)</c>;
+/// via cmd); the update download folder's <c>new DirectoryInfo(dir).Create(security)</c> (InstallerExecutor);
 /// UninstallCleanup's <c>new DirectoryInfo(..).Attributes =</c>; shell context-menu verbs (delete/cut/paste
 /// run by Explorer itself); reflection; code in other projects (tools/). <c>Stream.CopyTo</c> is
 /// intentionally NOT matched (it copies bytes, not files). Strings are not blanked, so a string that contains

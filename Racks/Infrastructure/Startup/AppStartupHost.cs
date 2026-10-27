@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Markup;
 using Microsoft.Toolkit.Uwp.Notifications;
 using Racks.Infrastructure.Shell;
+using Racks.Infrastructure.Update;
 using Racks.UseCases.Startup;
 using Application = System.Windows.Application;
 
@@ -72,7 +73,7 @@ internal sealed class AppStartupHost : IStartupHost
         {
             if (args.Contains("action") && args["action"] == "install_update")
             {
-                await Updater.InstallUpdate();
+                await UpdateComposition.Service.InstallAsync();
             }
         });
     }

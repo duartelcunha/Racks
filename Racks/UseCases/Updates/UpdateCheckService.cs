@@ -1,12 +1,12 @@
 using System.Diagnostics;
-using Racks.Util;
+using Racks.Infrastructure.Update;
 
 namespace Racks.UseCases.Updates;
 
 /// <summary>
 /// The glue the hidden host window runs around the updater: the opt-in background check a little after startup, the manual
 /// "Check for updates" menu item, and the delayed clean-up of the download folders earlier updates left behind. The
-/// updater itself (<c>Util/Updater</c>: manifest, signature, hash, install) is untouched and stays fail-closed (P10).
+/// update itself (manifest, signature, hash, install: <see cref="UpdateService"/>) stays fail-closed and never throws.
 ///
 /// The background check is silent: a toast appears only when a newer release exists (the updater stays quiet on a first
 /// failure such as being offline). The manual check also says "up to date". Both swallow and log any exception.
@@ -28,8 +28,8 @@ public sealed class UpdateCheckService
     public UpdateCheckService(Func<TimeSpan, Task>? delay = null, Func<bool, Task>? check = null, Action? cleanup = null)
     {
         _delay = delay ?? (d => Task.Delay(d));
-        _check = check ?? (showToastIfNoUpdate => Updater.CheckUpdateAsync(Updater.ReleasesApi, showToastIfNoUpdate));
-        _cleanup = cleanup ?? (() => Updater.CleanupOldUpdateDirs());
+        _check = check ?? (showToastIfNoUpdate => UpdateComposition.Service.CheckAsync(ReleaseCatalogClient.ReleasesApi, showToastIfNoUpdate));
+        _cleanup = cleanup ?? (() => UpdateCleanupService.CleanupOldUpdateDirs());
     }
 
     /// <summary>Waits 20 s, then checks silently. Never throws.</summary>

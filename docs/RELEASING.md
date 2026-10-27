@@ -5,7 +5,7 @@ machine.
 
 ## Trust model
 
-The in-app updater (`Racks/Util/Updater.cs`) installs a release only if it carries a manifest
+The in-app updater (`Racks/UseCases/Updates/UpdateService.cs`, with `Racks/Infrastructure/Update/*` for HTTP, files and the installer start) installs a release only if it carries a manifest
 signed by the **update signing key**:
 
 | Asset | What it is |

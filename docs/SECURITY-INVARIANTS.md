@@ -18,22 +18,61 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
 ## Invariantes (regras a manter)
 
 - **INV-UPDATE-1** Nunca executar um binário descarregado sem verificar proveniência E integridade
-  independentes do transporte: validar a URL (HTTPS, host do GitHub, repo esperado, nome de asset
-  esperado) e verificar a assinatura Authenticode / hash publicado antes do `Process.Start`.
-  *(revisão + teste)* ✅ Aplicado (2026-10) com uma assinatura própria ancorada FORA do GitHub:
-  manifesto canónico `{product, version, fileName, sha256, size}` assinado com ECDSA P-256; chave
-  pública compilada (`Util/UpdateTrust.cs`), privada só no Credential Manager do dono. O updater
-  exige assinatura válida, versão assinada == tag do release e > versão atual, e tamanho/sha256
-  dos bytes descarregados, verificados por um handle que nega escrita/apagamento e fica aberto até
-  o instalador arrancar. Placeholder da chave ⇒ nenhum update. O updater lê a primeira página de
-  `/releases` (até 30) e oferece o release assinado mais recente que verifica, para um release
-  partido não esconder um bom; os toasts só mostram a versão validada, nunca texto da API, e um
-  release que não verifica nunca é nomeado nem ligado (sem versão, sem link para a página de
-  releases: só "instale apenas updates que o Racks verifica"). Uma build sem a chave não contacta o
-  GitHub e só responde a uma verificação pedida pelo utilizador, com texto neutro.
-  *(teste: `UpdateSignatureTests`, `UpdaterAssetTests`, `UpdaterReleaseScanTests`,
-  `UpdaterMessageTests`; código
-  partilhado com `tools/RacksSigner`)*
+  independentes do transporte. *(revisão + teste)* ✅ Aplicado (2026-10, reestruturado na P10) com uma
+  assinatura própria ancorada FORA do GitHub: manifesto canónico `{product, version, fileName, sha256,
+  size}` assinado com ECDSA P-256; chave pública compilada (`Util/UpdateTrust.cs`), privada só no
+  Credential Manager do dono. **Falha sempre fechada**: nada descarregado corre a menos que, em
+  conjunto, (1) a assinatura do manifesto verifique com a chave compilada, (2) o manifesto seja do
+  release exato (versão assinada == tag) e mais novo que a versão em execução, (3) os URLs sejam
+  HTTPS + `github.com` + `/duartelcunha/Racks/releases/download/` e acabem no nome exato do asset,
+  (4) os bytes tenham o tamanho assinado e (5) o SHA-256 assinado. Placeholder da chave => nenhum
+  update e nenhum pedido de rede. Quem faz o quê (`Racks/UseCases/Updates` = lógica,
+  `Racks/Infrastructure/Update` = HTTP, ficheiros, processo, toasts):
+  - `ReleaseManifestValidator` (puro): escolhe candidatos da primeira página de `/releases` (até 30;
+    draft, prerelease e tags que não sejam `v<major>.<minor>.<patch>` ignorados), assets por nome
+    exato (nunca `assets[0]`), allowlist de URL (`IsTrustedDownloadUrl`) e o primeiro candidato que
+    verifica (um release partido não esconde um bom). Usa `UpdateVerifier` (`Util/UpdateManifest.cs`,
+    código partilhado com `tools/RacksSigner`) para assinatura, tag, "mais novo", tamanho e hash.
+  - `ReleaseCatalogClient`: só lê o URL do feed (`ReleasesApi`, a única definição; qualquer outro URL
+    é recusado antes de qualquer pedido), a resposta tem tecto de 2 MiB, manifesto e `.sig` ficam em
+    1024 bytes, e cada pedido tem timeout (feed 30 s, assets 20 s) e token de cancelamento. O fetch de
+    assets pequenos volta a validar o URL contra a allowlist (defesa em profundidade: fora dela, null e
+    nenhum pedido).
+  - `InstallerExecutor`: descarrega para uma pasta nova, aleatória e só do utilizador
+    (`FileMode.CreateNew`, `FileShare.None`), aborta ao primeiro byte além do tamanho assinado, cada
+    leitura (e a espera pelos cabeçalhos) tem timeout (30 s), volta a recusar um URL fora da allowlist
+    antes de criar a pasta, reabre o ficheiro só para leitura (nega escritores e apagadores),
+    verifica tamanho e SHA-256 POR ESSE handle (`UpdateVerifier.VerifyInstaller`), lança o instalador
+    enquanto o handle está aberto e só depois o liberta; qualquer falha apaga a pasta (a única que
+    fica é a do instalador a correr, que o `UpdateCleanupService` remove mais tarde, nunca uma pasta
+    com menos de 10 minutos nem com um ficheiro aberto; a pasta do update acabado de usar fica por isso
+    10 minutos). Se o encerramento da app falhar DEPOIS de o instalador arrancar, conta como arranque
+    (a pasta fica, sem toast de falha; fica no `audit.log`).
+  - `UpdateService`: orquestra; só oferece o que verificou, uma instalação de cada vez, o oferecido
+    (`_pending`) protegido por lock, gasto quando o instalador arranca e retirado por qualquer
+    verificação que falhe (offline, feed inválido, URL recusado, nada mais novo): um toast antigo não
+    instala uma oferta que a última verificação não confirmou; os toasts só mostram a versão
+    do manifesto verificado (`UpdateMessages`), nunca texto da API, e um release que não verifica nunca
+    é nomeado nem ligado. Uma build sem a chave não contacta o GitHub e só responde a uma verificação
+    pedida pelo utilizador, com texto neutro. Toda a falha ou recusa fica em `audit.log`
+    (`UpdateCheckFailed`, `UpdateInstallRefused`, `UpdateInstallFailed`, `UpdateInstallStarted`; URL sem
+    query, sem segredos).
+  - **Redirects (decisão consciente, não alterada):** o URL de um asset do GitHub responde com 302 para
+    o armazenamento de assets noutro host, e o HttpClient segue-o. A allowlist de host/path vale para
+    o URL tirado da API; para o host final a integridade vem da assinatura + tamanho + SHA-256, que
+    um host qualquer não consegue forjar sem a chave privada. Impor o host final partiria as
+    transferências legítimas e não acrescentava garantia.
+  *(teste, por verificação: assinatura inválida/outra chave/DER/vazia/lixo/acima do tecto, manifesto
+  não canónico, de outra versão ou repetido sob outra tag, URL fora de HTTPS/host/path:
+  `UpdateSignatureTests`, `UpdaterCheckBehaviorTests`, `UpdaterAssetTests`, `UpdaterReleaseScanTests`,
+  `UpdaterVersionTests`; tamanho (menor, maior, sem fim) e hash por handle aberto (escrita e
+  apagamento bloqueados até ao arranque): `UpdaterInstallBehaviorTests`, `InstallerExecutorTests`;
+  tectos, timeouts, cancelamento e URL do feed: `ReleaseCatalogClientTests`, `UpdateServiceTests`;
+  redirect para outro host verificado pelo hash: `UpdaterInstallBehaviorTests`; textos, auditoria sem
+  query, uma instalação de cada vez, `_pending` sob concorrência: `UpdateServiceTests`,
+  `UpdaterMessageTests`; sem chave nenhum pedido: `UpdaterCheckBehaviorTests`; limpeza que ignora
+  pastas recentes ou em uso: `UpdaterTempDirTests`; `ReleaseGateTests` falha o release sem chave real;
+  código partilhado com `tools/RacksSigner`)*
 - **INV-IMPORT-1** Input importado é validado antes de virar estado persistido: allowlist de nomes
   de valor, tipos/ranges validados, `Folder`/`BackgroundImagePath` canonicalizados e a rejeitar
   UNC/sistema/traversal, e `rack.Name` só um segmento de chave seguro. A allowlist deriva de
@@ -143,8 +182,10 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   *(revisão + mecânica: grep "Directory.Delete(" fora de SafeDelete)*
 - **INV-EXEC-1** Executáveis em diretórios graváveis pelo utilizador têm nome aleatório e são
   verificados imediatamente antes de lançar. *(revisão)* Updater: pasta nova
-  `%TEMP%\Racks-update-<guid>` com DACL só do utilizador, verificação pelo handle mantido aberto
-  até ao `Process.Start` (*teste: `UpdaterTempDirTests`*).
+  `%TEMP%\Racks-update-<guid>` com DACL só do utilizador (`InstallerExecutor`), verificação pelo handle
+  mantido aberto até ao arranque do instalador (*teste: `UpdaterTempDirTests`,
+  `UpdaterInstallBehaviorTests`*). A limpeza (`UpdateCleanupService`) só apaga pastas com o nome exato,
+  sem reparse points, com mais de 10 minutos e sem ficheiro aberto.
 - **INV-RELEASE-1** O CI nunca assina nem publica: só cria um release em rascunho. Actions fixadas
   por SHA completo, permissões por job (`build` lê, só `draft` escreve), `persist-credentials:
   false`, dados do evento só via `env`, ferramentas de build (Inno Setup) com versão e SHA-256
@@ -322,7 +363,7 @@ Gravidade / estado. `file:line` do sweep (podem ter drift de 1-2 linhas).
 
 ### HIGH
 
-**H1 — Updater executa `assets[0]` do release sem verificação** `Racks/Util/Updater.cs` · ✅ CORRIGIDO PARCIAL (Lote B)
+**H1 — Updater executa `assets[0]` do release sem verificação** `Racks/Util/Updater.cs` (hoje `UseCases/Updates/*` e `Infrastructure/Update/*`, P10) · ✅ CORRIGIDO PARCIAL (Lote B)
 Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), URL validada (HTTPS + host `github.com` + path `/duartelcunha/Racks/releases/download/`), tamanho verificado vs a API, e re-validação antes de descarregar. ~~Resíduo aceite: compromisso genuíno do repo/conta GitHub~~. Em 2026-10-09 isso aconteceu (token roubado substituiu assets de releases por malware). ✅ CORRIGIDO (2026-10): assinatura ECDSA P-256 de um manifesto canónico, com a chave privada fora do GitHub; ver INV-UPDATE-1 e `docs/RELEASING.md`. Resíduo: instalações ≤ 1.4.0 têm o updater antigo até atualizarem; a chave no Credential Manager é legível por qualquer processo do mesmo utilizador na máquina que assina; a assinatura só vale o que vale a revisão do dono (assinar sem rever um commit malicioso produz um instalador assinado), daí a tag assinada, o signer fixado e a confirmação depois da lista de alterações (QA 2026-10, F2/F3). → INV-UPDATE-1, INV-RELEASE-1.
 
 **H2 — Import de layout JSON sem validação, persistido no registo** `Racks/Util/RackLayoutIO.cs` (hoje `UseCases/Layout/*`, P9) · ✅ CORRIGIDO (Lote A nome; Lote C valida `Folder`/`BackgroundImagePath`: rejeita traversal `..` e paths não-rooted, na passagem atómica antes de apagar). Regex do import já limitado por SafeRegex (#3). ~~Resíduo: sem allowlist total de nomes de valor~~ e ~~UNC permitido~~: um audit independente (2026-10) mostrou que um layout com `Folder` UNC (ou `folder` em minúsculas, que escapava ao check sensível a maiúsculas) fazia o `DesktopRouter`/`SafeMove` mover novos ficheiros do Desktop para uma share remota e vazava o hash NTLM. ✅ CORRIGIDO (2026-10): allowlist de nomes+tipos sem distinguir maiúsculas e só caminhos locais `X:\...`. → INV-IMPORT-1. A revisão QA seguinte mostrou o mesmo vazamento por `TitleFontFamily`/`ItemFontFamily` (`\\host\share\#Fonte`) e pelas cores (`ContextColor <uri>`), que eram escalares livres: ✅ CORRIGIDO → INV-IMPORT-3.
@@ -343,7 +384,7 @@ Agora: asset escolhido por nome (`Racks-Setup-*.exe`, não `assets[0]` cego), UR
 
 ### LOW
 
-**L1 — Installer no temp com nome previsível `%TEMP%\Racks.exe`** `Updater.cs` · ✅ CORRIGIDO (Lote B, nome aleatório `Racks-update-{guid}.exe` + verificação de tamanho) → INV-EXEC-1.
+**L1 — Installer no temp com nome previsível `%TEMP%\Racks.exe`** `Updater.cs` (hoje `InstallerExecutor`) · ✅ CORRIGIDO (Lote B, nome aleatório `Racks-update-{guid}.exe` + verificação de tamanho) → INV-EXEC-1.
 **L2 — Uninstaller corre cópia de `{tmp}\RacksFarewell` (TOCTOU same-user)** `installer/Racks.iss` · ✅ CORRIGIDO (2026-10). O risco real era o modo admin: `PrivilegesRequiredOverridesAllowed=dialog` permitia instalar "para todos", e o uninstall elevado corria binários de pastas graváveis pelo utilizador. Esse modo nunca foi suportado (README: "No admin rights needed"; registo em HKCU) e foi removido: o instalador é só per-user. Defesa extra: com `IsAdmin` o `[Code]` não copia nem corre a animação a partir de `{tmp}`. Sem elevação, `{tmp}` é do mesmo utilizador (sem fronteira de privilégio). Resíduo: quem já instalou em modo admin fica com essa instalação; o próximo setup instala per-user ao lado (desinstalar a antiga à mão).
 **L6 — `choco install innosetup` sem versão no CI** · ✅ CORRIGIDO (2026-10). Inno Setup 6.7.1 descarregado do fornecedor com SHA-256 fixo e editor Authenticode "Pyrsys B.V." verificado. → INV-RELEASE-1.
 **L3 — `SafeDelete` check-then-recurse TOCTOU em junctions** `SafeDelete.cs` · ✅ CORRIGIDO (Lote D). Reescrito com `DirectoryInfo`, classifica pelos atributos da própria enumeração (uma só operação) em vez de um stat separado. Testado: árvore com junction é apagada, o alvo do junction sobrevive (sem perda de dados).
@@ -372,11 +413,13 @@ delete-protection num menu de shell real), que exige conduzir a app à mão.
 
 ## Code-signing (o residuo do updater)
 
-Sem certificado, o updater não verifica Authenticode. Opções concretas:
+Sem certificado, o updater não verifica Authenticode. A proveniência do instalador já está garantida
+pela assinatura própria do manifesto (INV-UPDATE-1, fechada); Authenticode seria uma camada extra
+(sobretudo SmartScreen). Opções concretas:
 - **SignPath Foundation** (recomendado): OV **grátis** para projetos open-source. O Racks
   qualifica (MIT, repo público, já tem releases). Assinatura via CI (GitHub Actions), chave num
   HSM deles. Aplicar em signpath.org. Quando estiver ativo: adicionar o passo de assinatura no CI
-  + a verificação Authenticode+publisher obrigatória no updater (INV-UPDATE-1 fica fechada).
+  + uma verificação Authenticode+publisher adicional no updater (INV-UPDATE-1 já está fechada sem ela).
 - **Azure Artifact Signing** (ex-Trusted Signing): ~10 USD/mês, mas para **indivíduos** só EUA/Canadá;
   na UE só organizações. Um solo dev em PT precisaria de registar empresa. Menos indicado.
 

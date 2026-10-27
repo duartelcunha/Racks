@@ -18,7 +18,7 @@ may reference those interfaces (dependency inversion), never the use-case logic.
 | Presentation | WPF only: windows, bindings, dialogs, delegating to services | `MainWindow*`, `RackWindow*`, `*Window.xaml.cs`, `RackSettingsDialog*`, `Views/`, `ViewModels/`, `Converters/`, `ColorPicker/`, `Shaders/` | stays here, shrinks |
 | Application (folder `UseCases/`) | Use cases and orchestration (what happens when a file is dropped, a route fires, an update is found) | `UseCases/AutoRoute/` (P4), `UseCases/{MagicOrganize,HotCorner,DoubleClickHide,Hotkeys,Tray,Updates,Display}/` (P7), `UseCases/{Startup,Crash}/` (P8), parts of `Core/` (`AutoOrganizer`, `MagicOrganize*`), `Rack/` (`WorkspaceReturn`, `DesktopRackClaims`) | `Racks/UseCases/` (namespace `Racks.UseCases.*`; not `Racks.Application`, which would shadow `System.Windows.Application`) |
 | Domain | Entities and rules, no I/O | `Core/Instance.cs`, `Core/FileItem.cs`, `Rack/RackNames.cs`, `Rack/Sorting/` | `Racks/Core/` |
-| Infrastructure | Everything that touches Windows: filesystem, shell, registry, HTTP, process, logging | most of `Util/` (`Safe*`, `Shell*`, `Interop`, `RegistryHelper`, `Updater`, `JunctionHelper`, ...), `Services/` | `Racks/Infrastructure/{FileSystem,Shell,Registry,Update,Logging}/` |
+| Infrastructure | Everything that touches Windows: filesystem, shell, registry, HTTP, process, logging | most of `Util/` (`Safe*`, `Shell*`, `Interop`, `RegistryHelper`, `JunctionHelper`, ...), `Services/` | `Racks/Infrastructure/{FileSystem,Shell,Registry,Update,Logging}/` |
 | Shared | Small pure helpers used by every layer | `SafeRegex`, `SafeWpfValues`, path and name validation | `Racks/Infrastructure/` until a split is needed |
 
 There is no DI container. `Infrastructure/Startup/AppComposition` (called from the `App` constructor) wires the startup services by hand. It is the composition root, the one deliberate exception to "Infrastructure does not know use cases" (kept there rather than next to `App`, so `App.xaml.cs` stays a thin lifecycle shell); the legacy static
@@ -48,7 +48,7 @@ There is no DI container. `Infrastructure/Startup/AppComposition` (called from t
    allowlist, the size and the SHA-256 all check out. See `docs/SECURITY-INVARIANTS.md` (INV-UPDATE-1).
 5. **Imports are validated before any state is written** and a bad file leaves the current layout untouched (layout files: size, depth, counts, version, ranges and paths are checked first, `UseCases/Layout`; INV-IMPORT-5).
 
-Rules 1, 2, 3 (shell and registry parts; updater comes later) and parts of 5 are enforced by tests in `test/Racks.Tests/Guards/`, which work as ratchets: the
+Rules 1, 2, 3 (shell and registry parts; the updater boundary since P10) and parts of 5 are enforced by tests in `test/Racks.Tests/Guards/`, which work as ratchets: the
 numbers in `Guards/baseline.json` may only go down.
 
 ## Where things live today
@@ -64,7 +64,7 @@ numbers in `Guards/baseline.json` may only go down.
   injected), `UseCases/DoubleClickHide/DoubleClickHideService` (hook life and the pure decision; H.Hooks and UI Automation only in
   `Infrastructure/Shell/GlobalMouseHook` and `DesktopHitTest`), `UseCases/Hotkeys/HotkeyController` (ids 0xB0CC/CD/CE, conflict
   callback, dispatch), `UseCases/Tray/TrayToggleService` (what each tray switch does: `AppSettings`, shell gateway, hot corner, lock
-  all), `UseCases/Updates/UpdateCheckService` (background and manual check, old-download clean-up; the updater itself is untouched)
+  all), `UseCases/Updates/UpdateCheckService` (background and manual check, old-download clean-up; the update itself is `UpdateService`, P10)
   and `UseCases/Display/DisplayChangeDebouncer` (one reposition pass per burst). Composition is manual, no container; the static
   `MainWindow._controller` stays for the rack windows. Tests use `ManualRepeatingScheduler`, `InMemoryRegistryRoot` and fakes for the
   hook, hit test, hotkey API and host; none touches the real Desktop, shell, hotkeys or `HKCU\SOFTWARE\Racks`.
@@ -134,8 +134,16 @@ numbers in `Guards/baseline.json` may only go down.
   failure). `ImportResult` says Imported / Rejected / Failed, and for Failed whether the state changed, was rolled back or the
   rollback itself failed. `IRackRegistry.ReadValuesExact` (default = `ReadValues`) is the exact read used for snapshots
   (REG_EXPAND_SZ unexpanded). Limits and the other rules: `SECURITY-INVARIANTS.md`, INV-IMPORT-1, -2, -5.
-- **Updates.** `Util/Updater` (flow), `Util/UpdateManifest` (pure signature/hash/size checks), `Util/UpdateTrust`
-  (embedded public key). `tools/RacksSigner` links the last two by path.
+- **Updates (P10).** Logic in `UseCases/Updates/`: `UpdateService` (check and install orchestration; one install at a time; the
+  verified offer under a lock; never throws), `ReleaseManifestValidator` (pure: which release, which assets, which URLs, which
+  candidate verified), `UpdateMessages` (the texts), `UpdateAudit` (failure records in `audit.log`, no query strings), and the
+  ports `IUpdateNotifier`, `IUpdateProgress`, `IInstallerLauncher`, `IAppShutdown`. Windows side in `Infrastructure/Update/`:
+  `ReleaseCatalogClient` (the only place with the feed URL; response caps and timeouts), `InstallerExecutor` (private folder,
+  bounded download, size + SHA-256 through the held-open handle, launch, shutdown), `UpdateCleanupService`,
+  `UpdateHttpClientFactory`, `ToastUpdateNotifier`, `ShellInstallerLauncher`, `WpfAppShutdown` and `UpdateComposition` (the
+  production wiring; `AppStartupHost` calls it when the Install toast button is pressed). `Util/UpdateManifest` (pure
+  signature/hash/size checks, `UpdateVerifier`) and `Util/UpdateTrust` (embedded public key) stay in `Util`; `tools/RacksSigner`
+  links them by path. Tests build the service with a fake HTTP handler, notifier, launcher and shutdown (`test/Racks.Tests/Util/UpdateRig`).
 - **Diagnostics.** `Util/CrashLog` (`%AppData%\Racks\crash.log`, rotated), `Infrastructure/Logging` (`audit.log`: one
   JSON line per file operation or rejected settings value, same rotation, local only), `Services/DiagnosticCounters`.
 
