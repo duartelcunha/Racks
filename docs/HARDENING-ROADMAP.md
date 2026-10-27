@@ -7,9 +7,9 @@ which tests were added.
 
 ## Where we are
 
-- **Current phase:** P7 (decompose `MainWindow` into use cases), in review; P6 (`RackSettingsSchema` + validator +
-  repository) is its base.
-- **Next step:** P8, decompose `App` (bootstrap, migrations, crash reporting, uninstall mode; the `OnStartup` order stays).
+- **Current phase:** P8 (decompose `App`: bootstrap, migrations, crash reporting, uninstall mode), in review; P7 (`MainWindow`)
+  is its base.
+- **Next step:** P9, layout import/export (parser, validator, policy, executor).
   `MainWindow._controller` is still a public static (20 uses, of which `InstanceController.RefreshMirror` is the only
   one outside presentation). The file allowlist (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned
   state; its numbers only go down.
@@ -32,7 +32,7 @@ which tests were added.
 | P5 | Typed `AppSettings` and `MigrationMarkers` for root registry values | in review |
 | P6 | `RackSettingsSchema` + validator + repository (golden fixtures first) | in review |
 | P7 | Decompose `MainWindow` (Magic Organize, hot corner, double-click hide, hotkeys, tray switches, update glue, display debounce) | in review |
-| P8 | Decompose `App` (bootstrap, migrations, crash reporting, uninstall mode) | todo |
+| P8 | Decompose `App` (bootstrap, migrations, crash reporting, uninstall mode) | in review |
 | P9 | Layout import/export: parser, validator, policy, executor | todo |
 | P10 | `UpdateService` split (behavior tests first; stays fail-closed) | todo |
 | P11 | Adversarial test gaps and Windows regression pass | todo |
@@ -267,6 +267,35 @@ which tests were added.
   code in `MainWindow.xaml.cs`, at most one `DispatcherTimer`).
 - Not done on purpose: `Test-Racks.ps1` and the dev-tools e2e were not run (they kill the running Racks and drive the real desktop);
   no real tray, hotkey, mouse hook, display change or Explorer was exercised, only the logic behind them.
+
+### P8 in short (what changed)
+
+- `App.xaml.cs` went from 293 to 38 lines (ratchet `appLines` 38, and "it is one file"). It builds the services in its constructor
+  (`Infrastructure/Startup/AppComposition`, no container) and delegates `OnStartup`/`OnExit`.
+- New: `UseCases/Startup/` (`AppBootstrapService` = the single ordered step list per mode, `StartupMigrationService`, `UninstallMode`
+  + `RackTitles`, `SingleInstanceGuard`, `ProcessConfiguration`), `UseCases/Crash/CrashReportingService`, and in
+  `Infrastructure/Startup/` the WPF/Windows side (`AppStartupHost`, `ThreadWatchdog`, `MutexHandle`, `TaskDispatcherDelayScheduler`).
+- The test that read `App.xaml.cs` as text (`SafeSvgTests.The_app_applies_the_svg_settings_at_startup`) was replaced by a behavior
+  test over the step list BEFORE the code moved. Order is in the `AppBootstrapService` summary and in `ARCHITECTURE.md`.
+- Deliberate differences (both only remove a defect): (1) `InitializeWorkspace` now runs before `StartupUri`/base `OnStartup`
+  (it used to run right after them, still inside `OnStartup`, so before MainWindow existed either way); the first-run marker is
+  read after base `OnStartup` as before. (2) A refused second instance no longer calls `ReleaseMutex` on a mutex it never owned
+  in `OnExit` (that threw, and the dispatcher handler logged a bogus `crash.log` entry and showed the crash toast).
+  The 500 ms animation delay is still a thread-pool wait followed by a UI-thread invoke.
+- Crash log format and the registry marker names/values are unchanged (`CrashLogTests`, `MigrationMarkersTests` untouched).
+  No structured fields were added to the log: the entry already names its source.
+- Tests: 1321 to 1376 passed (4 skipped): ordering, short-circuit and idempotent `Exit`; crash service (handled/observed flags,
+  uninstaller skip, one toast, entry text); migration service with a throwaway registry root and `ManualScheduler`; uninstall mode
+  (argument parsing, injected watchdog, titles from a throwaway rack registry, report). No test starts a real mutex.
+- Not done on purpose: the real app was not started (`Test-Racks.ps1` and the dev-tools e2e were not run), so the real startup path
+  (mutex, toast activation, startup animation, uninstall runs) is covered by the unit tests of the order and the logic only.
+
+### Follow-up recorded by the P8 review (not implemented)
+
+- **Startup failure after the single-instance name is taken.** If any step after `AcquireSingleInstance` throws, the dispatcher
+  hook marks the exception handled, WPF skips `StartupUri`, and with `ShutdownMode=OnExplicitShutdown` the process stays alive
+  with no window while still holding the mutex, so every relaunch is refused. Same behavior as before the refactor. A fix would
+  catch in `AppBootstrapService.Run`, log, and shut down (releasing the name).
 
 ### Follow-ups recorded by the P2 review (not implemented)
 
