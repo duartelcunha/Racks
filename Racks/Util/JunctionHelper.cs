@@ -214,6 +214,24 @@ namespace Racks.Util
             }
         }
 
+        // Like IsLink but tells "not a link" apart from "could not tell" (null): an unreadable reparse point must
+        // not be mistaken for a cloud placeholder by callers that fail closed.
+        public static bool? TryIsLink(string path)
+        {
+            try
+            {
+                if (!IsReparsePoint(path)) return false;
+                FileSystemInfo info = (File.GetAttributes(path) & FileAttributes.Directory) != 0
+                    ? new DirectoryInfo(path)
+                    : new FileInfo(path);
+                return info.LinkTarget != null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         public static bool IsReparsePoint(string path)
         {
             try

@@ -7,8 +7,8 @@ which tests were added.
 
 ## Where we are
 
-- **Current phase:** P3 (`ShellOperationGateway`), in review; P2 (route raw file mutations) is its base.
-- **Next step:** P4, `AutoRouteService` + `RoutingPolicy`. The file allowlist
+- **Current phase:** P4 (`AutoRouteService` + `RoutingPolicy`), in review; P3 (`ShellOperationGateway`) is its base.
+- **Next step:** P5, typed `AppSettings` and `MigrationMarkers` for the root registry values. The file allowlist
   (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned state; its numbers only go down.
 - **Base branch:** `feature/scandi-branding-and-stability` (4 commits not yet on `main`). Phase branches are
   `hardening/pN-<name>`; each PR targets the previous phase's branch until the base lands on `main`.
@@ -25,7 +25,7 @@ which tests were added.
 | P1 | `FileOperationBroker` (facade over `SafeMove`/`SafeDelete`), `PathPolicy`, `AuditLog`, file-mutation guard; fix inline rename and Magic Organize folder names | in review |
 | P2 | Route the remaining raw file mutations through the broker; shrink the allowlist; refuse ancestors of protected folders | in review |
 | P3 | `ShellOperationGateway` (shell change notifications, desktop icons) | in review |
-| P4 | `AutoRouteService` + `RoutingPolicy`, testable `DesktopRouter`, watcher hardening | todo |
+| P4 | `AutoRouteService` + `RoutingPolicy`, testable `DesktopRouter`, watcher hardening | in review |
 | P5 | Typed `AppSettings` and `MigrationMarkers` for root registry values | todo |
 | P6 | `RackSettingsSchema` + validator + repository (golden fixtures first) | todo |
 | P7 | Decompose `MainWindow` | todo |
@@ -111,6 +111,38 @@ which tests were added.
   geometry/style/blur/hotkey Win32 calls, `Process.Start` launches, the tray and `ShellLinkHelper` (only
   `ShortcutFactory` uses it). `UninstallCleanup` still calls `DesktopIcons.ForceShow` and `DesktopRouter` still reads
   `DesktopIconManager.RacksWorkspacePath` directly: neither is presentation (P4 for the router).
+
+### P4 in short (what changed)
+
+- New `Racks/UseCases/AutoRoute/` (the first Application-layer code; folder and namespace `UseCases`): `RoutingPolicy` (is this Desktop entry
+  eligible), `RoutingDecision`/`RoutingOutcome`, `AutoRouteService` (match, policy, broker move, shell notify,
+  desktop-rack claim, persist, one audit record per decision). The MainWindow callback is gone; MainWindow wires
+  `AutoRouteHost` (racks, save, workspace path) and `new DesktopRouter(service)`.
+- `DesktopRouter` is now the thin watcher: `IDelayScheduler` (Dispatcher-based in the app) for the debounce, a
+  64 KB buffer, names-only filter, one window (= one batch) per burst with de-duplication by path, `Error`
+  recovery (rebuild the watcher, rescan the Desktop top level once, 250 ms doubling to 30 s while errors keep
+  coming without a real event in between). The rescan routes only names that were NOT on the Desktop while the
+  watcher was healthy (a snapshot taken at start, plus every arrival since): files the user keeps there are never
+  swept up. A start that failed and has no snapshot yet routes nothing.
+  `DestinationFor` stays as a forwarding member, `DesktopRouterDestinationTests` is unedited.
+- Fixed: events lost under bursts and a watcher that stayed dead after an error; raw `Regex.IsMatch` (now
+  `SafeRegex`, compiled once per rack, one audit record per bad rule); half-written downloads, Office `~$` lock
+  files, `desktop.ini`, hidden/system entries, junctions/symlinks and files still being written were routed (or
+  failed in the broker); `Instance.AutoRouteRegex` accepted anything (now only what `SafeRegex.IsAcceptable` takes).
+- Deliberate behavior changes: see CHANGELOG `[Unreleased]`. Cloud files: online-only ones (offline, recall-on-open,
+  recall-on-data-access) are skipped; fully local synced files (reparse point, no recall flag) stay routable and are
+  never opened for the in-use probe. A reparse point whose kind can't be read is skipped (fail closed).
+- Rules: `Instance.AutoRouteRegex` stores any text (a saved rule is never lost to a load-time check); the service
+  makes a rack with an invalid or too-slow rule inactive (one audit record per rack and pattern, text untouched);
+  only the rule dialog (`Views/AutoRouteRuleDialog`) refuses to save such a pattern, with a message.
+- Namespace: the first P4 commit used `Racks.Application`, which shadows `System.Windows.Application` inside
+  `namespace Racks`; the review renamed it to `Racks.UseCases` and reverted the 9 files touched for that.
+- Ratchet: moving the rule dialog out of `RackWindow.Menu.cs` lowered `rackWindowPartMaxLines` to 919 and
+  `rackWindowTotalLines` to 5935 in `Guards/baseline.json`.
+- Not done on purpose: no first scan of the Desktop at startup (only after an `Error`), the watcher still ignores
+  folders (`FileName` filter, as before), no `Changed` handling for a big copy that outlasts the ~30 s of retries (it
+  stays on the Desktop with an audit record), no user-facing message when the rule dialog rejects a pattern (the
+  previous rule just stays, like the font and color settings).
 
 ### Follow-ups recorded by the P2 review (not implemented)
 

@@ -27,6 +27,7 @@ namespace Racks
         private LowLevelMouseHook? _lowLevelMouseHook;
         private QuickFinderWindow? _quickFinder;
         private DesktopRouter _desktopRouter = null!;
+        private Racks.UseCases.AutoRoute.AutoRouteService _autoRouteService = null!;
         private System.Windows.Threading.DispatcherTimer? _hotCornerTimer;
         private bool _hotCornerHidden; // tracks whether racks are currently hidden by hot-corner
         private const int QUICK_FINDER_HOTKEY_ID = 0xB0CC;
@@ -99,42 +100,18 @@ namespace Racks
             _controller = new InstanceController();
             _controller.InitInstances();
 
-            // Auto-routing: any file landing on the user's Desktop that matches a
-            // rack's AutoRouteRegex is moved into that rack.
+            // Auto-routing: any file landing on the user's Desktop that matches a rack's AutoRouteRegex is
+            // moved into that rack. The decisions, the move and the claims live in AutoRouteService; this
+            // only hands it the racks, a way to save one, and the workspace folder.
             try
             {
-                _desktopRouter = new DesktopRouter(
-                    () => _controller.Instances,
-                    (sourcePath, routedRack, destFolder) =>
-                    {
-                        // Auto-route MOVES matching files into the rack (no duplicate on Desktop).
-                        // Routed through the FileOperationBroker so a too-greedy regex (e.g., ".*") can't
-                        // vacuum shell-special folders into the rack, name collisions are
-                        // skipped cleanly, and cross-volume moves fall back to copy+delete.
-                        // Failures are silent here (auto-route is background, not user-
-                        // initiated) — logged to Debug only.
-                        try
-                        {
-                            string dest = System.IO.Path.Combine(destFolder, System.IO.Path.GetFileName(sourcePath));
-                            bool isDir = System.IO.Directory.Exists(sourcePath);
-                            var result = Racks.Infrastructure.FileSystem.FileOperationBroker.Default.Move(sourcePath, dest, "auto-route");
-                            if (!result.Completed)
-                            {
-                                Debug.WriteLine($"Auto-route {result.Status}: {result.Reason}");
-                                return;
-                            }
-                            Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyItemMoved(sourcePath, dest, isDir);
-                            Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyDirectoryChanged(System.IO.Path.GetDirectoryName(sourcePath)!);
-                            if (routedRack.IsDesktopFilterRack)
-                            {
-                                // A desktop rack lists the files it claims by name: claim it (the rack refreshes itself, it watches the workspace).
-                                foreach (var lost in Racks.Rack.DesktopRackClaims.Claim(_controller.Instances, routedRack, System.IO.Path.GetFileName(sourcePath)))
-                                    _controller.WriteInstanceToKey(lost);
-                                _controller.WriteInstanceToKey(routedRack);
-                            }
-                        }
-                        catch (System.Exception ex) { Debug.WriteLine($"Auto-route move failed: {ex.Message}"); }
-                    });
+                _autoRouteService = new Racks.UseCases.AutoRoute.AutoRouteService(
+                    new Racks.UseCases.AutoRoute.AutoRouteHost(
+                        () => _controller.Instances.ToArray(),
+                        rack => _controller.WriteInstanceToKey(rack),
+                        () => Racks.Infrastructure.Shell.ShellOperationGateway.Default.WorkspacePath),
+                    new Racks.Core.Abstractions.DispatcherDelayScheduler());
+                _desktopRouter = new DesktopRouter(_autoRouteService);
             }
             catch (System.Exception ex) { Debug.WriteLine($"DesktopRouter init failed: {ex.Message}"); }
             if (_controller.reg.KeyExistsRoot("startOnLogin")) startOnLogin = _controller.reg.ReadKeyValueRoot("startOnLogin") as bool? ?? false;
@@ -901,6 +878,7 @@ namespace Racks
                 _lowLevelMouseHook.Dispose();
             }
             _desktopRouter?.Dispose();
+            _autoRouteService?.Dispose();
             StopHotCornerWatch();
             if (_mainHwnd != IntPtr.Zero)
             {

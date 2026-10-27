@@ -14,7 +14,7 @@ the reverse).
 | Layer | What it may do | Folders today | New code goes in |
 |---|---|---|---|
 | Presentation | WPF only: windows, bindings, dialogs, delegating to services | `MainWindow*`, `RackWindow*`, `*Window.xaml.cs`, `RackSettingsDialog*`, `Views/`, `ViewModels/`, `Converters/`, `ColorPicker/`, `Shaders/` | stays here, shrinks |
-| Application | Use cases and orchestration (what happens when a file is dropped, a route fires, an update is found) | parts of `Core/` (`AutoOrganizer`, `MagicOrganize*`), `Rack/` (`WorkspaceReturn`, `DesktopRackClaims`) | `Racks/Application/` |
+| Application (folder `UseCases/`) | Use cases and orchestration (what happens when a file is dropped, a route fires, an update is found) | `UseCases/AutoRoute/` (first use-case code, P4), parts of `Core/` (`AutoOrganizer`, `MagicOrganize*`), `Rack/` (`WorkspaceReturn`, `DesktopRackClaims`) | `Racks/UseCases/` (namespace `Racks.UseCases.*`; not `Racks.Application`, which would shadow `System.Windows.Application`) |
 | Domain | Entities and rules, no I/O | `Core/Instance.cs`, `Core/FileItem.cs`, `Rack/RackNames.cs`, `Rack/Sorting/` | `Racks/Core/` |
 | Infrastructure | Everything that touches Windows: filesystem, shell, registry, HTTP, process, logging | most of `Util/` (`Safe*`, `Shell*`, `Interop`, `RegistryHelper`, `Updater`, `JunctionHelper`, ...), `Services/` | `Racks/Infrastructure/{FileSystem,Shell,Registry,Update,Logging}/` |
 | Shared | Small pure helpers used by every layer | `SafeRegex`, `SafeWpfValues`, path and name validation | `Racks/Infrastructure/` until a split is needed |
@@ -59,8 +59,14 @@ numbers in `Guards/baseline.json` may only go down.
 - **Shell gateway.** `Infrastructure/Shell/ShellOperationGateway` delegates (no logic) to `Util/Interop`
   (`SHChangeNotify`, one declaration), `Util/DesktopIcons`, `Util/DesktopIconPositioner` and
   `Core/DesktopIconManager`, which are `internal`. Tests replace the calls through an internal `ShellBackend`.
-- **Auto-route.** `Util/DesktopRouter` watches the Desktop and routes new files into racks by regex
-  (`Util/SafeRegex` bounds every regex with a timeout).
+- **Auto-route.** `UseCases/AutoRoute/` (namespace `Racks.UseCases.AutoRoute`): `AutoRouteService` picks
+  the first rack whose rule matches (regex through `Util/SafeRegex`), asks `RoutingPolicy` whether the entry may
+  move (not `desktop.ini`, hidden/system, partial download, link, online-only cloud file, locked), moves it through
+  the broker, notifies the shell gateway, claims it for a desktop rack and audits every decision. `Util/DesktopRouter`
+  is only the watcher: 64 KB buffer, Created + Renamed, one debounce window per burst, recovery from watcher `Error`
+  (rebuild + rescan for names that were not on the Desktop before, backoff), all on the UI thread through
+  `IDelayScheduler`. The service has no WPF types: `MainWindow` supplies the rack list, a save callback and the
+  workspace path (`AutoRouteHost`).
 - **Updates.** `Util/Updater` (flow), `Util/UpdateManifest` (pure signature/hash/size checks), `Util/UpdateTrust`
   (embedded public key). `tools/RacksSigner` links the last two by path.
 - **Diagnostics.** `Util/CrashLog` (`%AppData%\Racks\crash.log`, rotated), `Infrastructure/Logging` (`audit.log`: one

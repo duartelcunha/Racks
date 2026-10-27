@@ -43,8 +43,10 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   `CustomOrderFiles`; `Folder`/`BackgroundImagePath` só aceitam caminhos locais totalmente
   qualificados (`X:\...`): tudo o que começa por dois separadores (`\\host`, `//host`, `\\?\`,
   `\\.\`, `\\?\UNC\`, `\\host@SSL`) é rejeitado, tal como `C:x`, `\x`, `..` e `:` de ADS. O
-  `DesktopRouter` NÃO revalida: um utilizador pode escolher uma pasta de rede na própria app; a
-  regra é só para ficheiros importados. *(teste: `RackLayoutImportValidationTests`)*
+  Uma pasta de rede que o utilizador escolhe na própria app continua permitida: a regra é só para
+  ficheiros importados. O auto-route não revalida a pasta da rack, mas o destino passa sempre pelo
+  `FileOperationBroker` (`PathPolicy`, pastas protegidas, nunca sobrescreve), ver INV-ROUTE-1.
+  *(teste: `RackLayoutImportValidationTests`)*
 - **INV-IMPORT-3** Valores de racks que o WPF transforma em recursos nunca podem nomear uma
   localização: `new FontFamily(@"\\host\share\#Fonte")` abre a share, o `ColorConverter`/
   `BrushConverter` aceita `ContextColor <uri> ...` e abre esse perfil ICC, e uma imagem de fundo
@@ -191,6 +193,30 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   apontar a uma partilha de rede), ao contrário dos layouts importados (INV-IMPORT-1).
   *(teste: `PathPolicyTests`, `FileOperationBrokerTests`: rename com `..\x`, `C:\x`, `a:b`, `CON` é
   recusado e nada aparece fora da pasta)*
+- **INV-ROUTE-1** O auto-route (uma rack com regex apanha ficheiros novos do Desktop) só move entradas
+  *elegíveis*, através do `FileOperationBroker` (motivo `auto-route`), e cada decisão fica auditada.
+  `RoutingPolicy` recusa: `desktop.ini`, itens ocultos ou de sistema, nomes de ficheiros por acabar
+  (`.crdownload`, `.part`, `.partial`, `.tmp`, `.download`, `.opdownload`, `~$*`; o `Renamed` para o nome
+  final é que é encaminhado), junções e symlinks (e um reparse point cujo tipo não se consegue ler: falha
+  fechado), nomes que não são um leaf name (`PathPolicy.ValidateLeafName`) e ficheiros só-online da cloud
+  (atributos offline, recall-on-open ou recall-on-data-access: mover um para fora da pasta sincronizada
+  descarregava-o ou apagava-o nos outros dispositivos). Um ficheiro da cloud totalmente local (reparse point
+  sem flag de recall) É encaminhado e nunca é aberto para a sondagem de "em uso". Um ficheiro com um parceiro
+  `<nome>.part`/`.crdownload`/... ao lado, ou ainda aberto por outro programa (`FileShare.None` falha), é
+  reavaliado com esperas de 1+2+4+8+15 s e depois desistido com um `Skipped` auditado; nunca fica em ciclo nem
+  é largado em silêncio. Uma entrada que desapareceu antes de ser julgada (nome temporário) não gera registo.
+  A regra de cada rack passa por `SafeRegex` (timeout de 250 ms, regex compilado guardado por rack). O texto da
+  regra é guardado tal como está (`Instance.AutoRouteRegex` aceita qualquer texto, também no registo e no
+  import: uma regra guardada nunca se perde por uma verificação no arranque); uma regra inválida ou lenta
+  (`SafeRegex.IsAcceptable`, ou timeout ao casar) torna a rack inativa para auto-route, com um registo por
+  rack+padrão e não por ficheiro. Só o editor (`AutoRouteRuleDialog`) recusa guardar um padrão assim, com
+  mensagem. O watcher tem buffer de 64 KB, só pede nomes (`FileName`) e, em `Error`, volta a criar-se e revê
+  o Desktop uma vez (espera de 250 ms, a dobrar até 30 s), encaminhando só nomes que NÃO estavam no Desktop
+  antes (um snapshot do arranque mais as chegadas): os ficheiros que o utilizador mantém lá nunca são varridos. Auditoria: um movimento que chega ao broker é o registo do broker (`Move`, motivo
+  `auto-route`); o que se decide antes (recusa da política, ficheiro ainda em uso, regra que não corre) é um
+  registo `AutoRoute` do serviço (também uma falha ao gravar a rack depois de mover); um ficheiro que nenhuma
+  rack quer não gera registo.
+  *(teste: `RoutingPolicyTests`, `AutoRouteServiceTests`, `DesktopRouterTests`, `AutoRouteRegexSetterTests`)*
 
 ---
 

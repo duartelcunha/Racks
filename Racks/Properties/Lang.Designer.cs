@@ -58,6 +58,24 @@ namespace Racks.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to That pattern can&apos;t be used: it is not a valid regular expression, or it takes too long to check a file name. The previous rule was kept. Try a simpler pattern..
+        /// </summary>
+        public static string AutoRoute_Invalid_Message {
+            get {
+                return ResourceManager.GetString("AutoRoute.Invalid.Message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Auto-route rule not saved.
+        /// </summary>
+        public static string AutoRoute_Invalid_Title {
+            get {
+                return ResourceManager.GetString("AutoRoute.Invalid.Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Racks kept running. Details were saved to crash.log in %AppData%\Racks. Please include it if you report a bug..
         /// </summary>
         public static string Crash_Toast_Body {

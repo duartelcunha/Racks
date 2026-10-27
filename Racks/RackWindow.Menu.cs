@@ -468,36 +468,8 @@ namespace Racks
             };
             autoRouteItem.Click += async (_, _) =>
             {
-                var input = new TextBox
-                {
-                    Text = Instance.AutoRouteRegex ?? "",
-                    MinWidth = 280,
-                    Margin = new Thickness(0, 8, 0, 0),
-                };
-                var help = new TextBlock
-                {
-                    Text = "Regex matched against file names on the Desktop. " +
-                           "Examples:  \\.png$   ^report-.*\\.pdf$   .*screenshot.*",
-                    Opacity = 0.7,
-                    TextWrapping = TextWrapping.Wrap,
-                    Margin = new Thickness(0, 0, 0, 6),
-                };
-                var panel = new StackPanel();
-                panel.Children.Add(help);
-                panel.Children.Add(input);
-                var dlg = new MessageBox
-                {
-                    Title = "Auto-route rule",
-                    Content = panel,
-                    PrimaryButtonText = "Save",
-                    SecondaryButtonText = "Clear rule",
-                    CloseButtonText = "Cancel",
-                };
-                var res = await dlg.ShowDialogAsync();
-                if (res == MessageBoxResult.Primary)
-                    Instance.AutoRouteRegex = input.Text ?? "";
-                else if (res == MessageBoxResult.Secondary)
-                    Instance.AutoRouteRegex = "";
+                string? rule = await Racks.Views.AutoRouteRuleDialog.EditAsync(Instance.AutoRouteRegex ?? "");
+                if (rule != null) Instance.AutoRouteRegex = rule;
             };
 
             MenuItem frameSettings = new MenuItem
