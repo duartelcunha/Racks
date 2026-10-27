@@ -519,9 +519,7 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
   919 to 911, `rackWindowTotalLines` 5934 to 5925.
 - Hygiene: `tools/ComprehensiveE2ERunner.ps1` no longer defaults to a personal `.gemini` path (now `$env:TEMP\racks-e2e`);
   the PR template no longer says the test project does not exist and asks for what was refactored, risk reduced, tests added and local checks.
-- Tests: 1868 passed, 6 skipped, 0 failed before and after (no test added or removed). Over 10 runs two different timing tests failed once each
-  (`SettingsAuditRecordTests.Without_an_injected_sink_...`, `RackDeletionTests.FileWatcherService_Dispose_...`), both passed on rerun and
-  touch nothing changed here; recorded as flaky candidates.
+- Tests: 1868 passed, 6 skipped, 0 failed before and after (no test added or removed). Two flaky tests found in repeated runs were fixed in a follow-up commit: `SettingsAuditRecordTests.Without_an_injected_sink_...` (the process-wide audit sink also received events from parallel tests outside the AuditLog collection; the test now keeps only its own thread's events) and `RackDeletionTests.FileWatcherService_Dispose_...` (it watched the shared %TEMP% and used a blind sleep; real race too: an event already queued could reach a disposed `FileWatcherService`, now dropped by an `IsDisposed` guard; the test uses a private parent folder and a live control watcher instead of a sleep). Each class 30 runs and the whole suite 5 runs: all green.
 
 ## Findings that drive the order
 

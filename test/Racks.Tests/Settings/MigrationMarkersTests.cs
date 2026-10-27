@@ -123,6 +123,14 @@ public sealed class MigrationMarkersTests : IDisposable
 }
 
 // AuditLog.Use swaps a process-wide sink, so tests that do it must not run in parallel with each other.
+file sealed class ThreadFilterSink(IAuditSink inner, int threadId) : IAuditSink
+{
+    public void Write(AuditEvent auditEvent)
+    {
+        if (Environment.CurrentManagedThreadId == threadId) inner.Write(auditEvent);
+    }
+}
+
 [Collection("AuditLog")]
 public sealed class SettingsAuditRecordTests : IDisposable
 {
@@ -138,8 +146,11 @@ public sealed class SettingsAuditRecordTests : IDisposable
     [Fact]
     public void Without_an_injected_sink_records_go_to_the_app_audit_log()
     {
+        // The sink is process-wide and tests outside the AuditLog collection keep running in parallel, so keep only
+        // what this test's own thread writes (the code under test is synchronous).
         var recording = new RecordingAuditSink();
-        using (AuditLog.Use(recording))
+        var mine = new ThreadFilterSink(recording, Environment.CurrentManagedThreadId);
+        using (AuditLog.Use(mine))
         {
             var s = new AppSettings(_reg.Root, _reg.Run, () => "RacksTestApp");
             _reg.Seed(AppSettings.HotCornerHideName, "banana", RegistryValueKind.String);

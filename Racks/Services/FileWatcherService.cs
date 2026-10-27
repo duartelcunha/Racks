@@ -99,10 +99,14 @@ namespace Racks.Services
             return watcher;
         }
 
-        private void OnParentChanged(object sender, FileSystemEventArgs e) => ParentChanged?.Invoke(this, e);
-        private void OnParentRenamed(object sender, RenamedEventArgs e) => ParentRenamed?.Invoke(this, e);
-        private void OnFileStructureChanged(object sender, FileSystemEventArgs e) => FileChanged?.Invoke(this, e);
-        private void OnFileRenamed(object sender, RenamedEventArgs e) => FileRenamed?.Invoke(this, e);
+        // An event the watcher had already queued can still arrive after Dispose unsubscribed; drop it so a
+        // disposed service never reaches its owner (the rack window may be gone by then).
+        private bool IsDisposed { get { lock (_gate) return _disposed; } }
+
+        private void OnParentChanged(object sender, FileSystemEventArgs e) { if (!IsDisposed) ParentChanged?.Invoke(this, e); }
+        private void OnParentRenamed(object sender, RenamedEventArgs e) { if (!IsDisposed) ParentRenamed?.Invoke(this, e); }
+        private void OnFileStructureChanged(object sender, FileSystemEventArgs e) { if (!IsDisposed) FileChanged?.Invoke(this, e); }
+        private void OnFileRenamed(object sender, RenamedEventArgs e) { if (!IsDisposed) FileRenamed?.Invoke(this, e); }
 
         // Content change: raise once per file, after it has been quiet for ChangedQuietPeriod.
         private void OnFileContentChanged(object? sender, FileSystemEventArgs e)
