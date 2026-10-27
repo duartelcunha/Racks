@@ -24,7 +24,6 @@ public sealed class MigrationMarkersTests : IDisposable
         [MigrationMarkers.FirstRunWelcomeShownV2],
         [MigrationMarkers.VirtualRackLinkOnDropRevertedToMove],
         [MigrationMarkers.FolderOpenInsideFrameDefaultedToExplorer],
-        [MigrationMarkers.MigratedFromDeskFrame],
     ];
 
     [Fact]
@@ -36,7 +35,6 @@ public sealed class MigrationMarkersTests : IDisposable
         Assert.Equal("FirstRunWelcomeShownV2", MigrationMarkers.FirstRunWelcomeShownV2);
         Assert.Equal("VirtualRackLinkOnDropRevertedToMove", MigrationMarkers.VirtualRackLinkOnDropRevertedToMove);
         Assert.Equal("FolderOpenInsideFrameDefaultedToExplorer", MigrationMarkers.FolderOpenInsideFrameDefaultedToExplorer);
-        Assert.Equal("_MigratedFromDeskFrame", MigrationMarkers.MigratedFromDeskFrame);
     }
 
     [Theory]
@@ -59,11 +57,6 @@ public sealed class MigrationMarkersTests : IDisposable
         var (data, kind) = _reg.RawRoot(name);
         Assert.Equal(RegistryValueKind.String, kind);
 
-        if (name == MigrationMarkers.MigratedFromDeskFrame)
-        {
-            Assert.Equal("1", data);                                 // dest.SetValue("_MigratedFromDeskFrame", "1")
-            return;
-        }
         // reg.WriteToRegistryRoot(marker, true)
         string oldRoot = "RacksTests-" + Guid.NewGuid().ToString("N");
         try

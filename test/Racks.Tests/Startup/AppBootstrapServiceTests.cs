@@ -9,7 +9,7 @@ public sealed class AppBootstrapServiceTests
     private static readonly string[] NormalOrder =
     [
         ConfigureCulturePreview, OverrideWpfLanguage, SetRegexDefaultTimeout, ApplySafeSvg,
-        MigrateLegacyRegistry, EnableDarkMode, AcquireSingleInstance, SetBindingTraceLevel, InitializeWorkspace,
+        EnableDarkMode, AcquireSingleInstance, SetBindingTraceLevel, InitializeWorkspace,
         SetStartupUri, RaiseBaseStartup, ReadFirstRunMarker, RegisterToastActivation, PinQuickAccess, ScheduleStartupAnimation,
     ];
 
@@ -49,7 +49,7 @@ public sealed class AppBootstrapServiceTests
         int baseStartup = order.IndexOf(RaiseBaseStartup);
 
         Assert.True(svg < uri, "SafeSvg.Apply before StartupUri");
-        Assert.True(regex < uri && regex < order.IndexOf(MigrateLegacyRegistry), "regex timeout before anything can run a regex");
+        Assert.True(regex < uri && regex < order.IndexOf(EnableDarkMode), "regex timeout before anything can run a regex");
         Assert.True(lang < order.IndexOf(SetStartupUri), "WPF language override before any element exists");
         Assert.True(workspace < uri, "the workspace folder exists before MainWindow (and any rack window) is created");
         Assert.True(uri < baseStartup, "StartupUri is set before the base OnStartup");
@@ -87,7 +87,6 @@ public sealed class AppBootstrapServiceTests
         Assert.Equal(StartupMode.UninstallCleanup, UninstallMode.ParseMode(["--uninstall-cleanup"]));
         Assert.Equal(RunUninstallCleanup, h.Log[^2]);
         Assert.Equal("Shutdown(0)", h.Log[^1]);
-        Assert.DoesNotContain(MigrateLegacyRegistry, h.Log);
         Assert.DoesNotContain(h.Log, l => l.StartsWith(AcquireSingleInstance));
         Assert.DoesNotContain(SetStartupUri, h.Log);
         Assert.True(h.Uninstall.IsRunningForUninstaller);
@@ -102,7 +101,7 @@ public sealed class AppBootstrapServiceTests
 
         Assert.False(goOn);
         Assert.Equal(
-            [ConfigureCulturePreview, OverrideWpfLanguage, SetRegexDefaultTimeout, ApplySafeSvg, MigrateLegacyRegistry, EnableDarkMode, MarkUninstallAnimation, RunUninstallAnimation],
+            [ConfigureCulturePreview, OverrideWpfLanguage, SetRegexDefaultTimeout, ApplySafeSvg, EnableDarkMode, MarkUninstallAnimation, RunUninstallAnimation],
             h.Bootstrap.RanSteps);
         Assert.DoesNotContain(h.Log, l => l.StartsWith(AcquireSingleInstance));
         Assert.DoesNotContain(InitializeWorkspace, h.Log);

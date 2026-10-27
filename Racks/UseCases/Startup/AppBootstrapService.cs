@@ -38,7 +38,6 @@ public static class StartupSteps
     public const string ApplySafeSvg = nameof(ApplySafeSvg);
     public const string RunUninstallCleanup = nameof(RunUninstallCleanup);
     public const string ShutdownAfterCleanup = nameof(ShutdownAfterCleanup);
-    public const string MigrateLegacyRegistry = nameof(MigrateLegacyRegistry);
     public const string EnableDarkMode = nameof(EnableDarkMode);
     public const string MarkUninstallAnimation = nameof(MarkUninstallAnimation);
     public const string AcquireSingleInstance = nameof(AcquireSingleInstance);
@@ -60,13 +59,13 @@ public static class StartupSteps
 /// Order, per mode (a step returning false ends the run; the app then does not continue to the main window):
 /// <code>
 /// Normal             ConfigureCulturePreview, OverrideWpfLanguage, SetRegexDefaultTimeout, ApplySafeSvg,
-///                    MigrateLegacyRegistry, EnableDarkMode, AcquireSingleInstance (a second Racks shuts down here),
+///                    EnableDarkMode, AcquireSingleInstance (a second Racks shuts down here),
 ///                    SetBindingTraceLevel, InitializeWorkspace, SetStartupUri, RaiseBaseStartup,
 ///                    ReadFirstRunMarker, RegisterToastActivation, PinQuickAccess, ScheduleStartupAnimation
 /// UninstallCleanup   ConfigureCulturePreview, OverrideWpfLanguage, SetRegexDefaultTimeout, ApplySafeSvg,
-///                    RunUninstallCleanup, ShutdownAfterCleanup          (no registry migration, no single instance, no UI)
+///                    RunUninstallCleanup, ShutdownAfterCleanup          (no single instance, no UI)
 /// UninstallAnimation ConfigureCulturePreview, OverrideWpfLanguage, SetRegexDefaultTimeout, ApplySafeSvg,
-///                    MigrateLegacyRegistry, EnableDarkMode, MarkUninstallAnimation, RunUninstallAnimation (no single instance)
+///                    EnableDarkMode, MarkUninstallAnimation, RunUninstallAnimation (no single instance)
 /// </code>
 /// WPF creates <c>MainWindow</c> from <c>StartupUri</c> only after <c>OnStartup</c> returns, so after the whole Normal list.
 /// The SVG hardening and the regex timeout come before anything can parse a file, and the workspace folder exists before
@@ -131,13 +130,11 @@ public sealed class AppBootstrapService
                 steps.Add((StartupSteps.ShutdownAfterCleanup, () => { _host.Shutdown(0); return false; }));
                 break;
             case StartupMode.UninstallAnimation:
-                steps.Add((StartupSteps.MigrateLegacyRegistry, Do(_migrations.MigrateLegacyRegistry)));
                 steps.Add((StartupSteps.EnableDarkMode, Do(_host.EnableDarkMode)));
                 steps.Add((StartupSteps.MarkUninstallAnimation, Do(_uninstall.MarkRunningForUninstaller)));
                 steps.Add((StartupSteps.RunUninstallAnimation, () => { _host.RunUninstallAnimation(); return false; }));
                 break;
             default:
-                steps.Add((StartupSteps.MigrateLegacyRegistry, Do(_migrations.MigrateLegacyRegistry)));
                 steps.Add((StartupSteps.EnableDarkMode, Do(_host.EnableDarkMode)));
                 steps.Add((StartupSteps.AcquireSingleInstance, () =>
                 {

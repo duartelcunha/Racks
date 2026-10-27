@@ -14,7 +14,7 @@ namespace Racks.Infrastructure.Registry;
 /// <item><c>MainHwnd</c> is a REG_SZ with the decimal handle (an Int64 passed to <c>SetValue</c> is stored as text, not a
 /// QWORD); <c>tools/ComprehensiveE2ERunner.ps1</c> reads it by name.</item>
 /// <item>The Windows autorun entry is a REG_SZ with the executable path under the Run key, named like the product;
-/// turning it off also removes the legacy <c>DeskFrame</c> entry.</item>
+/// turning it off removes that entry.</item>
 /// </list>
 /// A getter never throws. A value that is not a boolean text (a DWORD, a binary, garbage) or a registry that cannot
 /// be read gives the documented default and one audit record per name (<see cref="RegistryAudit"/>). A missing value
@@ -96,8 +96,8 @@ public sealed class AppSettings
 
     /// <summary>
     /// Turns "start on login" on or off: adds or removes the Windows Run entry, then saves the switch (the switch is
-    /// saved even when the Run entry failed, as before). Off removes the product entry and the legacy
-    /// <c>DeskFrame</c> one. Returns false when anything failed (each failure is audited).
+    /// saved even when the Run entry failed, as before). Off removes the product entry.
+    /// Returns false when anything failed (each failure is audited).
     /// </summary>
     /// <param name="exePath">Full path of the running executable; only used (and required) when turning on.</param>
     public bool TrySetStartOnLogin(bool enabled, string? exePath)
@@ -120,9 +120,7 @@ public sealed class AppSettings
 
     private bool TryRemoveAutoRun()
     {
-        bool ok = TryDelete(_autoRun, _autoRunName());
-        ok &= TryDelete(_autoRun, InstanceController.LegacyAppName);
-        return ok;
+        return TryDelete(_autoRun, _autoRunName());
     }
 
     // ---- MainHwnd ------------------------------------------------------------------------------

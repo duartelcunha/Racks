@@ -16,7 +16,7 @@ namespace Racks.Tests.Fakes;
 /// a refusal on record.</para>
 /// <para>What it does NOT cover: the layout import executor (it takes an <c>IRackRegistry</c> and is built by the caller, P9), the old <c>RegistryHelper</c> root
 /// writer used by P5 comparisons, <c>AppSettings</c>/<c>MigrationMarkers</c> (they take their root as a parameter or follow
-/// <c>appName</c> themselves), <c>MigrateLegacyRegistry</c> and <c>DefaultStyleReset.Run</c> on a key a test opened.</para>
+/// <c>appName</c> themselves) and <c>DefaultStyleReset.Run</c> on a key a test opened.</para>
 /// </summary>
 internal static class TestRegistryGuard
 {

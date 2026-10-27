@@ -309,11 +309,11 @@ base being `feature/scandi-branding-and-stability`, which has no PR of its own a
   (`Default`). Registry-using call sites moved off `RegistryHelper.*Root`: `MainWindow` (startup reads, five toggle
   handlers, `MainHwnd`, first-run welcome), `SettingsWindow` (auto update, double-click to hide), `App` (two markers;
   its unused `reg` field is gone), `FirstRunWelcome` (takes `MigrationMarkers`), `InstanceController` (blur read, two
-  markers, `_MigratedFromDeskFrame`). `RegistryHelper` lost `KeyExistsRoot`, `AddToAutoRun` and `RemoveFromAutoRun`;
+  markers). `RegistryHelper` lost `KeyExistsRoot`, `AddToAutoRun` and `RemoveFromAutoRun`;
   the per-rack methods, `ReadKeyValueRoot` and `WriteToRegistryRoot` stay for `Instance` (P6).
 - Stored forms are byte-compatible with what the old code wrote and read (tests compare against the old helper): switches
   are REG_SZ `True`/`False`; **`MainHwnd` is REG_SZ with the decimal handle, not a QWORD** (`SetValue(name, (long)x)`
-  stores text; the E2E runner parses it); `_MigratedFromDeskFrame` is REG_SZ `1`; the other markers REG_SZ `True`.
+  stores text; the E2E runner parses it); the markers are REG_SZ `True`.
   A marker counts as set when any value of that name exists.
 - Read rules: missing = default, silently; a DWORD/QWORD/binary/garbage/empty value or an unreadable registry = default plus
   one `SettingFallback` audit record per name (field, raw value, reason, fallback) in the existing `audit.log` line

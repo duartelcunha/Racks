@@ -5,7 +5,7 @@ using Racks.Infrastructure.Registry;
 namespace Racks.UseCases.Startup;
 
 /// <summary>
-/// The one-time work of a launch: the DeskFrame registry migration, the first-run markers (welcome animation, Quick Access
+/// The one-time work of a launch: the first-run markers (welcome animation, Quick Access
 /// pin) and the startup animation. Moved unchanged out of <c>App.OnStartup</c>.
 ///
 /// <list type="bullet">
@@ -22,7 +22,6 @@ public sealed class StartupMigrationService
     public static readonly TimeSpan AnimationDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly MigrationMarkers _markers;
-    private readonly Action _migrateLegacyRegistry;
     private readonly Action _pinQuickAccess;
     private readonly IDelayScheduler _scheduler;
     private readonly Action _playInstallAnimation;
@@ -30,22 +29,17 @@ public sealed class StartupMigrationService
 
     public StartupMigrationService(
         MigrationMarkers markers,
-        Action migrateLegacyRegistry,
         Action pinQuickAccess,
         IDelayScheduler scheduler,
         Action playInstallAnimation,
         Action playLaunchAnimation)
     {
         _markers = markers;
-        _migrateLegacyRegistry = migrateLegacyRegistry;
         _pinQuickAccess = pinQuickAccess;
         _scheduler = scheduler;
         _playInstallAnimation = playInstallAnimation;
         _playLaunchAnimation = playLaunchAnimation;
     }
-
-    /// <summary>Copies HKCU\SOFTWARE\DeskFrame to HKCU\SOFTWARE\Racks once, so users coming from the original build keep their racks.</summary>
-    public void MigrateLegacyRegistry() => _migrateLegacyRegistry();
 
     /// <summary>True when this is the first launch after install (and marks it, so the next launch is not).</summary>
     public bool ConsumeFirstRunMarker()

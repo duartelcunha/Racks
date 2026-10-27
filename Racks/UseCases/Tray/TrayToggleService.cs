@@ -87,7 +87,7 @@ public sealed class TrayToggleService
     }
 
     /// <summary>
-    /// Adds or removes the Windows Run entry (off also removes the legacy DeskFrame one), then saves the switch. The
+    /// Adds or removes the Windows Run entry (off removes it), then saves the switch. The
     /// executable path is only looked up when turning on.
     /// </summary>
     public void SetStartOnLogin(bool on)
