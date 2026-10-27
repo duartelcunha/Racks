@@ -484,10 +484,10 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
 - **P11c** (F2, F3, F7): the three fixes above, with their tests flipped from `Known_gap_...` to real expectations: 18 destination-name
   cases (device names, trailing dot/space, data streams) plus ordinary and `(from Racks N)` names, a trailing separator, odd parent
   names, `Rename`/`CreateDirectory`; 13 loader cases and the layout import for `AssignedFiles` items; the XML-escape case.
-- Tests: 1669 to 1874 passed (6 skipped: the 4 old ones plus 2 new `[SymlinkFact]` tests that need the right to create symbolic links),
+- Tests: 1669 to 1868 passed (6 skipped: the 4 old ones plus 2 new `[SymlinkFact]` tests that need the right to create symbolic links),
   0 failed. P11a added 108 (106 run here; SafeDelete 18, SafeMove 31, claims and return 36, uninstall and mirror 23), P11b 49 (copy
   cleanup 7, single preflight 3, rack folder removal 8, workspace set-up 10, mirror rebuild 11, drive-root rack 10). The Adversarial set
-  was run 10 times in a row and the whole suite three times after P11b and again after P11c with no flake. P11c added 50 (1824 to 1874).
+  was run 10 times in a row and the whole suite three times after P11b and again after P11c with no flake. P11c added 44 (1824 to 1868).
 - Not done on purpose: the audit background queue, a handle-based `Unlink`, a link-aware `Move` for Ctrl+dropped links, the
   virtual-rack cross-volume copy-then-recycle and the `WorkspaceReturn` file-identity check stay as follow-ups above. The real app,
   `Test-Racks.ps1` and the dev-tools e2e were not run; the rack-removal dialog is covered through `RackFolderRemoval` (the decision and the
