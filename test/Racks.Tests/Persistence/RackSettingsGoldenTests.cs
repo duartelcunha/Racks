@@ -73,7 +73,7 @@ public sealed class RackSettingsGoldenTests : IDisposable
             Is("IsLocked", RegistryValueKind.String, "True");
             Is("ShowInGrid", RegistryValueKind.String, "False");
             Is("TitleTextAlignment", RegistryValueKind.String, "Right");
-            Is("AssignedFiles", RegistryValueKind.String, @"a.txt|sub dir\c.pdf");
+            Is("AssignedFiles", RegistryValueKind.String, "a.txt|sub dir c.pdf");
             Is("ShowOnVirtualDesktops", RegistryValueKind.String, "1,3");
             Is("LastAccessedFiles", RegistryValueKind.MultiString, "x.txt|y.txt");
             Is("CustomOrderFiles", RegistryValueKind.MultiString, "a.txt,1|b.txt,2");

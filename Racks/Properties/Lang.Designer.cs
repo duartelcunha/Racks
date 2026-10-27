@@ -1016,6 +1016,15 @@ namespace Racks.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to The rack was removed, but its folder &quot;{0}&quot; is still on your Desktop because something in it could not be moved back (for example a file is open). Nothing was deleted. You can delete the folder yourself once it is empty..
+        /// </summary>
+        public static string RemoveRack_FolderKept {
+            get {
+                return ResourceManager.GetString("RemoveRack.FolderKept", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Couldn&apos;t rename to &quot;{0}&quot;:
         ///{1}.
         /// </summary>

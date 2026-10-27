@@ -15,7 +15,9 @@ public static class WorkspaceReturn
     /// <summary>The path the item ended up at on the Desktop, or null if it could not be returned.</summary>
     public static string? ToDesktop(string workspaceDir, string desktopDir, string fileName)
     {
-        if (string.IsNullOrEmpty(fileName) || Path.GetFileName(fileName) != fileName) return null;
+        // A plain leaf name only: "." and ".." would name the workspace itself or its parent, and a path, a drive,
+        // a data stream or a device name would leave the workspace (INV-IDS-1, INV-FS-2).
+        if (!PathPolicy.ValidateLeafName(fileName).Ok) return null;
         string from = Path.Combine(workspaceDir, fileName);
         bool isDir = Directory.Exists(from);
         if (!isDir && !File.Exists(from)) return null;

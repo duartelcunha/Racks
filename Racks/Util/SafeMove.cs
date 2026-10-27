@@ -58,6 +58,7 @@ namespace Racks.Util
         // I/O failure while moving (Rejected by TryMove).
         internal static Result? Check(string src, string dest, out string reason)
         {
+            t_checkCalls++;
             reason = "";
             if (string.IsNullOrEmpty(src) || string.IsNullOrEmpty(dest))
             {
@@ -91,13 +92,25 @@ namespace Racks.Util
             return null;
         }
 
+        // Test seam: how many times Check ran on this thread (it makes ~50 CreateFile calls, so the broker runs it once).
+        [ThreadStatic] private static int t_checkCalls;
+        internal static int CheckCallsOnThisThread => t_checkCalls;
+
         // allowCrossVolumeCopy: false refuses the copy+delete fallback, for callers that must only
         // ever rename (the uninstall path): a move that would need a copy is Rejected untouched.
         public static Result TryMove(string src, string dest, out string reason, bool allowCrossVolumeCopy = true)
         {
             var verdict = Check(src, dest, out reason);
             if (verdict != null) return verdict.Value;
+            return MoveAfterCheck(src, dest, out reason, allowCrossVolumeCopy);
+        }
 
+        // The move itself, for a caller that already ran Check (the broker does, and adds its own checks after it,
+        // so the preflight is paid once). A name that appeared since Check is not overwritten: File.Move and
+        // Directory.Move refuse an existing destination, which then surfaces as a failure with the system's reason.
+        internal static Result MoveAfterCheck(string src, string dest, out string reason, bool allowCrossVolumeCopy = true)
+        {
+            reason = "";
             bool srcIsDir = Directory.Exists(src);
             try
             {
@@ -129,24 +142,38 @@ namespace Racks.Util
             }
         }
 
+        // Test seam: runs on this thread right before CopyThenDelete creates anything, with (src, dest). It stands
+        // for the other process that creates the destination between the preflight and the copy.
+        [ThreadStatic] private static Action<string, string>? t_beforeCopyHook;
+
+        internal static IDisposable UseBeforeCopyHookForTest(Action<string, string> hook)
+        {
+            t_beforeCopyHook = hook;
+            return new BeforeCopyScope();
+        }
+
+        private sealed class BeforeCopyScope : IDisposable
+        {
+            public void Dispose() => t_beforeCopyHook = null;
+        }
+
         internal static Result CopyThenDelete(string src, string dest, bool srcIsDir, out string reason)
         {
             reason = "";
+            // Everything THIS call creates, in creation order. A failed copy removes exactly these and nothing
+            // else: the destination can appear between the preflight and here, and whatever somebody else put
+            // there is not ours to delete. Every name is created with "must not exist" semantics, so the list
+            // only ever holds things that did not exist a moment before.
+            var created = new List<(string Path, bool IsDirectory)>();
             try
             {
-                if (srcIsDir) CopyDirectory(src, dest);
-                else File.Copy(src, dest, overwrite: false);
+                t_beforeCopyHook?.Invoke(src, dest);
+                if (srcIsDir) CopyDirectory(src, dest, created);
+                else CopyFileNew(src, dest, created);
             }
             catch (Exception ex)
             {
-                // Best-effort cleanup of a partial copy so we don't leave junk behind. Route
-                // through SafeDelete so the cleanup itself never follows a reparse point.
-                try
-                {
-                    if (srcIsDir && Directory.Exists(dest)) SafeDelete.DeleteDirectoryRecursive(dest);
-                    else if (!srcIsDir && File.Exists(dest)) File.Delete(dest);
-                }
-                catch { }
+                RemoveCreated(created);
                 reason = $"Cross-volume copy of \"{TryGetLeafName(src)}\" failed: {ex.Message}";
                 return Result.Rejected;
             }
@@ -167,7 +194,7 @@ namespace Racks.Util
                 try { File.Delete(src); }
                 catch (Exception ex)
                 {
-                    try { File.Delete(dest); } catch { }
+                    RemoveCreated(created);
                     reason = $"Couldn't move \"{TryGetLeafName(src)}\" because the original is in use or protected ({ex.Message}). Nothing was changed.";
                     return Result.Rejected;
                 }
@@ -175,17 +202,47 @@ namespace Racks.Util
             return Result.Moved;
         }
 
-        private static void CopyDirectory(string src, string dest, int depth = 0)
+        // Removes what a failed copy created, newest first, and only that: files by name, folders with a plain
+        // (non-recursive) delete so a folder that has gained somebody else's content stays with it.
+        internal static void RemoveCreated(IReadOnlyList<(string Path, bool IsDirectory)> created)
+        {
+            for (int i = created.Count - 1; i >= 0; i--)
+            {
+                var (path, isDirectory) = created[i];
+                try
+                {
+                    if (isDirectory) Directory.Delete(path, recursive: false);
+                    else
+                    {
+                        File.SetAttributes(path, FileAttributes.Normal); // a copied read-only file is ours to remove
+                        File.Delete(path);
+                    }
+                }
+                catch { /* best effort: a leftover is reported by the caller's failure, never hidden by deleting more */ }
+            }
+        }
+
+        // Claims the name first (CreateNew: throws if anything is there, so nothing of ours exists yet), then copies
+        // over the empty file we just made, which keeps File.Copy's handling of attributes, times and streams.
+        private static void CopyFileNew(string src, string dest, List<(string Path, bool IsDirectory)> created)
+        {
+            using (new FileStream(dest, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
+            created.Add((dest, false));
+            File.Copy(src, dest, overwrite: true);
+        }
+
+        private static void CopyDirectory(string src, string dest, List<(string Path, bool IsDirectory)> created, int depth = 0)
         {
             // Backstop against a junction loop (a link pointing at an ancestor) blowing the stack
             // or filling the disk before it aborts.
             if (depth > 64) throw new IOException("Directory nesting too deep (possible junction loop).");
 
-            Directory.CreateDirectory(dest);
+            CreateNewDirectory(dest);
+            created.Add((dest, true));
             var srcInfo = new DirectoryInfo(src);
             foreach (var file in srcInfo.EnumerateFiles())
             {
-                file.CopyTo(Path.Combine(dest, file.Name), overwrite: false);
+                CopyFileNew(file.FullName, Path.Combine(dest, file.Name), created);
             }
             foreach (var sub in srcInfo.EnumerateDirectories())
             {
@@ -194,8 +251,28 @@ namespace Racks.Util
                 // until it aborts. A cross-volume move can't recreate a junction anyway - the link
                 // isn't real data. Classified from the enumeration's own attributes.
                 if ((sub.Attributes & FileAttributes.ReparsePoint) != 0) continue;
-                CopyDirectory(sub.FullName, Path.Combine(dest, sub.Name), depth + 1);
+                CopyDirectory(sub.FullName, Path.Combine(dest, sub.Name), created, depth + 1);
             }
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CreateDirectoryW(string lpPathName, IntPtr lpSecurityAttributes);
+        private const int ERROR_ALREADY_EXISTS = 183;
+
+        // Directory.CreateDirectory succeeds silently when the folder is already there, which would let a copy
+        // merge into somebody else's folder. CreateDirectoryW reports ERROR_ALREADY_EXISTS instead. The parent
+        // must exist (the broker checks that before any move). The extended-length spelling keeps long paths working.
+        private static void CreateNewDirectory(string path)
+        {
+            string full = Path.GetFullPath(path);
+            string extended = full.StartsWith(@"\\?\", StringComparison.Ordinal) ? full
+                : full.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + full.Substring(2)
+                : @"\\?\" + full;
+            if (CreateDirectoryW(extended, IntPtr.Zero)) return;
+            int error = Marshal.GetLastWin32Error();
+            if (error == ERROR_ALREADY_EXISTS) throw new IOException($"The folder '{path}' already exists.");
+            throw new IOException($"Couldn't create the folder '{path}': {new System.ComponentModel.Win32Exception(error).Message}");
         }
 
         internal static bool IsProtectedPath(string path, out string kind)

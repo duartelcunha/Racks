@@ -605,6 +605,7 @@ namespace Racks
                     // into a clean grid afterwards (files just moved back land wherever
                     // Explorer decides, which looks messy).
                     var returnedToDesktop = new List<string>();
+                    string? folderKept = null; // set when the emptied Desktop folder could not be deleted
                     if (Instance.IsDesktopFilterRack && Instance.AssignedFiles != null)
                     {
                         string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -614,7 +615,7 @@ namespace Racks
                             // name by contract. Skip anything with a separator or ".." so a
                             // hand-edited/imported value can't Path.Combine its way out of the
                             // workspace and move an arbitrary file to the desktop.
-                            if (string.IsNullOrEmpty(fileName) || System.IO.Path.GetFileName(fileName) != fileName)
+                            if (!Infrastructure.FileSystem.PathPolicy.ValidateLeafName(fileName).Ok)
                                 continue;
                             var back = Rack.WorkspaceReturn.ToDesktop(Racks.Infrastructure.Shell.ShellOperationGateway.Default.WorkspacePath, desktopPath, fileName);
                             if (back != null) returnedToDesktop.Add(back);
@@ -646,7 +647,7 @@ namespace Racks
                             if (Infrastructure.FileSystem.FileOperationBroker.Default.Move(file, dest, "remove rack: return to desktop").Completed)
                                 returnedToDesktop.Add(dest);
                         }
-                        Infrastructure.FileSystem.FileOperationBroker.Default.DeleteEmptyDirectory(Instance.Folder, "remove rack: delete the emptied rack folder");
+                        folderKept = Rack.RackFolderRemoval.DeleteEmptiedFolder(Infrastructure.FileSystem.FileOperationBroker.Default, Instance.Folder);
                     }
                     if (returnedToDesktop.Count > 0)
                         Racks.Infrastructure.Shell.ShellOperationGateway.Default.ArrangeDesktopIcons(returnedToDesktop);
@@ -657,6 +658,7 @@ namespace Racks
                     // The sandbox folder was emptied and removed above (ReturnFolderToDesktop). Nothing
                     // is ever deleted recursively here any more: see INV-REMOVE-1.
                     this.Close();
+                    if (folderKept != null) Racks.Views.RacksMessageBox.Show(folderKept, Lang.TitleBarContextMenu_RemoveMessageBox_Title);
 
                 }
             };

@@ -7,9 +7,10 @@ which tests were added.
 
 ## Where we are
 
-- **Current phase:** P10 (update path split: catalog client, manifest validator, installer executor, cleanup, service), in
-  review; P9 (layout import/export) is its base.
-- **Next step:** P11, adversarial test gaps and the Windows regression pass.
+- **Current phase:** P11 (adversarial filesystem tests and the Windows regression pass, plus four small follow-ups), in
+  review; P10 (update path split) is its base.
+- **Next step:** P12, dependency notes/updates and dead code. Before it, decide what to do with the open P11 findings
+  F1 and F4 to F8 (see "P11 in short"; F2, F3 and F7 were closed in the P11c commit): none is a regression, F1 is the one worth a phase of its own.
   `MainWindow._controller` is still a public static (20 uses, of which `InstanceController.RefreshMirror` is the only
   one outside presentation). The file allowlist (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned
   state; its numbers only go down.
@@ -35,7 +36,7 @@ which tests were added.
 | P8 | Decompose `App` (bootstrap, migrations, crash reporting, uninstall mode) | in review |
 | P9 | Layout import/export: parser, validator, policy, executor | in review |
 | P10 | `UpdateService` split (behavior tests first; stays fail-closed) | in review |
-| P11 | Adversarial test gaps and Windows regression pass | todo |
+| P11 | Adversarial test gaps and Windows regression pass | in review |
 | P12 | Dependency notes/updates and dead code | todo |
 | P13 | Final docs: `SECURITY-INVARIANTS.md`, `ARCHITECTURE.md`, README, CHANGELOG | todo |
 
@@ -221,7 +222,14 @@ which tests were added.
   skeleton key under that name that loads as a "folder missing" ghost).
 - Behaviour note: `ShowOnVirtualDesktops` `1,abc` now becomes `[1]` (it used to be dropped whole, meaning "all desktops").
 - Follow-up (pre-existing, not fixed): a rack whose folder is a drive root has the name `""`; it has no registry key, so it is never
-  persisted. Saving it is now a silent skip (it used to log a write failure on every change).
+  persisted. Saving it is now a silent skip (it used to log a write failure on every change). **Investigated in P11b** (behavior
+  unchanged, `DriveRootRackTests` documents it): dropping a folder on an empty rack sets `Instance.Name = Path.GetFileName(folder)`
+  (`RackWindow.DragDrop`), which is `""` for `D:\`, `D:` and a share root such as `\\server\share`; the name is the registry key, so
+  nothing is written, nothing is logged and the rack is gone after a restart. Recommendation (a small phase, not P11): derive the
+  name through one function for all three places that set it (drop, rename, bootstrap) that falls back to the drive letter (`D`) or
+  the share name when the leaf is empty and then makes it unique among the racks, or refuse the drop with a message; either way
+  the same key must be used on every later save. Two folders with the same leaf name (`C:\a\Docs`, `D:\b\Docs`) would also get the same
+  key when bound this way (not tested).
 - Kept on purpose: the two one-shot migrations still write through the setters after a load; a full save leaves an empty
   `LastAccessedFiles`/`CustomOrderFiles` value alone while a single-value write stores the empty list (and `AssignedFiles` is removed
   when empty), exactly as before; `BackgroundImagePath` is stored as typed (the local-drive check stays where the image is loaded);
@@ -352,21 +360,26 @@ which tests were added.
 - `Move`/`DeleteTree`/`DeleteToRecycleBin` still judge a junction by its TARGET, so the ancestor rule refuses to
   move or delete a Ctrl+dropped link to the OneDrive root, `C:\Users` or `AppData`. Making those link-aware (as
   `Rename` and `Unlink` already are) is safe for `DeleteTree`/Recycle and for a same-volume `Move`.
-- `RackWindow.Menu.cs` (remove rack on the Desktop) ignores the `DeleteEmptyDirectory` result: the rack is removed
-  but the folder may remain although the dialog said it would be deleted.
+- ~~`RackWindow.Menu.cs` (remove rack on the Desktop) ignores the `DeleteEmptyDirectory` result: the rack is removed
+  but the folder may remain although the dialog said it would be deleted.~~ Done in P11b: `Rack/RackFolderRemoval`
+  returns the text to show once (`Lang.RemoveRack_FolderKept`) when the folder is still there; the broker's own
+  `DeleteEmptyDirectory` record is the audit trail.
 - `UninstallCleanup` and `WorkspaceReturn` treat "link count above 1" as "the data survives elsewhere" but do not
   know where the other name lives (it could be in `$Recycle.Bin`), and `WorkspaceReturn` does not compare file
-  identity (volume serial + file index) with the Desktop file.
+  identity (volume serial + file index) with the Desktop file. **Confirmed by a test in P11 (F4)**: still open,
+  deliberately not implemented there.
 - `Unlink` and `DeleteEmptyDirectory` act by path after their checks; a handle-based delete closes the
-  check-to-delete window (P11).
+  check-to-delete window. Considered in P11 and **not implemented on purpose** (it needs a design of its own: the
+  window is two system calls wide and every failure of it is safe, because both calls refuse a non-empty folder,
+  a real folder or a file with one name).
 
 ### Follow-ups recorded by the P1 review
 
 - ~~**P2:** refuse an ancestor of a protected folder~~ Done in P2 (see above).
-- **P11 or later:** `SafeMove.CopyThenDelete` cleanup after a failed copy should delete only what this call
-  created (CreateNew / a did-not-exist flag), because of a TOCTOU window; the audit sink does synchronous I/O on
-  the calling (often UI) thread, so consider a background queue; `MoveChecked` runs `SafeMove.Check` twice (once
-  directly, once inside `TryMove`); reason texts are English only.
+- ~~**P11 or later:** `SafeMove.CopyThenDelete` cleanup after a failed copy should delete only what this call
+  created.~~ Done in P11b (see "P11 in short"). Still open: the audit sink does synchronous I/O on the calling (often
+  UI) thread, so consider a background queue; reason texts are English only.
+- ~~`MoveChecked` runs `SafeMove.Check` twice.~~ Done in P11b: once, through `SafeMove.MoveAfterCheck`.
 
 Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (done).
 
@@ -399,6 +412,87 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
   `Infrastructure/Update/InstallerExecutor.cs` 1 and `UpdateCleanupService.cs` 2.
 - Not done on purpose: no real download, no real installer and no real GitHub call were made (the tests use a fake handler, a temp
   folder and a fake launcher); `Test-Racks.ps1` and the dev-tools e2e were not run.
+
+### P11 in short (what changed)
+
+- Two commits. **P11a** is tests only (no production file touched): `test/Racks.Tests/Adversarial/`, 108 tests tagged
+  `[Trait("Category","Adversarial")]` (2 of them need the right to create symbolic links; they run in the normal suite too;
+  `dotnet test --filter "Category=Adversarial"` runs them alone, about 3 s, together with the 39 tagged ones of P11b). Everything is real NTFS in a temp tree with real junctions, hard links and a made-up non-link reparse point
+  (stand-in for a OneDrive placeholder); the real Desktop/Documents/AppData and `HKCU\SOFTWARE\Racks` are never touched (a folder
+  that must look protected is declared with `SafeMove.UseProtectedFoldersForTest`). **P11b** is the small production follow-ups
+  below, each with its tests.
+- **Covered by P11a:** `SafeDelete` (junction and junction chain inside a tree not followed, dangling junction, read-only/hidden/
+  system files, deep >260 trees, unicode and symbol names, `x.` / `y ` entries created through `\\?\`, a locked file reported as
+  `PartiallyCompleted` and finished on retry, Recycle Bin on a tree with a junction, on a junction and on symbol names, network paths
+  refused); `SafeMove`/broker (protected folder by case, `\\?\`, `..`, 8.3 name, junction and 3-hop junction chain, ancestor through
+  an alias, child of a protected folder allowed, into itself directly and through a junction alias, onto its own parent, missing
+  parent, existing file/folder never overwritten in any kind or case, trailing dot/space destination, device-name destinations,
+  symbols/emoji/unicode names, >260 paths, copy+delete fallback with a locked file, with a stuck original, with a link inside, deeper
+  than the 64-level backstop, and a real move to the second drive when there is one); `DesktopRackClaims` (claims across 4 racks,
+  ordinal case, removed rack, null list, `IsGone` with missing, file and dangling-junction parents); `WorkspaceReturn` (same name and
+  same length with other content, hard links with equal and different length, the 1000-name cap both sides, hostile names, locked
+  file, folder with a junction, link to a protected folder); `UninstallCleanup` (locked and nested hidden/system content, nested
+  `desktop.ini`, clashes of file vs folder, the 1000-name cap, junctions to outside content in the workspace, in a sandbox, nested
+  and dangling, junction to a protected folder, non-link reparse points returned and never unlinked, unicode paths, a second run);
+  `RackMirror.RemoveJunctions` (only links go, a link inside a user folder is not reached, non-link reparse points stay, chains,
+  dangling, crowds, unicode).
+- **P11b, behavior:** (1) `SafeMove.CopyThenDelete` removes only what the call created: every file is claimed with `CreateNew`, every
+  folder with `CreateDirectoryW` (fails if it exists, so a copy can no longer merge into somebody else's folder), the created paths are
+  tracked and a failure removes them newest first with a non-recursive delete (a folder that gained somebody else's content stays with it).
+  Seam: `SafeMove.UseBeforeCopyHookForTest` runs between the preflight and the copy. The old cleanup fails 3 of the 7 new tests (checked).
+  The destination's parent must now exist (the broker already required it). (2) Removing a Desktop-folder rack whose emptied folder could not be
+  deleted now tells the user once (`Lang.RemoveRack_FolderKept`, `Rack/RackFolderRemoval`) and still removes the rack; the attempt is in
+  `audit.log` as the broker's `DeleteEmptyDirectory` record (Rejected "isn't empty" or Failed). (3) `FileOperationBroker.MoveChecked` runs
+  `SafeMove.Check` once and calls the new `SafeMove.MoveAfterCheck`; every reason text and the order of the checks are unchanged (existing
+  tests untouched). The one difference: a name that appears between the check and the move is no longer reported as `Skipped` by a second
+  check but as `Failed` with the system's reason; it is still never overwritten. (4) The drive-root investigation is a test and a
+  recommendation (see the P6 follow-up above). Two internal seams were added to make the rest testable and nothing else changed there:
+  `DesktopIconManager.Setup(workspace, icon, libraries, desktop)` (what `Initialize()` does, with the four places passed in) and
+  `RackMirror.Rebuild(racks, mirrorRoot)`.
+- **Findings.** F2, F3 and F7 were fixed in a third commit (P11c, below). The others are not fixed in P11; each is pinned by a test
+  (named `Known_gap_...` except F6 and F8), so a fix has to flip it on purpose:
+  - **F1, medium (function, no data loss):** a FOLDER move to another volume never reaches the copy+delete fallback. .NET's
+    `Directory.Move` throws an `IOException` whose HResult is not `ERROR_NOT_SAME_DEVICE`, so `IsCrossVolumeError` never matches and the
+    user's drop is refused ("Failed to move"; source untouched, nothing created). File moves across drives work because the OS copies
+    them (no verification of the copy by Racks). So the copy fallback and its new cleanup are reached only by tests today. Recommendation:
+    decide by comparing the volume roots before the move (as `SameVolume` in the broker does), route to `CopyThenDelete` followed by a
+    completeness check (`CopyLooksComplete`) and only then the delete. Know before enabling: the copy skips links (the pointer is lost,
+    never its target) and stops at 64 levels deep (refused whole, nothing changed).
+  - ~~**F2, low likelihood, high impact (data loss):** moving a file to a destination called `NUL` pours the file into the NUL device.~~
+    **Fixed in P11c:** `FileOperationBroker.Move`/`MoveSameVolume` now judge the destination's final segment with
+    `PathPolicy.ValidateLeafName` right after the path check and before anything is touched ("Destination name: ..." in the reason):
+    device names with or without an extension (NUL, CON, PRN, AUX, COM0-9, LPT0-9, CONIN$), a trailing dot or space and data streams are
+    `Rejected`. Only the last segment is checked, so legitimate parents and every internal name (`name (from Racks 12).txt`) are
+    unaffected. `Rename` and `CreateDirectory` already did this.
+  - ~~**F3, medium:** `AssignedFiles` containing `.` made `WorkspaceReturn` move the whole workspace onto the Desktop.~~
+    **Fixed in P11c:** `WorkspaceReturn.ToDesktop` and the remove-rack loop require `PathPolicy.ValidateLeafName(name).Ok`; the loader
+    and the layout import (`RackSettingsValidator.ParsePipeList`) drop the items that fail it and keep the good ones, as a
+    `SettingFallback` audit record on load and a dropped-value entry on import (the stored text is left as it is). One golden
+    fixture value changed because it was not a leaf name: `sub dir\c.pdf` became `sub dir c.pdf`.
+  - **F4, low:** a workspace file with another hard link elsewhere and the same LENGTH as an unrelated Desktop file of the same name is
+    taken for the Ctrl+drop duplicate and dropped instead of returned. No byte is lost (its data stays under the other name) but it does
+    not come back. Fix: the file-identity check already listed above (volume serial + file index).
+  - **F5, low:** `DesktopRackClaims.IsGone` treats a dangling junction as a reachable folder (`Directory.Exists` is true for it), so every
+    name under a workspace that is a junction whose target vanished reads as "moved away" and its claim is dropped on a drag-out.
+  - **F6, cosmetic:** a second uninstall run returns the "files not returned" note written by the first run to the Desktop as if it were a
+    user file (`UninstallCleanup` step 1 skips only `desktop.ini` and the icon).
+  - ~~**F7, low:** the Desktop library file is built by string interpolation; a path with `&` or `<` made `DesktopWorkspace.library-ms`
+    invalid XML.~~ **Fixed in P11c:** both paths go through `SecurityElement.Escape`.
+  - **F8, informational:** `SafeMove.Canonicalize` of a destination that does not exist yet does not resolve its parent through a
+    junction, so "destination inside source, through a junction alias" is not seen by the preflight; the operating system refuses the
+    move and the broker reports `Failed` instead of `Rejected`. Nothing moved (tested).
+- **P11c** (F2, F3, F7): the three fixes above, with their tests flipped from `Known_gap_...` to real expectations: 18 destination-name
+  cases (device names, trailing dot/space, data streams) plus ordinary and `(from Racks N)` names, a trailing separator, odd parent
+  names, `Rename`/`CreateDirectory`; 13 loader cases and the layout import for `AssignedFiles` items; the XML-escape case.
+- Tests: 1669 to 1868 passed (6 skipped: the 4 old ones plus 2 new `[SymlinkFact]` tests that need the right to create symbolic links),
+  0 failed. P11a added 108 (106 run here; SafeDelete 18, SafeMove 31, claims and return 36, uninstall and mirror 23), P11b 49 (copy
+  cleanup 7, single preflight 3, rack folder removal 8, workspace set-up 10, mirror rebuild 11, drive-root rack 10). The Adversarial set
+  was run 10 times in a row and the whole suite three times after P11b and again after P11c with no flake. P11c added 44 (1824 to 1868).
+- Not done on purpose: the audit background queue, a handle-based `Unlink`, a link-aware `Move` for Ctrl+dropped links, the
+  virtual-rack cross-volume copy-then-recycle and the `WorkspaceReturn` file-identity check stay as follow-ups above. The real app,
+  `Test-Racks.ps1` and the dev-tools e2e were not run; the rack-removal dialog is covered through `RackFolderRemoval` (the decision and the
+  text), not by showing the window. A second fixed drive existed on the machine used (D:), so the real cross-volume tests ran there; on a
+  one-drive machine (and in CI) they show as skipped.
 
 ## Findings that drive the order
 
