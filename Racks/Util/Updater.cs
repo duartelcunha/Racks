@@ -18,13 +18,47 @@ namespace Racks
     //      stays open (no writes, no deletes) until the installer has started.
     // Anything missing or mismatched fails closed with a message and nothing is launched. GitHub
     // (TLS, host, repo path) is only the transport; trust comes from the signature.
+    //
+    // The class has a static face (CheckUpdateAsync / InstallUpdate, wired to the real toasts, process
+    // start, WPF shutdown, %TEMP% and the compiled-in key) and an instance behind it that takes those
+    // as interfaces, so tests drive the whole check/download/verify/launch path with fakes.
     public class Updater
     {
         internal sealed record ReleaseAssets(string Version, string InstallerUrl, string ManifestUrl, string SignatureUrl);
         internal sealed record PendingUpdate(string Tag, ReleaseAssets Assets, UpdateManifest Manifest);
 
         // Set only after the manifest verified; Install uses nothing else.
-        private static PendingUpdate? _pending;
+        private PendingUpdate? _pending;
+
+        private readonly IUpdateNotifier _notifier;
+        private readonly IInstallerLauncher _launcher;
+        private readonly IAppShutdown _shutdown;
+        private readonly string _tempRoot;
+        private readonly HttpMessageHandler? _httpHandler;
+        private readonly string _publicKeySpkiBase64;
+        private readonly Func<string> _currentVersion;
+
+        internal Updater(IUpdateNotifier notifier, IInstallerLauncher launcher, IAppShutdown shutdown, string tempRoot,
+                         HttpMessageHandler? httpHandler, string publicKeySpkiBase64, Func<string> currentVersion)
+        {
+            _notifier = notifier;
+            _launcher = launcher;
+            _shutdown = shutdown;
+            _tempRoot = tempRoot;
+            _httpHandler = httpHandler;
+            _publicKeySpkiBase64 = publicKeySpkiBase64;
+            _currentVersion = currentVersion;
+        }
+
+        // The production wiring: real toasts, ShellExecute, the WPF dispatcher, %TEMP%, the key compiled into this build.
+        private static readonly Lazy<Updater> Default = new(() => new Updater(
+            new ToastUpdateNotifier(), new ShellInstallerLauncher(), new WpfAppShutdown(), Path.GetTempPath(), null,
+            UpdateTrust.PublicKeySpkiBase64,
+            () => Process.GetCurrentProcess().MainModule!.FileVersionInfo.FileVersion!.ToString()));
+
+        public static Task CheckUpdateAsync(string url, bool showToastIfNoUpdate) => Default.Value.CheckAsync(url, showToastIfNoUpdate);
+
+        public static Task InstallUpdate() => Default.Value.InstallAsync();
 
         // The only host/path the update binary may come from. TLS proves it's really GitHub;
         // this proves it's OUR repo's release asset and not an arbitrary URL from the JSON.
@@ -51,19 +85,19 @@ namespace Racks
         // installer) cannot hide an older good update. Only a release whose signed manifest verified
         // is ever named (its signed version); nothing else from the API (tag, name, body) is shown,
         // and a release that does not verify is never named or linked.
-        public static async Task CheckUpdateAsync(string url, bool showToastIfNoUpdate)
+        internal async Task CheckAsync(string url, bool showToastIfNoUpdate)
         {
             // No key compiled in: nothing can be verified, so nothing is fetched or named. Only a
             // check the user asked for says so (not every startup).
-            if (!UpdateTrust.IsConfigured(UpdateTrust.PublicKeySpkiBase64))
+            if (!UpdateTrust.IsConfigured(_publicKeySpkiBase64))
             {
                 _pending = null;
                 if (showToastIfNoUpdate)
-                    ShowToast(NoKeyHeader, NoKeyBody);
+                    _notifier.Show(NoKeyHeader, NoKeyBody);
                 return;
             }
 
-            string currentVersion = Process.GetCurrentProcess().MainModule!.FileVersionInfo.FileVersion!.ToString();
+            string currentVersion = _currentVersion();
             try
             {
                 using var httpClient = NewHttpClient(currentVersion);
@@ -74,7 +108,7 @@ namespace Racks
                 if (newestVersion == null)
                 {
                     if (showToastIfNoUpdate)
-                        ShowToast("You are up to date!", "There is no available update.");
+                        _notifier.Show("You are up to date!", "There is no available update.");
                     return;
                 }
 
@@ -84,32 +118,22 @@ namespace Racks
                 if (offer != null)
                 {
                     _pending = offer;
-                    new ToastContentBuilder()
-                        .AddText($"🚀 Racks {offer.Manifest.Version} is available", AdaptiveTextStyle.Header)
-                        .AddText("A signed update is ready to install. See what's new on the releases page.", AdaptiveTextStyle.Body)
-                        .AddButton(new ToastButton()
-                            .SetContent("Install")
-                            .AddArgument("action", "install_update")
-                            .SetBackgroundActivation())
-                        .AddButton(new ToastButton()
-                            .SetContent("Close")
-                            .AddArgument("action", "close")
-                            .SetBackgroundActivation())
-                        .Show();
+                    _notifier.ShowOffer($"🚀 Racks {offer.Manifest.Version} is available",
+                        "A signed update is ready to install. See what's new on the releases page.");
                     return;
                 }
 
                 _pending = null;
                 Debug.WriteLine($"Newest release not offered: {failure}");
                 if (showToastIfNoUpdate)
-                    ShowToast(NotVerifiedHeader, NotVerifiedBody);
+                    _notifier.Show(NotVerifiedHeader, NotVerifiedBody);
             }
             catch (Exception e)
             {
                 // A check the user asked for must never fail silently (being offline on the first
                 // click used to show nothing). The automatic startup check stays quiet.
                 if (showToastIfNoUpdate)
-                    ShowToast("Failed to check for updates.", e.Message);
+                    _notifier.Show("Failed to check for updates.", e.Message);
                 Debug.WriteLine($"Update error: {e.Message}");
             }
         }
@@ -232,7 +256,7 @@ namespace Racks
             => UpdateVerifier.VerifyManifest(manifestBytes, signatureText, UpdateTrust.PublicKeySpkiBase64,
                                              releaseTag, currentVersion, out manifest);
 
-        private static async Task<(UpdateCheck, UpdateManifest?)> FetchAndVerifyManifestAsync(
+        private async Task<(UpdateCheck, UpdateManifest?)> FetchAndVerifyManifestAsync(
             HttpClient http, ReleaseAssets assets, string currentVersion)
         {
             string releaseTag = "v" + assets.Version;
@@ -241,7 +265,7 @@ namespace Racks
             byte[]? sigBytes = await GetSmallAssetAsync(http, assets.SignatureUrl, UpdateManifest.MaxSignatureBytes);
             if (sigBytes == null) return (UpdateCheck.MissingSignature, null);
             string sig = Encoding.ASCII.GetString(sigBytes);
-            var result = VerifyReleaseManifest(manifestBytes, sig, releaseTag, currentVersion, out var manifest);
+            var result = UpdateVerifier.VerifyManifest(manifestBytes, sig, _publicKeySpkiBase64, releaseTag, currentVersion, out var manifest);
             return (result, manifest);
         }
 
@@ -272,38 +296,19 @@ namespace Racks
             }
         }
 
-        public static async Task InstallUpdate()
+        internal async Task InstallAsync()
         {
-            // Only an update whose manifest verified in CheckUpdateAsync can be installed. A toast
+            // Only an update whose manifest verified in CheckAsync can be installed. A toast
             // clicked after a restart (state gone) or a tampered URL fails closed.
             var pending = _pending;
             if (pending == null || !IsTrustedDownloadUrl(pending.Assets.InstallerUrl))
             {
-                ShowToast("Update blocked", $"{CantVerify} Check for updates again.");
+                _notifier.Show("Update blocked", $"{CantVerify} Check for updates again.");
                 return;
             }
             var manifest = pending.Manifest;
 
-            string tag = "update";
-            string group = "downloads";
-
-            var toast = new ToastContentBuilder()
-                .AddText($"Updating to {pending.Tag}", AdaptiveTextStyle.Header)
-                .AddVisualChild(new AdaptiveProgressBar()
-                {
-                    Title = $"Progress",
-                    Value = new BindableProgressBarValue("progressValue"),
-                    ValueStringOverride = new BindableString("progressValueString"),
-                    Status = new BindableString("progressStatus")
-                })
-                .GetToastContent();
-
-            var notif = new ToastNotification(toast.GetXml())
-            {
-                Tag = tag,
-                Group = group
-            };
-            ToastNotificationManagerCompat.CreateToastNotifier().Show(notif);
+            var progress = _notifier.StartProgress($"Updating to {pending.Tag}");
 
             // Fresh, random, owner-only folder per download (INV-EXEC-1): nothing can be pre-placed
             // at a predictable path, and other accounts cannot reach it.
@@ -311,7 +316,7 @@ namespace Racks
             FileStream? locked = null;
             try
             {
-                dir = CreatePrivateTempDir();
+                dir = CreatePrivateTempDir(_tempRoot);
                 string installerPath = Path.Combine(dir, manifest.FileName);
 
                 using (var httpClient = NewHttpClient(pending.Tag))
@@ -340,23 +345,11 @@ namespace Racks
                             }
                             await outputStream.WriteAsync(buffer, 0, read);
 
-                            int progress = (int)((totalRead * 100) / totalBytes);
-                            if (progress != lastProgress)
+                            int percent = (int)((totalRead * 100) / totalBytes);
+                            if (percent != lastProgress)
                             {
-                                lastProgress = progress;
-
-                                var data = new NotificationData
-                                {
-                                    SequenceNumber = (uint)progress,
-                                    Values =
-                                        {
-                                            ["progressValue"] = (progress / 100.0).ToString("0.##", CultureInfo.InvariantCulture),
-                                            ["progressValueString"] = $"{progress}%",
-                                            ["progressStatus"] = "Downloading..."
-                                        }
-                                };
-
-                                ToastNotificationManagerCompat.CreateToastNotifier().Update(data, tag, group);
+                                lastProgress = percent;
+                                progress.Report(percent);
                             }
                         }
                     }
@@ -366,7 +359,7 @@ namespace Racks
                         return;
                     }
                 }
-                ToastNotificationManagerCompat.CreateToastNotifier().Hide(notif);
+                progress.Hide();
 
                 // Re-open read-only and deny writers and deleters, verify THROUGH this handle, and keep
                 // it open until the installer has started: the bytes that run are the bytes checked.
@@ -385,24 +378,24 @@ namespace Racks
             catch (Exception ex)
             {
                 Debug.WriteLine($"Update download failed: {ex.Message}");
-                ToastNotificationManagerCompat.CreateToastNotifier().Hide(notif);
+                progress.Hide();
                 locked?.Dispose();
                 locked = null;
                 TryDeleteDir(dir);
-                ShowToast("Update failed", ex.Message);
+                _notifier.Show("Update failed", ex.Message);
             }
 
             void Fail(UpdateCheck why)
             {
-                ToastNotificationManagerCompat.CreateToastNotifier().Hide(notif);
+                progress.Hide();
                 locked?.Dispose();
                 locked = null;
                 TryDeleteDir(dir);
-                ShowToast("Update blocked", $"{CantVerify} {UpdateVerifier.Describe(why)}");
+                _notifier.Show("Update blocked", $"{CantVerify} {UpdateVerifier.Describe(why)}");
             }
         }
 
-        private static async Task RestartApplication(string installerPath, FileStream verifiedHandle, string dir)
+        private async Task RestartApplication(string installerPath, FileStream verifiedHandle, string dir)
         {
             // installerPath is the freshly verified Racks-Setup-x.y.z.exe. Run it and quit.
             // The installer upgrades in place (same AppId), force-closes this running instance
@@ -416,11 +409,7 @@ namespace Racks
                 // verifiedHandle is still open (share: read only), so the file cannot be swapped
                 // between the hash check and process creation. Once the process runs, its mapped
                 // image cannot be written either.
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = installerPath,
-                    UseShellExecute = true
-                });
+                _launcher.Start(installerPath);
             }
             catch (Exception ex)
             {
@@ -428,7 +417,7 @@ namespace Racks
                 Debug.WriteLine($"Launching updater failed: {ex.Message}");
                 verifiedHandle.Dispose(); // (finally disposes again; harmless) release before deleting
                 TryDeleteDir(dir);
-                ShowToast("Update failed to start", ex.Message);
+                _notifier.Show("Update failed to start", ex.Message);
                 return;
             }
             finally
@@ -438,22 +427,22 @@ namespace Racks
             // Orderly shutdown instead of Environment.Exit: Exit skipped OnExit, which releases the
             // single-instance mutex (the relaunched Racks could be refused) and restores state. The
             // installer force-closes anything still running, so a stuck window cannot block the update.
-            System.Windows.Application.Current.Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown());
+            _shutdown.Shutdown();
         }
 
-        private static HttpClient NewHttpClient(string version)
+        private HttpClient NewHttpClient(string version)
         {
-            var httpClient = new HttpClient();
+            var httpClient = _httpHandler != null ? new HttpClient(_httpHandler, disposeHandler: false) : new HttpClient();
             string v = string.IsNullOrWhiteSpace(version) ? "0" : version.Trim();
             try { httpClient.DefaultRequestHeaders.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("Racks", v)); }
             catch (FormatException) { httpClient.DefaultRequestHeaders.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("Racks", "0")); }
             return httpClient;
         }
 
-        // %TEMP%\Racks-update-<guid>, DACL: current user only, not inherited.
-        internal static string CreatePrivateTempDir()
+        // <root>\Racks-update-<guid>, DACL: current user only, not inherited. Root defaults to %TEMP%.
+        internal static string CreatePrivateTempDir(string? tempRoot = null)
         {
-            string dir = Path.Combine(Path.GetTempPath(), $"Racks-update-{Guid.NewGuid():N}");
+            string dir = Path.Combine(tempRoot ?? Path.GetTempPath(), $"Racks-update-{Guid.NewGuid():N}");
             var security = new DirectorySecurity();
             security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
             var me = WindowsIdentity.GetCurrent().User ?? throw new InvalidOperationException("No user SID.");
@@ -504,11 +493,107 @@ namespace Racks
             }
             catch { }
         }
+    }
 
-        private static void ShowToast(string header, string body)
+    // What the updater needs from the outside, so tests can run the whole flow with fakes (no network,
+    // no toast, no process, no WPF). The production implementations follow.
+    internal interface IUpdateNotifier
+    {
+        void Show(string header, string body);
+        // The "update available" toast: header, body and the Install / Close buttons.
+        void ShowOffer(string header, string body);
+        IUpdateProgress StartProgress(string header);
+    }
+
+    internal interface IUpdateProgress
+    {
+        void Report(int percent);
+        void Hide();
+    }
+
+    internal interface IInstallerLauncher
+    {
+        // Starts the (verified) installer. Throws if it cannot be started.
+        void Start(string installerPath);
+    }
+
+    internal interface IAppShutdown
+    {
+        void Shutdown();
+    }
+
+    internal sealed class ShellInstallerLauncher : IInstallerLauncher
+    {
+        public void Start(string installerPath)
+            => Process.Start(new ProcessStartInfo { FileName = installerPath, UseShellExecute = true });
+    }
+
+    internal sealed class WpfAppShutdown : IAppShutdown
+    {
+        public void Shutdown()
+            => System.Windows.Application.Current.Dispatcher.Invoke(() => System.Windows.Application.Current.Shutdown());
+    }
+
+    internal sealed class ToastUpdateNotifier : IUpdateNotifier
+    {
+        private const string ToastTag = "update";
+        private const string ToastGroup = "downloads";
+
+        public void Show(string header, string body)
             => new ToastContentBuilder()
                 .AddText(header, AdaptiveTextStyle.Header)
                 .AddText(body, AdaptiveTextStyle.Body)
                 .Show();
+
+        public void ShowOffer(string header, string body)
+            => new ToastContentBuilder()
+                .AddText(header, AdaptiveTextStyle.Header)
+                .AddText(body, AdaptiveTextStyle.Body)
+                .AddButton(new ToastButton()
+                    .SetContent("Install")
+                    .AddArgument("action", "install_update")
+                    .SetBackgroundActivation())
+                .AddButton(new ToastButton()
+                    .SetContent("Close")
+                    .AddArgument("action", "close")
+                    .SetBackgroundActivation())
+                .Show();
+
+        public IUpdateProgress StartProgress(string header)
+        {
+            var toast = new ToastContentBuilder()
+                .AddText(header, AdaptiveTextStyle.Header)
+                .AddVisualChild(new AdaptiveProgressBar()
+                {
+                    Title = "Progress",
+                    Value = new BindableProgressBarValue("progressValue"),
+                    ValueStringOverride = new BindableString("progressValueString"),
+                    Status = new BindableString("progressStatus")
+                })
+                .GetToastContent();
+            var notif = new ToastNotification(toast.GetXml()) { Tag = ToastTag, Group = ToastGroup };
+            ToastNotificationManagerCompat.CreateToastNotifier().Show(notif);
+            return new Progress(notif);
+        }
+
+        private sealed class Progress(ToastNotification notif) : IUpdateProgress
+        {
+            public void Report(int percent)
+            {
+                var data = new NotificationData
+                {
+                    SequenceNumber = (uint)percent,
+                    Values =
+                    {
+                        ["progressValue"] = (percent / 100.0).ToString("0.##", CultureInfo.InvariantCulture),
+                        ["progressValueString"] = $"{percent}%",
+                        ["progressStatus"] = "Downloading..."
+                    }
+                };
+                ToastNotificationManagerCompat.CreateToastNotifier().Update(data, ToastTag, ToastGroup);
+            }
+
+            public void Hide() => ToastNotificationManagerCompat.CreateToastNotifier().Hide(notif);
+        }
     }
 }

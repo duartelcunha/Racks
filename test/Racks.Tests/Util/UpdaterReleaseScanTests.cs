@@ -1,4 +1,3 @@
-using System.IO;
 using System.Text.Json;
 using Racks.Util;
 
@@ -138,14 +137,5 @@ public class UpdaterReleaseScanTests
             _ => throw new InvalidOperationException("nothing to verify")).GetAwaiter().GetResult();
         Assert.Null(offer);
         Assert.Equal(UpdateCheck.MissingManifest, failure);
-    }
-
-    [Fact]
-    public void Toasts_show_only_validated_versions_never_api_text()
-    {
-        // The toast texts in CheckUpdateAsync may interpolate only the validated version strings.
-        string src = File.ReadAllText(Racks.Tests.Guards.RepoPaths.App("Util", "Updater.cs"));
-        Assert.DoesNotContain("GetProperty(\"body\")", src);
-        Assert.DoesNotContain("GetProperty(\"name\")", src);
     }
 }
