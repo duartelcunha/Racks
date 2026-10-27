@@ -529,7 +529,7 @@ namespace Racks
                 if (dropMessages.Count > 0)
                 {
                     var combined = string.Join("\n", dropMessages);
-                    Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                    System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                     {
                         try
                         {
@@ -589,7 +589,7 @@ namespace Racks
                         CreateShortcut(firstDroppedFile, sandbox);
                         if (!string.IsNullOrEmpty(moveReason))
                         {
-                            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                            System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                             {
                                 try
                                 {

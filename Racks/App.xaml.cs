@@ -15,7 +15,7 @@ namespace Racks
     /// <summary>
     /// Interaction logic for App.xaml
     /// </summary>
-    public partial class App : Application
+    public partial class App : System.Windows.Application
     {
 
         // Hold a named Mutex for the lifetime of the process. Second-launch detects
@@ -198,14 +198,14 @@ namespace Racks
                 if (!createdNew)
                 {
                     // Another Racks is already running in this session — its tray icon is live. Just exit.
-                    Application.Current.Shutdown();
+                    System.Windows.Application.Current.Shutdown();
                     return;
                 }
             }
 #endif
             if (isUninstallAnim)
             {
-                Racks.Util.LifecycleAnimations.RunUninstallAnimation(() => Application.Current.Shutdown());
+                Racks.Util.LifecycleAnimations.RunUninstallAnimation(() => System.Windows.Application.Current.Shutdown());
                 return;
             }
 

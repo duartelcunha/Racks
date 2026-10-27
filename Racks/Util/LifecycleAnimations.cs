@@ -170,7 +170,7 @@ namespace Racks.Util
 
                 Task.Delay(760).ContinueWith(_ =>
                 {
-                    Application.Current.Dispatcher.Invoke(() =>
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
                         CompositionTarget.Rendering -= keep;
                         try { win.Close(); } catch { }
@@ -233,7 +233,7 @@ namespace Racks.Util
                 glow.BeginAnimation(DropShadowEffect.OpacityProperty, glowInOp);
 
                 // --- 2. Hold a clear beat at center, then dissolve upward (1300 -> 2000ms) ---
-                Task.Delay(1300).ContinueWith(_ => Application.Current.Dispatcher.Invoke(() =>
+                Task.Delay(1300).ContinueWith(_ => System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     try
                     {
@@ -254,7 +254,7 @@ namespace Racks.Util
                         blur.BeginAnimation(BlurEffect.RadiusProperty, blurOut);
                         win.BeginAnimation(UIElement.OpacityProperty, winFade);
 
-                        Task.Delay(740).ContinueWith(__ => Application.Current.Dispatcher.Invoke(() =>
+                        Task.Delay(740).ContinueWith(__ => System.Windows.Application.Current.Dispatcher.Invoke(() =>
                         {
                             CompositionTarget.Rendering -= keepQuit;
                             try { win.Close(); } catch { }
@@ -328,7 +328,7 @@ namespace Racks.Util
                 bye.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation { From = 0, To = 0.9, BeginTime = TimeSpan.FromMilliseconds(520), Duration = TimeSpan.FromMilliseconds(380), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
 
                 // --- 3. Hold, then dissolve upward: fade + blur + drift + text fade (1500 -> 2200ms) ---
-                Task.Delay(1500).ContinueWith(_ => Application.Current.Dispatcher.Invoke(() =>
+                Task.Delay(1500).ContinueWith(_ => System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     try
                     {
@@ -349,7 +349,7 @@ namespace Racks.Util
                         bye.BeginAnimation(UIElement.OpacityProperty, byeOut);
                         win.BeginAnimation(UIElement.OpacityProperty, winFade);
 
-                        Task.Delay(740).ContinueWith(__ => Application.Current.Dispatcher.Invoke(() =>
+                        Task.Delay(740).ContinueWith(__ => System.Windows.Application.Current.Dispatcher.Invoke(() =>
                         {
                             CompositionTarget.Rendering -= keep;
                             try { win.Close(); } catch { }

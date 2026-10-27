@@ -43,8 +43,10 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   `CustomOrderFiles`; `Folder`/`BackgroundImagePath` só aceitam caminhos locais totalmente
   qualificados (`X:\...`): tudo o que começa por dois separadores (`\\host`, `//host`, `\\?\`,
   `\\.\`, `\\?\UNC\`, `\\host@SSL`) é rejeitado, tal como `C:x`, `\x`, `..` e `:` de ADS. O
-  `DesktopRouter` NÃO revalida: um utilizador pode escolher uma pasta de rede na própria app; a
-  regra é só para ficheiros importados. *(teste: `RackLayoutImportValidationTests`)*
+  Uma pasta de rede que o utilizador escolhe na própria app continua permitida: a regra é só para
+  ficheiros importados. O auto-route não revalida a pasta da rack, mas o destino passa sempre pelo
+  `FileOperationBroker` (`PathPolicy`, pastas protegidas, nunca sobrescreve), ver INV-ROUTE-1.
+  *(teste: `RackLayoutImportValidationTests`)*
 - **INV-IMPORT-3** Valores de racks que o WPF transforma em recursos nunca podem nomear uma
   localização: `new FontFamily(@"\\host\share\#Fonte")` abre a share, o `ColorConverter`/
   `BrushConverter` aceita `ContextColor <uri> ...` e abre esse perfil ICC, e uma imagem de fundo
@@ -191,6 +193,23 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   apontar a uma partilha de rede), ao contrário dos layouts importados (INV-IMPORT-1).
   *(teste: `PathPolicyTests`, `FileOperationBrokerTests`: rename com `..\x`, `C:\x`, `a:b`, `CON` é
   recusado e nada aparece fora da pasta)*
+- **INV-ROUTE-1** O auto-route (uma rack com regex apanha ficheiros novos do Desktop) só move entradas
+  *elegíveis*, através do `FileOperationBroker` (motivo `auto-route`), e cada decisão fica auditada.
+  `RoutingPolicy` recusa: `desktop.ini`, itens ocultos ou de sistema, nomes de ficheiros por acabar
+  (`.crdownload`, `.part`, `.partial`, `.tmp`, `.download`, `.opdownload`, `~$*`; o `Renamed` para o nome
+  final é que é encaminhado), junções e symlinks, nomes que não são um leaf name (`PathPolicy.ValidateLeafName`)
+  e entradas que já não existem. Outros reparse points (placeholders do OneDrive num Desktop redirecionado)
+  SÃO encaminhados e nunca são abertos para a sondagem de "em uso" (abrir um podia descarregá-lo). Um ficheiro
+  ainda aberto por outro programa (`FileShare.None` falha) é reavaliado com esperas de 1+2+4+8+15 s e depois
+  desistido com um `Skipped` auditado; nunca fica em ciclo nem é largado em silêncio. A regra de cada rack
+  passa por `SafeRegex` (timeout de 250 ms, regex compilado guardado por rack; inválida ou lenta = rack ignorada,
+  um registo por rack e não por ficheiro) e `Instance.AutoRouteRegex` só guarda padrões que
+  `SafeRegex.IsAcceptable` aceita (compila e aguenta entradas-canário sem timeout), no registo, no import e no
+  menu. O watcher tem buffer de 64 KB e, em `Error`, volta a criar-se e revê o Desktop uma vez (espera de
+  250 ms, a dobrar até 30 s). Auditoria: um movimento que chega ao broker é o registo do broker (`Move`, motivo
+  `auto-route`); o que se decide antes (recusa da política, ficheiro ainda em uso, regra que não corre) é um
+  registo `AutoRoute` do serviço; um ficheiro que nenhuma rack quer não gera registo.
+  *(teste: `RoutingPolicyTests`, `AutoRouteServiceTests`, `DesktopRouterTests`, `AutoRouteRegexSetterTests`)*
 
 ---
 

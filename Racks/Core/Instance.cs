@@ -176,16 +176,19 @@ public class Instance : INotifyPropertyChanged
         }
     }
 
-    // Regex matched against file names appearing on the user's Desktop. Any match
-    // is auto-routed (shortcut created) into this rack. Empty disables routing.
+    // Regex matched against file names appearing on the user's Desktop. A match moves the file into
+    // this rack (AutoRouteService). Empty disables routing. Like the font and color setters, a value that
+    // cannot be used (does not compile, or is too slow on the SafeRegex canary inputs) is ignored and the
+    // previous pattern stays; that covers the registry load, an import and the menu alike (INV-ROUTE-1).
     public string AutoRouteRegex
     {
         get => _autoRouteRegex;
         set
         {
-            if (_autoRouteRegex != value)
+            value ??= "";
+            if (_autoRouteRegex != value && (value.Length == 0 || SafeRegex.IsAcceptable(value, System.Text.RegularExpressions.RegexOptions.IgnoreCase)))
             {
-                _autoRouteRegex = value ?? "";
+                _autoRouteRegex = value;
                 OnPropertyChanged(nameof(AutoRouteRegex), _autoRouteRegex);
             }
         }

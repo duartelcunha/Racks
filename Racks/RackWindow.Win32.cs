@@ -429,7 +429,7 @@ namespace Racks
 
                     if (delta > 0) // UP
                     {
-                        Application.Current.Dispatcher.BeginInvoke(() =>
+                        System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
                         {
                             Interop.SetWindowPos(hwnd, IntPtr.Zero, pt.X,
                                     newTop,
