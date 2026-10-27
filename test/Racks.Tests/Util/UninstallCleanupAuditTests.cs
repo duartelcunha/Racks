@@ -8,6 +8,7 @@ namespace Racks.Tests.Util;
 // P2: every move, unlink and folder removal the uninstall / remove-rack path does on user data goes through the
 // broker and leaves an audit record. Other tests may use the default broker at the same time, so each test looks
 // only at records whose paths are under its own temp folder.
+[Collection("AuditLog")]   // AuditLog.Use swaps a process-wide sink: classes that use it must not run in parallel
 public sealed class UninstallCleanupAuditTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "racks-cleanup-audit-" + Guid.NewGuid().ToString("N"));

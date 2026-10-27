@@ -167,13 +167,12 @@ public sealed class BrokerEmptyDirUnlinkShortcutTests : IDisposable
         Assert.False(JunctionHelper.IsReparsePoint(link));
     }
 
-    [Fact]
+    [SymlinkFact]
     public void Unlink_removes_a_file_symbolic_link_and_not_its_target()
     {
         string target = File_("real.txt", "real");
         string link = P("sym.txt");
-        try { File.CreateSymbolicLink(link, target); }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException) { return; }   // needs Developer Mode or elevation
+        File.CreateSymbolicLink(link, target);
 
         var r = _broker.Unlink(link, "test file symlink");
 
@@ -238,22 +237,26 @@ public sealed class BrokerEmptyDirUnlinkShortcutTests : IDisposable
     }
 
     [Fact]
-    public void Unlink_refuses_the_real_protected_folder_and_unlinks_a_link_that_points_at_it()
+    public void Unlink_refuses_a_protected_item_and_unlinks_an_ordinary_link_that_points_at_it()
     {
-        string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-        Assert.True(Directory.Exists(desktop), "test setup: no Desktop folder");
-        string before = string.Join("|", Directory.EnumerateFileSystemEntries(desktop).Order());
-        string link = Link(desktop, P("desktop-link"));
+        // A temp folder stands in for a protected one (never the developer's real Desktop): "stand-in" is the
+        // protected path itself, "other-link" is just a link elsewhere that points at it.
+        string standIn = P("stand-in");
+        File_("stand-in\\keep.txt", "keep me");
+        string otherLink = Link(standIn, P("other-link"));
 
-        var real = _broker.Unlink(desktop, "test protected");
-        var viaLink = _broker.Unlink(link, "test link to protected");
+        FileOperationResult real, viaLink;
+        using (SafeMove.UseProtectedFoldersForTest(standIn))
+        {
+            real = _broker.Unlink(standIn, "test protected");
+            viaLink = _broker.Unlink(otherLink, "test link to protected");
+        }
 
         Assert.Equal(OperationStatus.Rejected, real.Status);
         Assert.Contains("protected", real.Reason);
         Assert.True(viaLink.Succeeded, viaLink.Reason);
-        Assert.False(Directory.Exists(link));
-        Assert.True(Directory.Exists(desktop));
-        Assert.Equal(before, string.Join("|", Directory.EnumerateFileSystemEntries(desktop).Order()));
+        Assert.False(Directory.Exists(otherLink));
+        Assert.Equal("keep me", File.ReadAllText(P("stand-in", "keep.txt")));
     }
 
     [Fact]
@@ -338,13 +341,10 @@ public sealed class BrokerEmptyDirUnlinkShortcutTests : IDisposable
 
     // ---- MoveSameVolume ---------------------------------------------------------------------
 
-    [Fact]
+    [SecondFixedDriveFact]
     public void MoveSameVolume_refuses_a_destination_on_another_volume_and_leaves_the_source()
     {
-        string? tempRoot = Path.GetPathRoot(_root);
-        var other = DriveInfo.GetDrives().FirstOrDefault(d =>
-            d.DriveType == DriveType.Fixed && d.IsReady && !string.Equals(d.Name, tempRoot, StringComparison.OrdinalIgnoreCase));
-        if (other == null) return;                                 // single-volume machine: nothing to assert (documented)
+        var other = SecondFixedDriveFactAttribute.Find()!;
 
         string src = File_("a.txt", "stay here");
         string dest = Path.Combine(other.RootDirectory.FullName, "racks-test-never-created-" + Guid.NewGuid().ToString("N") + ".txt");

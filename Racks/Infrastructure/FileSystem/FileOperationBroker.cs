@@ -65,9 +65,11 @@ public sealed class FileOperationBroker
         => Execute(new FileOperationIntent(FileOperationKind.Unlink, path, null, reason));
 
     /// <summary>
-    /// Deletes a shortcut file (<c>.lnk</c> or <c>.url</c>, at most 1 MiB) that Racks made, sitting directly inside
-    /// <paramref name="containingFolder"/>. Deliberately narrow: this cannot delete any other kind of file, a file
-    /// elsewhere, a folder or a link.
+    /// Deletes a shortcut file: extension <c>.lnk</c> or <c>.url</c>, a plain file (not a folder or link) of at most
+    /// 1 MiB, sitting directly inside <paramref name="containingFolder"/>, which must not be a protected folder.
+    /// Those are the only things checked; there is no proof that Racks created the file, so callers must pass the
+    /// folder of a rack sandbox. Deliberately narrow: it cannot delete any other kind of file, a file elsewhere,
+    /// a folder or a link.
     /// </summary>
     public FileOperationResult DeleteRacksShortcut(string path, string containingFolder, string reason)
         => Execute(new FileOperationIntent(FileOperationKind.DeleteRacksShortcut, path, containingFolder, reason));

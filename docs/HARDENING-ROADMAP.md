@@ -80,9 +80,37 @@ which tests were added.
   non-destructive copy): `Core/DesktopIconManager.cs` 7, `RackWindow.DragDrop.cs` 2, `Util/CrashLog.cs` 3,
   `Util/JunctionHelper.cs` 5, `Util/RackLayoutIO.cs` 1, `Util/RackMirror.cs` 2, `Util/ShortcutFactory.cs` 1,
   `Util/UninstallCleanup.cs` 8, `Util/Updater.cs` 3.
+- Review fixes (second commit): `IsProtectedLink`/`IsProtectedOrAncestorLink` now match each protected folder in
+  three spellings (resolved, parent resolved + own name, raw) and expand an 8.3 leaf, so a Desktop/Documents/
+  AppData that was relocated with a junction is recognised under the junction's own path (`Unlink`/`Rename` of
+  that junction are refused; any other link pointing at it is still just a link); a per-thread test seam
+  (`SafeMove.UseProtectedFoldersForTest`) lets tests declare a temp folder protected without touching real
+  folders; the orphan-shortcut cleanup only runs for a rack whose folder is inside the virtual frames root (a
+  duplicated Desktop rack is shortcuts-only too, with the real Desktop as folder); classes that call
+  `AuditLog.Use` share the xunit collection `AuditLog` (chosen over an AsyncLocal sink because the broker's
+  sink is also written from non-test threads); tests that need a second drive, symlink rights, 8.3 names or a
+  SendTo folder are skipped with a message instead of returning early; the installer removes `audit.log*` like
+  `crash.log*`.
 - Not done on purpose: the Win32/COM and `DirectoryInfo` attribute changes the guard cannot see (listed in the
   guard header) were reviewed by hand, not routed; `Unlink` deletes by path after the checks (a swap of the item
   between the check and the delete is a tiny window; a handle-based delete is a P11 candidate).
+
+### Follow-ups recorded by the P2 review (not implemented)
+
+- **Deliberate change to revisit:** in a virtual rack a file that is the only name of its data is no longer
+  deleted as an "orphan shortcut" after an Explorer Move drag-out that crossed volumes. The original stays in the
+  rack, so the user sees a duplicate. The proper fix is the desktop-rack pattern: `CopyLooksComplete`, then
+  `DeleteToRecycleBin`.
+- `Move`/`DeleteTree`/`DeleteToRecycleBin` still judge a junction by its TARGET, so the ancestor rule refuses to
+  move or delete a Ctrl+dropped link to the OneDrive root, `C:\Users` or `AppData`. Making those link-aware (as
+  `Rename` and `Unlink` already are) is safe for `DeleteTree`/Recycle and for a same-volume `Move`.
+- `RackWindow.Menu.cs` (remove rack on the Desktop) ignores the `DeleteEmptyDirectory` result: the rack is removed
+  but the folder may remain although the dialog said it would be deleted.
+- `UninstallCleanup` and `WorkspaceReturn` treat "link count above 1" as "the data survives elsewhere" but do not
+  know where the other name lives (it could be in `$Recycle.Bin`), and `WorkspaceReturn` does not compare file
+  identity (volume serial + file index) with the Desktop file.
+- `Unlink` and `DeleteEmptyDirectory` act by path after their checks; a handle-based delete closes the
+  check-to-delete window (P11).
 
 ### Follow-ups recorded by the P1 review
 

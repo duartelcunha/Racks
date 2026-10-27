@@ -9,6 +9,7 @@ namespace Racks.Tests.FileSystem;
 
 // Real temp directories, real junctions. Anything that touches a protected root is done through a junction
 // that points at it, so a regression could only rename or delete the link, never the real folder.
+[Collection("AuditLog")]   // one test swaps the process-wide audit sink with AuditLog.Use
 public sealed class FileOperationBrokerTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "racks-broker-" + Guid.NewGuid().ToString("N"));
@@ -205,13 +206,10 @@ public sealed class FileOperationBrokerTests : IDisposable
         Assert.True(Directory.Exists(docs));
     }
 
-    [Fact]
+    [SecondFixedDriveFact]
     public void Rename_of_a_junction_whose_target_is_on_another_volume_is_not_a_volume_error()
     {
-        string? tempRoot = Path.GetPathRoot(_root);
-        var other = DriveInfo.GetDrives().FirstOrDefault(d =>
-            d.DriveType == DriveType.Fixed && d.IsReady && !string.Equals(d.Name, tempRoot, StringComparison.OrdinalIgnoreCase));
-        if (other == null) return;                                           // single-volume machine: the Documents test above covers the link logic
+        var other = SecondFixedDriveFactAttribute.Find()!;
 
         string link = Link(other.RootDirectory.FullName, P("other-volume"));
         var r = _broker.Rename(link, "Elsewhere", "test cross-volume link");
@@ -221,14 +219,13 @@ public sealed class FileOperationBrokerTests : IDisposable
         Assert.True(Directory.Exists(other.RootDirectory.FullName));
     }
 
-    [Fact]
+    [SendToFolderFact]
     public void Rename_of_the_real_protected_folder_is_still_rejected()
     {
         // SendTo is on SafeMove's protected list and, unlike the Desktop, harmless if a regression ever renamed it;
         // the finally block puts it back anyway.
         string sendTo = Environment.GetFolderPath(Environment.SpecialFolder.SendTo);
         Assert.True(SafeMove.IsProtectedLink(sendTo, out _));
-        if (!Directory.Exists(sendTo)) return;
         string renamedTo = Path.Combine(Path.GetDirectoryName(sendTo)!, "SendTo-renamed-by-test");
         try
         {

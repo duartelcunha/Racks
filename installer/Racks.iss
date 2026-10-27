@@ -106,6 +106,9 @@ Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExeName} /F"; Flags: runhid
 ; "Racks.exe --uninstall-cleanup" (see [Code]) returns those files to the Desktop first, and these
 ; entries only remove what is left if it is empty. INV-UNINSTALL-1 in docs/SECURITY-INVARIANTS.md.
 Type: files; Name: "{userappdata}\{#AppName}\crash.log*"
+; audit.log (file operations, with file names) exists whenever the app has run, so without this the
+; dirifempty line below for {userappdata}\Racks could never succeed. Removed like crash.log, after the cleanup above.
+Type: files; Name: "{userappdata}\{#AppName}\audit.log*"
 Type: dirifempty; Name: "{userappdata}\{#AppName}\VirtualFrames"
 Type: dirifempty; Name: "{userappdata}\{#AppName}"
 Type: filesandordirs; Name: "{localappdata}\{#AppName}"

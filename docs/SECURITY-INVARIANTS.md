@@ -145,8 +145,9 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   pasta vazia, nunca recursivo, recusa pastas protegidas, ligações e pastas com qualquer coisa dentro),
   `Unlink` (só remove um *nome*: junção/symlink, ou um nome extra de hardlink cujo conteúdo continua
   acessível por outro nome; recusa pasta real, ficheiro com um só nome e reparse points que não são
-  ligações, como placeholders do OneDrive) e `DeleteRacksShortcut` (só `.lnk`/`.url` até 1 MiB, diretamente
-  dentro da pasta indicada pelo chamador, nunca numa pasta protegida). Migrados: o atalho órfão de uma rack
+  ligações, como placeholders do OneDrive) e `DeleteRacksShortcut` (só ficheiros simples `.lnk`/`.url` até 1 MiB,
+  diretamente dentro da pasta indicada pelo chamador e que não seja protegida; não há prova de que o Racks
+  criou o ficheiro, por isso o chamador passa a pasta de uma sandbox de rack). Migrados: o atalho órfão de uma rack
   virtual, a pasta de rack esvaziada no Desktop, o nome de hardlink do workspace (`WorkspaceReturn`), as
   pastas vazias do desfazer do Magic Organize, as junções do `RackMirror` e, no `UninstallCleanup`, os
   renames (`MoveSameVolume`), os desligamentos de junções/hardlinks (`Unlink`) e a remoção de pastas vazias
@@ -164,7 +165,10 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   comparação é sobre caminhos canónicos com prefixo e barra final, por isso `C:\Users\a` não é antecessor de
   `C:\Users\ab`; pastas *dentro* de uma pasta protegida (um ficheiro no Desktop, `Documentos\Projetos`, o
   workspace, as sandboxes) continuam permitidas. Num `Rename` ou `Unlink` olha-se para o item em si, não para
-  o alvo: uma junção para AppData pode ser renomeada ou desligada, a pasta real não.
+  o alvo: cada pasta protegida é comparada na forma resolvida, na forma "pai resolvido + nome próprio" (o
+  caminho de uma junção que realocou o Desktop/Documentos/AppData para outro disco) e na forma que o
+  Windows devolve, e um nome 8.3 do item é expandido; por isso a junção que *é* a pasta protegida
+  recusa-se, e uma ligação qualquer que apenas aponta para ela (numa rack) renomeia-se e desliga-se.
   Limites herdados do `SafeMove`: (1) a proteção por contenção só vê as pastas da lista protegida; uma pasta
   de utilizador fora dela (por exemplo uma pasta de projetos) continua a ser movível por desenho; (2) sobre SMB o
   `GetFinalPathNameByHandle` devolve a forma UNC, por isso `\\localhost\C$\Users\eu\Desktop` NÃO é

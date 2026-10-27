@@ -18,6 +18,8 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 - **Magic Organize in "Folders" mode** created desktop folders from the raw group name. Names with characters Windows does not allow (or `..`, or a reserved name) are now turned into a plain folder name, like in "Racks" mode.
 
 ### Changed
+- In a virtual rack, an item dragged out with a Move that Explorer completes as a copy (another drive) is no longer deleted from the rack's folder when it is the only copy of that file; the original stays in the rack until you remove it, so you may see it twice. Racks now only removes its own shortcuts and extra names of a file.
+- The uninstaller also removes `audit.log`, like `crash.log`.
 - The installer is per-user only. The unsupported "install for all users" choice is gone. If you installed that way, uninstall that copy from Apps & Features after updating.
 
 ## [1.4.0] - 2026-10-10

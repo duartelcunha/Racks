@@ -88,4 +88,73 @@ public sealed class OrphanShortcutCleanupTests : IDisposable
         Assert.True(File.Exists(outside));
         Assert.Empty(_audit.Events);
     }
+
+    // ---- the rack-level guard (RackWindow drag-out) ---------------------------------------------
+
+    [Fact]
+    public void A_virtual_rack_sandbox_inside_the_frames_root_is_cleaned()
+    {
+        string frames = Path.Combine(_root, "VirtualFrames");
+        string sandbox = Path.Combine(frames, "abc123");
+        Directory.CreateDirectory(sandbox);
+        string path = Path.Combine(sandbox, "x.lnk");
+        File.WriteAllText(path, "shortcut");
+
+        var r = OrphanShortcutCleanup.RemoveForRack(isShortcutsOnly: true, sandbox, "x.lnk", _broker, frames);
+
+        Assert.True(r!.Succeeded, r.Reason);
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public void A_duplicated_desktop_rack_is_shortcuts_only_but_its_folder_is_the_desktop_so_nothing_is_touched()
+    {
+        // InstanceController.DuplicateInstance sets IsShortcutsOnly and a Folder that is the real Desktop.
+        string frames = Path.Combine(_root, "VirtualFrames");
+        Directory.CreateDirectory(frames);
+        string desktop = Path.Combine(_root, "Desktop");
+        Directory.CreateDirectory(desktop);
+        string original = Path.Combine(_root, "elsewhere.png");
+        File.WriteAllText(original, "pixels");
+        string hardLink = Path.Combine(desktop, "elsewhere.png");
+        Assert.True(HardlinkHelper.TryCreate(original, hardLink), "test setup: hard link");
+        string shortcut = Path.Combine(desktop, "site.url");
+        File.WriteAllText(shortcut, "[InternetShortcut]");
+
+        Assert.Null(OrphanShortcutCleanup.RemoveForRack(true, desktop, "elsewhere.png", _broker, frames));
+        Assert.Null(OrphanShortcutCleanup.RemoveForRack(true, desktop, "site.url", _broker, frames));
+
+        Assert.Equal("pixels", File.ReadAllText(hardLink));
+        Assert.True(File.Exists(shortcut));
+        Assert.Empty(_audit.Events);
+    }
+
+    [Fact]
+    public void A_rack_that_is_not_shortcuts_only_or_has_no_folder_is_never_cleaned()
+    {
+        string frames = Path.Combine(_root, "VirtualFrames");
+        string sandbox = Path.Combine(frames, "abc123");
+        Directory.CreateDirectory(sandbox);
+        string path = Path.Combine(sandbox, "x.lnk");
+        File.WriteAllText(path, "shortcut");
+
+        Assert.Null(OrphanShortcutCleanup.RemoveForRack(false, sandbox, "x.lnk", _broker, frames));
+        Assert.Null(OrphanShortcutCleanup.RemoveForRack(true, "", "x.lnk", _broker, frames));
+        Assert.Null(OrphanShortcutCleanup.RemoveForRack(true, null, "x.lnk", _broker, frames));
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public void A_folder_that_only_shares_the_frames_root_name_prefix_is_not_inside_it()
+    {
+        string frames = Path.Combine(_root, "VirtualFrames");
+        string lookalike = Path.Combine(_root, "VirtualFrames-old", "abc");
+        Directory.CreateDirectory(frames);
+        Directory.CreateDirectory(lookalike);
+        string path = Path.Combine(lookalike, "x.lnk");
+        File.WriteAllText(path, "shortcut");
+
+        Assert.Null(OrphanShortcutCleanup.RemoveForRack(true, lookalike, "x.lnk", _broker, frames));
+        Assert.True(File.Exists(path));
+    }
 }
