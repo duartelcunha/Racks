@@ -13,7 +13,7 @@ the repository. Sections: [Where we are](#where-we-are), [The plan in one page](
 
 ## Where we are
 
-- **Status:** P0 to P12 are done and in review as PRs #41 to #53; P13 (this documentation sync) is the last phase, on
+- **Status:** P0 to P13 are done and in review as PRs #41 to #54 (#54 is this documentation sync, the last phase), on
   branch `hardening/p13-final-docs` (stacked on `hardening/p12-deps-deadcode`). **Nothing of this is on `main` yet.**
 - **Next step:** the owner runs the manual checklist below, then merges the chain in order (see "Merge order"). The
   work that remains after that is not part of the plan; it is the list in `docs/SECURITY-INVARIANTS.md`, section
@@ -72,7 +72,7 @@ Titles are abbreviated; all are stacked in this order.
 | P10 | `UpdateService` split (behavior tests first; stays fail-closed) | #51 | `hardening/p10-update-service` | `hardening/p9-layout-import` | in review |
 | P11 | Adversarial filesystem tests and the fixes they justified (P11a tests, P11b follow-ups, P11c F2/F3/F7) | #52 | `hardening/p11-adversarial-tests` | `hardening/p10-update-service` | in review |
 | P12 | Dependency notes, patch bumps (Microsoft.ML 5.0.1, Svg 3.4.8), dead code, zero warnings, two flaky tests fixed | #53 | `hardening/p12-deps-deadcode` | `hardening/p11-adversarial-tests` | in review |
-| P13 | Final documentation sync (this change): invariants index and risks, architecture, README, CONTRIBUTING, SECURITY, notices, changelog, this roadmap | not opened | `hardening/p13-final-docs` | `hardening/p12-deps-deadcode` | local commit, no PR yet |
+| P13 | Final documentation sync (this change): invariants index and risks, architecture, README, CONTRIBUTING, SECURITY, notices, changelog, this roadmap | #54 | `hardening/p13-final-docs` | `hardening/p12-deps-deadcode` | in review |
 
 Test count per phase (passed / skipped): P0 493 / 1; P7 1320 / 4; P8 1376 / 4; P9 1536 / 4; P10 1651 / 4; P11 1868 / 6 (the
 4 old skips plus 2 symlink tests that need the right to create symbolic links); P12 and P13 1868 / 6.
@@ -146,7 +146,7 @@ Then run the automated pass if the machine can be driven: `.\test\Test-Racks.ps1
 
 ## Merge order
 
-The PRs are stacked: **#41 -> #42 -> ... -> #53** (and P13 on top), each PR's base being the previous branch, and #41's
+The PRs are stacked: **#41 -> #42 -> ... -> #54**, each PR's base being the previous branch, and #41's
 base being `feature/scandi-branding-and-stability`, which has no PR of its own and is 4 commits ahead of `main`.
 
 1. Open (or merge directly) the feature branch into `main` first, because `main` is an ancestor of it. Until then every
