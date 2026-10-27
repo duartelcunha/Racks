@@ -69,8 +69,9 @@ namespace Racks.Core
             {
                 try
                 {
-                    if (Directory.Exists(f) && Directory.GetFileSystemEntries(f).Length == 0)
-                        Directory.Delete(f);
+                    // The broker refuses anything that is not an empty, real, unprotected folder (never recursive).
+                    if (Directory.Exists(f))
+                        Racks.Infrastructure.FileSystem.FileOperationBroker.Default.DeleteEmptyDirectory(f, "magic organize: undo, remove the folder it created");
                 }
                 catch { }
             }

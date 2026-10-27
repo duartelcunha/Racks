@@ -195,6 +195,25 @@ namespace Racks.Util
             }
         }
 
+        // True for a junction or a symbolic link: a reparse point that is only a NAME pointing somewhere
+        // else (a dangling one too). Other reparse points (OneDrive/cloud placeholders, dedup stubs, WSL
+        // files) carry real user data and are NOT links.
+        public static bool IsLink(string path)
+        {
+            try
+            {
+                if (!IsReparsePoint(path)) return false;
+                FileSystemInfo info = (File.GetAttributes(path) & FileAttributes.Directory) != 0
+                    ? new DirectoryInfo(path)
+                    : new FileInfo(path);
+                return info.LinkTarget != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public static bool IsReparsePoint(string path)
         {
             try

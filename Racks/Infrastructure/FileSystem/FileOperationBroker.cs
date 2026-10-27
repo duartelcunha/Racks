@@ -49,6 +49,29 @@ public sealed class FileOperationBroker
     public FileOperationResult CreateDirectory(string path, string reason)
         => Execute(new FileOperationIntent(FileOperationKind.CreateDirectory, path, null, reason));
 
+    /// <summary>
+    /// Removes ONE empty folder (never recursive). Refuses a protected folder, a folder with anything in it
+    /// (including hidden files), a file and a junction or symlink (use <see cref="Unlink"/> for those).
+    /// </summary>
+    public FileOperationResult DeleteEmptyDirectory(string path, string reason)
+        => Execute(new FileOperationIntent(FileOperationKind.DeleteEmptyDirectory, path, null, reason));
+
+    /// <summary>
+    /// Removes a NAME, never data: a junction or symbolic link (the target is left alone), or one extra hard link
+    /// name of a file whose data is still reachable under another name (link count above 1). Anything else, a real
+    /// folder, a file with a single name, a cloud placeholder, is refused.
+    /// </summary>
+    public FileOperationResult Unlink(string path, string reason)
+        => Execute(new FileOperationIntent(FileOperationKind.Unlink, path, null, reason));
+
+    /// <summary>
+    /// Deletes a shortcut file (<c>.lnk</c> or <c>.url</c>, at most 1 MiB) that Racks made, sitting directly inside
+    /// <paramref name="containingFolder"/>. Deliberately narrow: this cannot delete any other kind of file, a file
+    /// elsewhere, a folder or a link.
+    /// </summary>
+    public FileOperationResult DeleteRacksShortcut(string path, string containingFolder, string reason)
+        => Execute(new FileOperationIntent(FileOperationKind.DeleteRacksShortcut, path, containingFolder, reason));
+
     public FileOperationResult Execute(FileOperationIntent intent)
     {
         ArgumentNullException.ThrowIfNull(intent);
@@ -72,6 +95,9 @@ public sealed class FileOperationBroker
                     FileOperationKind.DeleteToRecycleBin => DoRecycle(ctx, intent),
                     FileOperationKind.DeleteTree => DoDeleteTree(ctx, intent),
                     FileOperationKind.CreateDirectory => DoCreateDirectory(ctx, intent),
+                    FileOperationKind.DeleteEmptyDirectory => DoDeleteEmptyDirectory(ctx, intent),
+                    FileOperationKind.Unlink => DoUnlink(ctx, intent),
+                    FileOperationKind.DeleteRacksShortcut => DoDeleteRacksShortcut(ctx, intent),
                     _ => Make(ctx, OperationStatus.Rejected, $"Unknown operation {intent.Kind}.", intent.Source, intent.Destination),
                 };
             }
@@ -178,7 +204,7 @@ public sealed class FileOperationBroker
         // protected-folder check looks at the item itself, not at what a junction or symlink points to: a
         // Ctrl+dropped reference to Documents or to a folder on another drive is a link inside a rack and renames
         // fine, while the real Documents folder is still refused.
-        if (SafeMove.IsProtectedLink(current, out string kind))
+        if (SafeMove.IsProtectedOrAncestorLink(current, out string kind))
             return Make(ctx, OperationStatus.Rejected, $"\"{Path.GetFileName(current)}\" is a {kind} — refusing to rename.", existing, target);
 
         if (string.Equals(current, target, StringComparison.Ordinal))
@@ -290,9 +316,138 @@ public sealed class FileOperationBroker
             return Make(ctx, OperationStatus.Rejected, $"\"{name}\" is a file, not a folder.", path, null);
         if (!Exists(path))
             return Make(ctx, OperationStatus.Rejected, $"\"{name}\" no longer exists.", path, null);
-        if (SafeMove.IsProtectedPath(path, out string kind))
+        if (SafeMove.IsProtectedOrAncestorPath(path, out string kind))
             return Make(ctx, OperationStatus.Rejected, $"\"{name}\" is a {kind} — refusing to delete.", path, null);
         return null;
+    }
+
+    // ---- DeleteEmptyDirectory / Unlink / DeleteRacksShortcut --------------------------------
+
+    private static FileOperationResult DoDeleteEmptyDirectory(OperationContext ctx, FileOperationIntent i)
+    {
+        string path = i.Source;
+        var vp = PathPolicy.ValidateFullPath(path);
+        if (!vp.Ok) return Make(ctx, OperationStatus.Rejected, vp.Reason, path, null);
+
+        string trimmed = Path.TrimEndingDirectorySeparator(path);
+        string name = Path.GetFileName(trimmed);
+        if (!TryGetAttributes(trimmed, out FileAttributes attrs))
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" no longer exists.", path, null);
+        if ((attrs & FileAttributes.Directory) == 0)
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" is a file, not a folder.", path, null);
+        if ((attrs & FileAttributes.ReparsePoint) != 0)
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" is a link, not a real folder. Use Unlink for links.", path, null);
+        if (SafeMove.IsProtectedPath(trimmed, out string kind))
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" is a {kind} — refusing to delete.", path, null);
+        if (Directory.EnumerateFileSystemEntries(trimmed).Any())
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" isn't empty, so it was left in place.", path, null);
+
+        // Non-recursive: if something appeared since the check above, the delete itself fails and nothing is lost.
+        try { Directory.Delete(trimmed, recursive: false); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Make(ctx, OperationStatus.Failed, $"Couldn't delete the empty folder \"{name}\": {ex.Message}", path, null);
+        }
+        return Directory.Exists(trimmed)
+            ? Make(ctx, OperationStatus.Failed, $"\"{name}\" is still there after the delete.", path, null)
+            : Make(ctx, OperationStatus.Succeeded, "", path, null);
+    }
+
+    private static FileOperationResult DoUnlink(OperationContext ctx, FileOperationIntent i)
+    {
+        string path = i.Source;
+        var vp = PathPolicy.ValidateFullPath(path);
+        if (!vp.Ok) return Make(ctx, OperationStatus.Rejected, vp.Reason, path, null);
+
+        string trimmed = Path.TrimEndingDirectorySeparator(path);
+        string name = Path.GetFileName(trimmed);
+        if (!TryGetAttributes(trimmed, out FileAttributes attrs))
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" no longer exists.", path, null);
+
+        // The item itself is judged, never what it points to: a link to Documents is a link and may be unlinked,
+        // the real Documents folder (or a redirect that IS the Desktop) may not.
+        if (SafeMove.IsProtectedLink(trimmed, out string kind))
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" is a {kind} — refusing to unlink.", path, null);
+
+        bool isDirectory = (attrs & FileAttributes.Directory) != 0;
+        if ((attrs & FileAttributes.ReparsePoint) != 0)
+        {
+            if (!JunctionHelper.IsLink(trimmed))
+                return Make(ctx, OperationStatus.Rejected,
+                    $"\"{name}\" is not a junction or a symbolic link (it can be a cloud placeholder that holds the file), so it was left in place.", path, null);
+            try
+            {
+                if (isDirectory) Directory.Delete(trimmed, recursive: false);
+                else File.Delete(trimmed);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return Make(ctx, OperationStatus.Failed, $"Couldn't remove the link \"{name}\": {ex.Message}", path, null);
+            }
+        }
+        else
+        {
+            if (isDirectory)
+                return Make(ctx, OperationStatus.Rejected, $"\"{name}\" is a real folder, not a link.", path, null);
+            int names = HardlinkHelper.GetLinkCount(trimmed);
+            if (names <= 1)
+                return Make(ctx, OperationStatus.Rejected,
+                    $"\"{name}\" is the only name of this file's data, so deleting it would lose the file. It was left in place.", path, null);
+            try { File.Delete(trimmed); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return Make(ctx, OperationStatus.Failed, $"Couldn't remove \"{name}\": {ex.Message}", path, null);
+            }
+        }
+
+        return TryGetAttributes(trimmed, out _)
+            ? Make(ctx, OperationStatus.Failed, $"\"{name}\" is still there after the unlink.", path, null)
+            : Make(ctx, OperationStatus.Succeeded, "", path, null);
+    }
+
+    private const long MaxShortcutBytes = 1024 * 1024;
+
+    private static FileOperationResult DoDeleteRacksShortcut(OperationContext ctx, FileOperationIntent i)
+    {
+        string path = i.Source, folder = i.Destination ?? "";
+        var vp = PathPolicy.ValidateFullPath(path);
+        if (!vp.Ok) return Make(ctx, OperationStatus.Rejected, vp.Reason, path, null);
+        var vf = PathPolicy.ValidateFullPath(folder);
+        if (!vf.Ok) return Make(ctx, OperationStatus.Rejected, "Folder: " + vf.Reason, path, null);
+
+        string trimmed = Path.TrimEndingDirectorySeparator(path);
+        string name = Path.GetFileName(trimmed);
+        string ext = Path.GetExtension(name);
+        if (!ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".url", StringComparison.OrdinalIgnoreCase))
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" is not a shortcut (.lnk or .url), so it was left in place.", path, null);
+
+        if (!TryGetAttributes(trimmed, out FileAttributes attrs))
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" no longer exists.", path, null);
+        if ((attrs & FileAttributes.Directory) != 0)
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" is a folder, not a shortcut file.", path, null);
+        if ((attrs & FileAttributes.ReparsePoint) != 0)
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" is a link, not a shortcut file. Use Unlink for links.", path, null);
+
+        // It must sit directly in the folder the caller named, and that folder must not be a protected one
+        // (this cannot be used to clean out the Desktop or Documents).
+        string expected = SafeMove.Canonicalize(Path.TrimEndingDirectorySeparator(folder));
+        string actual = SafeMove.Canonicalize(Path.GetDirectoryName(trimmed) ?? "");
+        if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" is not in the expected folder, so it was left in place.", path, null);
+        if (SafeMove.IsProtectedPath(folder, out string kind))
+            return Make(ctx, OperationStatus.Rejected, $"The folder is a {kind} — refusing to delete shortcuts there.", path, null);
+
+        if (new FileInfo(trimmed).Length > MaxShortcutBytes)
+            return Make(ctx, OperationStatus.Rejected, $"\"{name}\" is too big to be a shortcut, so it was left in place.", path, null);
+
+        try { File.Delete(trimmed); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Make(ctx, OperationStatus.Failed, $"Couldn't delete the shortcut \"{name}\": {ex.Message}", path, null);
+        }
+        return File.Exists(trimmed)
+            ? Make(ctx, OperationStatus.Failed, $"\"{name}\" is still there after the delete.", path, null)
+            : Make(ctx, OperationStatus.Succeeded, "", path, null);
     }
 
     // ---- CreateDirectory -------------------------------------------------------------------
@@ -324,6 +479,21 @@ public sealed class FileOperationBroker
     // ---- helpers ---------------------------------------------------------------------------
 
     private static bool Exists(string path) => File.Exists(path) || Directory.Exists(path);
+
+    // Attributes of the item ITSELF (a link is not followed), so a dangling junction still "exists".
+    private static bool TryGetAttributes(string path, out FileAttributes attrs)
+    {
+        try
+        {
+            attrs = File.GetAttributes(path);
+            return true;
+        }
+        catch
+        {
+            attrs = 0;
+            return false;
+        }
+    }
 
     private static FileOperationResult Make(OperationContext ctx, OperationStatus status, string reason, string? source, string? destination)
         => new(status, reason, source ?? "", destination, ctx.Id);

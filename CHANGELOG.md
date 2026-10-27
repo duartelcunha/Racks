@@ -12,6 +12,8 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 - **Inline rename can no longer move an item.** Renaming a file or folder in a rack used the typed text as a path, so a name like `..\x`, `sub\x` or `C:\x` moved the item to another folder. A typed name must now be a plain name: slashes, drive letters, `..`, `:`, reserved device names (`CON`, `NUL`, `COM1`...), a trailing dot or space and names over 255 characters are refused, with the reason shown and the item left where it was. Renaming only the case of a name (`photo.jpg` to `Photo.jpg`) works.
 - **Every destructive file operation is now audited.** Moves, renames, deletes and folder creation by Racks go through one gateway that checks the paths, refuses protected folders and writes one line per operation to `%AppData%\Racks\audit.log` (kept on your PC, rotated, never uploaded). The log contains file and folder names; only your profile folder path is shortened to `%USERPROFILE%`, so read it before sharing it. Sending an item to the Recycle Bin is refused on network and removable drives instead of deleting it permanently.
 
+- **Folders that contain a protected folder can no longer be moved or deleted by Racks.** Until now only the protected folder itself (Desktop, Documents, ...) was refused. A drop, move, rename or delete of a folder that holds one of them, such as `AppData`, `C:\Users` or your OneDrive folder when Desktop and Documents live in it, is now refused with the reason shown.
+
 ### Fixed
 - **Magic Organize in "Folders" mode** created desktop folders from the raw group name. Names with characters Windows does not allow (or `..`, or a reserved name) are now turned into a plain folder name, like in "Racks" mode.
 

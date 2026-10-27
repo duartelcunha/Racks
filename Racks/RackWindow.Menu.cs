@@ -674,7 +674,7 @@ namespace Racks
                             if (Infrastructure.FileSystem.FileOperationBroker.Default.Move(file, dest, "remove rack: return to desktop").Completed)
                                 returnedToDesktop.Add(dest);
                         }
-                        try { System.IO.Directory.Delete(Instance.Folder, false); } catch { }
+                        Infrastructure.FileSystem.FileOperationBroker.Default.DeleteEmptyDirectory(Instance.Folder, "remove rack: delete the emptied rack folder");
                     }
                     if (returnedToDesktop.Count > 0)
                         Util.DesktopIconPositioner.ArrangeInGrid(returnedToDesktop);

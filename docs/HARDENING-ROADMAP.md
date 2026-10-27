@@ -7,9 +7,9 @@ which tests were added.
 
 ## Where we are
 
-- **Current phase:** P1 (file-safety core), in review; P0 (base + docs) is its base.
-- **Next step:** P2, route the remaining raw file mutations through the broker (list in
-  `test/Racks.Tests/Guards/fs-allowlist.json`; each entry has a one-line reason and the numbers only go down).
+- **Current phase:** P2 (route raw file mutations), in review; P1 (file-safety core) is its base.
+- **Next step:** P3, `ShellOperationGateway` (shell change notifications, desktop icons). The file allowlist
+  (`test/Racks.Tests/Guards/fs-allowlist.json`) is now only Racks-owned state; its numbers only go down.
 - **Base branch:** `feature/scandi-branding-and-stability` (4 commits not yet on `main`). Phase branches are
   `hardening/pN-<name>`; each PR targets the previous phase's branch until the base lands on `main`.
 - **Baseline (P0):** `dotnet test` = 493 passed, 1 skipped (`Category=ReleaseGate`, only runs in the release
@@ -23,7 +23,7 @@ which tests were added.
 |---|---|---|
 | P0 | Base, `ARCHITECTURE.md`, `AGENTS.md`, this file | in review |
 | P1 | `FileOperationBroker` (facade over `SafeMove`/`SafeDelete`), `PathPolicy`, `AuditLog`, file-mutation guard; fix inline rename and Magic Organize folder names | in review |
-| P2 | Route the remaining raw file mutations through the broker; shrink the allowlist | todo |
+| P2 | Route the remaining raw file mutations through the broker; shrink the allowlist; refuse ancestors of protected folders | in review |
 | P3 | `ShellOperationGateway` (shell change notifications, desktop icons) | todo |
 | P4 | `AutoRouteService` + `RoutingPolicy`, testable `DesktopRouter`, watcher hardening | todo |
 | P5 | Typed `AppSettings` and `MigrationMarkers` for root registry values | todo |
@@ -47,9 +47,9 @@ which tests were added.
 - Guard: `FileMutationGuardTests` counts raw `File`/`Directory` mutations per file against
   `Guards/fs-allowlist.json` (ratchet) and forbids `SafeMove.`/`SafeDelete.` outside the gateway. Its blind
   spots are listed in the test's header comment.
-- Not done on purpose: shell notifications stay where they were (P3); the 12 files still in the allowlist are P2.
-- Known gap (unchanged from `SafeMove`): protection is by equality with a protected folder, so a path that
-  *contains* a protected folder (for example `C:\Users`) is not refused by `DeleteTree`/`Move`. Admin shares
+- Not done on purpose: shell notifications stay where they were (P3); the 12 files then in the allowlist were P2.
+- Known gap (closed in P2): protection was by equality with a protected folder, so a path that *contained* a
+  protected folder (for example `C:\Users`) was not refused by `DeleteTree`/`Move`. Admin shares
   (`\\host\C$\...`) are refused by `PathPolicy` because over SMB the canonical form is the UNC one.
 - Audit log privacy: only the exact user-profile prefix becomes `%USERPROFILE%`; file names and other paths are
   logged. The log is local only and is written synchronously.
@@ -59,11 +59,34 @@ which tests were added.
   0x00-0x1F are control characters, the guard requires exact counts and also looks at `File.Create`,
   `AppendAll*`, write-intent `FileStream`/`File.Open` and `using static`/alias imports.
 
-### Follow-ups recorded by the P1 review (not implemented)
+### P2 in short (what changed)
 
-- **P2:** `Move`/`DeleteTree`/`DeleteToRecycleBin` must also refuse a source that is an ANCESTOR of any protected
-  folder (for example `%USERPROFILE%\AppData`, or the OneDrive root when Desktop/Documents are redirected), by
-  canonical prefix with a trailing backslash.
+- New broker operations, each validate -> preflight -> execute -> confirm -> one audit record, never throwing for
+  an expected failure: `DeleteEmptyDirectory` (one empty real folder, never recursive), `Unlink` (a junction,
+  a symlink or an extra hard link name; never data), `DeleteRacksShortcut` (a `.lnk`/`.url` up to 1 MiB directly
+  inside a folder the caller names). `MoveSameVolume` is now used by the uninstall path.
+- Routed: orphan shortcut in a virtual rack (`Rack/OrphanShortcutCleanup`, extracted so it is testable),
+  emptied rack folder on the Desktop, workspace hard link in `WorkspaceReturn`, empty folders in Magic Organize
+  undo, `RackMirror.RemoveJunctions`, and in `UninstallCleanup` the renames, unlinks and empty-folder removals
+  (reasons start with `uninstall:` or `remove rack:`).
+- Containment: `SafeMove.Check` (so `Move`, `MoveSameVolume`, `DeleteTree`, `DeleteToRecycleBin` and `Rename`)
+  refuses an ancestor of a protected folder, by canonical prefix with a trailing backslash (INV-FS-1).
+- Behavior changes that are deliberate (they only make things safer): a reparse point that is not a junction or
+  symlink (OneDrive/cloud placeholder) is no longer deleted by uninstall, remove-rack or the mirror cleanup (uninstall
+  renames it back like any item; the mirror leaves it); a file in a virtual rack that is the only name of its
+  data is no longer deleted as an "orphan shortcut"; a protected, non-empty or linked folder is no longer
+  removed by the rack-folder and undo cleanups.
+- Final allowlist (was 45 calls in 12 files, now 32 calls in 9 files; every entry is Racks-owned state or a
+  non-destructive copy): `Core/DesktopIconManager.cs` 7, `RackWindow.DragDrop.cs` 2, `Util/CrashLog.cs` 3,
+  `Util/JunctionHelper.cs` 5, `Util/RackLayoutIO.cs` 1, `Util/RackMirror.cs` 2, `Util/ShortcutFactory.cs` 1,
+  `Util/UninstallCleanup.cs` 8, `Util/Updater.cs` 3.
+- Not done on purpose: the Win32/COM and `DirectoryInfo` attribute changes the guard cannot see (listed in the
+  guard header) were reviewed by hand, not routed; `Unlink` deletes by path after the checks (a swap of the item
+  between the check and the delete is a tiny window; a handle-based delete is a P11 candidate).
+
+### Follow-ups recorded by the P1 review
+
+- ~~**P2:** refuse an ancestor of a protected folder~~ Done in P2 (see above).
 - **P11 or later:** `SafeMove.CopyThenDelete` cleanup after a failed copy should delete only what this call
   created (CreateNew / a did-not-exist flag), because of a TOCTOU window; the audit sink does synchronous I/O on
   the calling (often UI) thread, so consider a background queue; `MoveChecked` runs `SafeMove.Check` twice (once

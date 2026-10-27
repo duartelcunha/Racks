@@ -103,11 +103,7 @@ namespace Racks
                     // orphan from our sandbox.
                     if (effect == DragDropEffects.Move && Instance.IsShortcutsOnly && !string.IsNullOrEmpty(Instance.Folder))
                     {
-                        string shortcutPath = System.IO.Path.Combine(Instance.Folder, fileItem.Name);
-                        if (System.IO.File.Exists(shortcutPath))
-                        {
-                            try { System.IO.File.Delete(shortcutPath); } catch { }
-                        }
+                        Racks.Rack.OrphanShortcutCleanup.Remove(Instance.Folder, fileItem.Name);
                     }
                 }
             }
