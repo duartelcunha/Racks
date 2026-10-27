@@ -25,8 +25,6 @@ namespace Racks
 #pragma warning disable CS0649
         private static Mutex? _singleInstanceMutex;
 #pragma warning restore CS0649
-        public RegistryHelper reg = new RegistryHelper(InstanceController.appName);
-
         public App()
         {
             // Racks is a background tray app that's meant to keep running for the
@@ -225,8 +223,9 @@ namespace Racks
             bool firstRun = false;
             try
             {
-                const string AnimMarker = "InstallAnimationShownV2";
-                if (!reg.KeyExistsRoot(AnimMarker)) { firstRun = true; reg.WriteToRegistryRoot(AnimMarker, true); }
+                var markers = Racks.Infrastructure.Registry.MigrationMarkers.Default;
+                const string AnimMarker = Racks.Infrastructure.Registry.MigrationMarkers.InstallAnimationShownV2;
+                if (!markers.IsSet(AnimMarker)) { firstRun = true; markers.Set(AnimMarker); }
             }
             catch { }
 
@@ -240,11 +239,12 @@ namespace Racks
             // marker so we don't re-pin if the user manually unpins.
             try
             {
-                const string PinnedMarker = "QuickAccessMirrorPinned";
-                if (!reg.KeyExistsRoot(PinnedMarker))
+                var markers = Racks.Infrastructure.Registry.MigrationMarkers.Default;
+                const string PinnedMarker = Racks.Infrastructure.Registry.MigrationMarkers.QuickAccessMirrorPinned;
+                if (!markers.IsSet(PinnedMarker))
                 {
                     Racks.Util.RackMirror.PinToQuickAccess();
-                    reg.WriteToRegistryRoot(PinnedMarker, true);
+                    markers.Set(PinnedMarker);
                 }
             }
             catch (Exception ex) { Debug.WriteLine($"Quick Access pin failed: {ex.Message}"); }

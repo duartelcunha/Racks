@@ -218,6 +218,19 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   rack quer não gera registo.
   *(teste: `RoutingPolicyTests`, `AutoRouteServiceTests`, `DesktopRouterTests`, `AutoRouteRegexSetterTests`)*
 
+- **INV-REG-1** Os valores globais do Racks no registo (`HKCU\SOFTWARE\Racks`: interruptores, marcadores de
+  migraÃ§Ã£o, `MainHwnd`) sÃ³ se leem e escrevem por `Infrastructure/Registry` (`AppSettings`,
+  `MigrationMarkers`); a apresentaÃ§Ã£o nÃ£o abre o registo (o que sobra, por rack, vive em
+  `Guards/registry-presentation-allowlist.json` e acaba em P6/P8). Um interruptor Ã© texto `True`/`False`
+  (REG_SZ); um valor em falta dÃ¡ o valor por omissÃ£o sem ruÃ­do (`IcePhysics` liga por omissÃ£o, o resto desligado);
+  um valor de tipo errado, lixo ou um registo ilegÃ­vel dÃ¡ o valor por omissÃ£o e **um** registo `SettingFallback` no
+  `audit.log` por nome (campo, valor em bruto encurtado, motivo, valor usado); nunca Ã© aplicado. Uma escrita
+  falhada devolve `false` e deixa um registo `SettingWriteFailed` (a interface segue como antes). Os
+  formatos gravados nÃ£o mudam (um build antigo lÃª o que este escreve): `MainHwnd` Ã© REG_SZ decimal, nÃ£o QWORD.
+  O esquema por rack (`Instances\*`) entra em P6. *(teste: `AppSettingsTests`, `MigrationMarkersTests`,
+  `SettingsAuditRecordTests`, `RegistryAccessGuardTests`; raiz de registo descartÃ¡vel
+  `Software\RacksTests-<guid>`, nunca a chave Run real)*
+
 ---
 
 ## Achados

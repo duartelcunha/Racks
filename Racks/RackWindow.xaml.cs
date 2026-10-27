@@ -360,7 +360,6 @@ namespace Racks
             UpdateIconVisibility();
             AnimateChevron(_isMinimized, true, 0.01); // When 0 docked window won't open
             KeepWindowBehind();
-            RegistryHelper rgh = new RegistryHelper(InstanceController.appName);
             FileWrapPanel_GeneratorStatusChanged(FileWrapPanel, EventArgs.Empty);
 
         }

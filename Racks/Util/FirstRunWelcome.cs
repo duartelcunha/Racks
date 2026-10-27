@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.Toolkit.Uwp.Notifications;
+using Racks.Infrastructure.Registry;
 using Application = System.Windows.Application;
 
 namespace Racks.Util
@@ -13,14 +14,14 @@ namespace Racks.Util
     // Failures are swallowed; the app must never crash because the welcome flow misbehaved.
     public static class FirstRunWelcome
     {
-        private const string MarkerKey = "FirstRunWelcomeShownV2";
+        private const string MarkerKey = MigrationMarkers.FirstRunWelcomeShownV2;
 
-        public static void ShowIfFirstRun(RegistryHelper reg)
+        public static void ShowIfFirstRun(MigrationMarkers markers)
         {
             try
             {
-                if (reg.KeyExistsRoot(MarkerKey)) return;
-                reg.WriteToRegistryRoot(MarkerKey, true);
+                if (markers.IsSet(MarkerKey)) return;
+                markers.Set(MarkerKey);
             }
             catch { return; }
 
