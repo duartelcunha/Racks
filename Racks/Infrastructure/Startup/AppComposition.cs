@@ -36,7 +36,6 @@ internal static class AppComposition
 
         var migrations = new StartupMigrationService(
             MigrationMarkers.Default,
-            InstanceController.MigrateLegacyRegistry,
             RackMirror.PinToQuickAccess,
             new TaskDispatcherDelayScheduler(),
             () => new Views.StartupAnimationWindow().Show(),

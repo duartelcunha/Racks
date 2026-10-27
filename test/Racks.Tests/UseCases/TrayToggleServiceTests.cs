@@ -82,13 +82,13 @@ public class TrayToggleServiceTests
     }
 
     [Fact]
-    public void Start_on_login_off_removes_the_Run_entry_and_the_legacy_one_without_looking_up_the_exe()
+    public void Start_on_login_off_removes_the_Run_entry_without_looking_up_the_exe()
     {
         var rig = new Rig();
         rig.Service.SetStartOnLogin(true);
         rig.Service.SetStartOnLogin(false);
         Assert.Null(rig.Run.Text("Racks"));
-        Assert.Contains("DeskFrame", rig.Run.Deletes);
+        Assert.Contains("Racks", rig.Run.Deletes);
         Assert.Equal("False", rig.Root.Text("startOnLogin"));
         Assert.Equal(1, rig.ExePathAsked);   // only the "on" call asked
     }

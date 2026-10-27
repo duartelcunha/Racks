@@ -7,11 +7,8 @@ using System.Windows.Interop;
 
 public class InstanceController
 {
-    // Product name. Was "DeskFrame", now "Racks". A one-time registry migration
-    // (MigrateLegacyRegistry) copies old HKCU\SOFTWARE\DeskFrame keys to the new
-    // root on first launch so existing frames survive the rebrand.
+    // Product name; also the HKCU\SOFTWARE registry root.
     public static string appName = "Racks";
-    public const string LegacyAppName = "DeskFrame";
     public bool isInitializingInstances = false;
     public List<Instance> Instances = new List<Instance>();
     public RegistryHelper reg = new RegistryHelper(appName);
@@ -62,42 +59,6 @@ public class InstanceController
         }
     }
 
-    // Copy HKCU\SOFTWARE\DeskFrame tree to HKCU\SOFTWARE\Racks once, so users who
-    // upgrade from the legacy DeskFrame build don't lose their frames.
-    public static void MigrateLegacyRegistry()
-    {
-        try
-        {
-            using var newRoot = Registry.CurrentUser.OpenSubKey($@"SOFTWARE\{appName}");
-            if (newRoot != null) return; // already migrated
-
-            using var legacy = Registry.CurrentUser.OpenSubKey($@"SOFTWARE\{LegacyAppName}");
-            if (legacy == null) return;
-
-            using var dest = Registry.CurrentUser.CreateSubKey($@"SOFTWARE\{appName}");
-            CopyRegistryKey(legacy, dest);
-            Racks.Infrastructure.Registry.MigrationMarkers.Default.Set(Racks.Infrastructure.Registry.MigrationMarkers.MigratedFromDeskFrame);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"MigrateLegacyRegistry failed: {ex.Message}");
-        }
-    }
-
-    private static void CopyRegistryKey(RegistryKey source, RegistryKey dest)
-    {
-        foreach (var name in source.GetValueNames())
-        {
-            object? val = source.GetValue(name);
-            if (val != null) dest.SetValue(name, val, source.GetValueKind(name));
-        }
-        foreach (var sub in source.GetSubKeyNames())
-        {
-            using var s = source.OpenSubKey(sub);
-            using var d = dest.CreateSubKey(sub);
-            if (s != null && d != null) CopyRegistryKey(s, d);
-        }
-    }
     // Persist `instance` under its current name and drop the key it used to live under.
     // Used when a rack is renamed (the registry key IS the rack name).
     // Delegates to WriteInstanceToKey so there is exactly one list of persisted values; this method

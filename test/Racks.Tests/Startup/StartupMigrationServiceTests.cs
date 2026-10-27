@@ -19,18 +19,10 @@ public sealed class StartupMigrationServiceTests : IDisposable
 
     private StartupMigrationService Create(MigrationMarkers? markers = null) => new(
         markers ?? Markers(),
-        () => _log.Add("migrate"),
         () => { _log.Add("pin"); if (_pinThrows) throw new InvalidOperationException("no shell"); },
         _scheduler,
         () => _log.Add("install-animation"),
         () => _log.Add("launch-animation"));
-
-    [Fact]
-    public void The_registry_migration_is_delegated()
-    {
-        Create().MigrateLegacyRegistry();
-        Assert.Equal(["migrate"], _log);
-    }
 
     [Fact]
     public void The_first_launch_is_a_first_run_and_marks_itself_so_the_next_is_not()
@@ -118,7 +110,7 @@ public sealed class StartupMigrationServiceTests : IDisposable
     [Fact]
     public void A_failing_animation_is_swallowed()
     {
-        var svc = new StartupMigrationService(Markers(), () => { }, () => { }, _scheduler,
+        var svc = new StartupMigrationService(Markers(), () => { }, _scheduler,
             () => throw new InvalidOperationException("no window"), () => { });
         svc.ScheduleStartupAnimation(firstRun: true);
         _scheduler.Advance(TimeSpan.FromSeconds(1));   // must not throw

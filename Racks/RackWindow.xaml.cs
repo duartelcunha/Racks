@@ -259,14 +259,9 @@ namespace Racks
                 _isTopmost = true;
                 this.Topmost = true;
             }
-            // Recognize sandboxed virtual racks. Match either the current Racks
-            // sandbox or the legacy DeskFrame AppData path so users upgrading from
-            // the old build keep working racks.
-            string legacyAppDataPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeskFrame");
+            // Recognize sandboxed virtual racks.
             if (!string.IsNullOrEmpty(instance.Folder)
-                && (InstanceController.IsInsideVirtualFramesRoot(instance.Folder)
-                    || instance.Folder.StartsWith(legacyAppDataPath, StringComparison.OrdinalIgnoreCase)))
+                && InstanceController.IsInsideVirtualFramesRoot(instance.Folder))
             {
                 Instance.IsShortcutsOnly = true;
                 Instance.ShowShortcutArrow = false;

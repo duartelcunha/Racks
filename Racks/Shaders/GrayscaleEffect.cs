@@ -11,8 +11,7 @@ namespace Racks.Shaders
         {
             PixelShader pixelShader = new PixelShader();
             // Assembly name in pack URI must match the runtime assembly identity
-            // (AssemblyName in .csproj). After the DeskFrame → Racks rebrand this
-            // resolves to /Racks;component/...
+            // (AssemblyName in .csproj), here /Racks;component/...
             pixelShader.UriSource = new Uri("/Racks;component/Shaders/GrayscaleEffect.ps", UriKind.Relative);
             this.PixelShader = pixelShader;
 

@@ -38,7 +38,6 @@ internal sealed class StartupHarness : IDisposable
         }, () => new EmptyStore());
         Migrations = new StartupMigrationService(
             Markers,
-            () => Log.Add(StartupSteps.MigrateLegacyRegistry),
             () => Log.Add(StartupSteps.PinQuickAccess),
             Scheduler,
             () => Log.Add("play-install-animation"),

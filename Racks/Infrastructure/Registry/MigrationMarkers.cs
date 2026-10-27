@@ -6,8 +6,7 @@ namespace Racks.Infrastructure.Registry;
 /// <summary>
 /// The one-shot markers under <c>HKCU\SOFTWARE\Racks</c> that stop a first-run or migration step from running
 /// again. A marker is "set" when a value of that name exists, whatever its type (what <c>KeyExistsRoot</c> always
-/// checked). <see cref="Set"/> writes the same text the app always wrote: REG_SZ <c>True</c>, except
-/// <see cref="MigratedFromDeskFrame"/>, which is REG_SZ <c>1</c>. The set of names is closed: an unknown name is a
+/// checked). <see cref="Set"/> writes the same text the app always wrote: REG_SZ <c>True</c>. The set of names is closed: an unknown name is a
 /// programming error (<see cref="ArgumentException"/>). Otherwise nothing throws: an unreadable registry reads as
 /// "not set" (the step runs again, as before; audited once) and a failed write is audited and returned as false.
 /// </summary>
@@ -18,7 +17,6 @@ public sealed class MigrationMarkers
     public const string FirstRunWelcomeShownV2 = "FirstRunWelcomeShownV2";
     public const string VirtualRackLinkOnDropRevertedToMove = "VirtualRackLinkOnDropRevertedToMove";
     public const string FolderOpenInsideFrameDefaultedToExplorer = "FolderOpenInsideFrameDefaultedToExplorer";
-    public const string MigratedFromDeskFrame = "_MigratedFromDeskFrame";
 
     private static readonly Dictionary<string, string> WrittenText = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -27,7 +25,6 @@ public sealed class MigrationMarkers
         [FirstRunWelcomeShownV2] = "True",
         [VirtualRackLinkOnDropRevertedToMove] = "True",
         [FolderOpenInsideFrameDefaultedToExplorer] = "True",
-        [MigratedFromDeskFrame] = "1",
     };
 
     /// <summary>The markers of the real registry; follows <c>InstanceController.appName</c>.</summary>

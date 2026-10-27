@@ -93,7 +93,7 @@ public class RackLayoutImportValidationTests
     [Fact]
     public void Unknown_value_names_are_dropped()
     {
-        var values = new Dictionary<string, object> { ["Folder"] = @"C:\x", ["Shell"] = @"\\evil\x", ["_MigratedFromDeskFrame"] = "1" };
+        var values = new Dictionary<string, object> { ["Folder"] = @"C:\x", ["Shell"] = @"\\evil\x", ["_SomeUnknownName"] = "1" };
         var rack = Assert.Single(RackLayoutIO.ParseAndValidate(Layout(values)));
         Assert.Equal(new[] { "Folder" }, rack.Values.Keys);
     }

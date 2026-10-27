@@ -297,17 +297,15 @@ public sealed class AppSettingsTests : IDisposable
     }
 
     [Fact]
-    public void Turning_it_off_removes_the_run_entry_and_the_legacy_DeskFrame_one()
+    public void Turning_it_off_removes_the_run_entry()
     {
         _reg.Run.Write(RunName, @"C:\Apps\Racks\Racks.exe", RegistryValueKind.String);
-        _reg.Run.Write("DeskFrame", @"C:\Old\DeskFrame.exe", RegistryValueKind.String);
         _reg.Run.Write("SomethingElse", @"C:\Other.exe", RegistryValueKind.String);
         var s = Settings();
 
         Assert.True(s.TrySetStartOnLogin(false, null));
 
         Assert.Null(_reg.RawRun(RunName).Data);
-        Assert.Null(_reg.RawRun("DeskFrame").Data);
         Assert.Equal(@"C:\Other.exe", _reg.RawRun("SomethingElse").Data);       // never touches other apps
         Assert.Equal(("False", (RegistryValueKind?)RegistryValueKind.String), _reg.RawRoot("startOnLogin"));
         Assert.False(s.StartOnLogin);
@@ -338,7 +336,6 @@ public sealed class AppSettingsTests : IDisposable
         Assert.False(s.TrySetStartOnLogin(false, null));
         Assert.False(s.StartOnLogin);
         Assert.Contains(_audit.Events, e => e.Source.EndsWith(@"\" + RunName) && e.Kind == "SettingWriteFailed");
-        Assert.Contains(_audit.Events, e => e.Source.EndsWith(@"\DeskFrame") && e.Kind == "SettingWriteFailed");
     }
 
     // ---- the app-wide instance ---------------------------------------------------------------

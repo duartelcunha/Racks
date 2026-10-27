@@ -4,6 +4,9 @@ All notable changes to Racks are listed here. Format based on [Keep a Changelog]
 
 ## [Unreleased]
 
+### Changed
+- Removed the one-time import of settings from the predecessor app and its old autostart entry.
+
 ## [1.5.0] - 2026-10-27
 
 > **Do not go back to an older Racks version after this one** (and do not open and re-save your racks in an older version).

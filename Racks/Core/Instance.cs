@@ -971,8 +971,7 @@ public class Instance : INotifyPropertyChanged
         _isLocked = false;
         if (name == "empty" || _settingDefault)
         {
-            // Read global defaults from the rebranded root, not the legacy "DeskFrame"
-            // one. After registry migration the new root holds whatever the user had.
+            // Read global defaults from the app root (InstanceController.appName).
             // A single corrupt or hand-edited value used to throw here and abort startup.
             // Wrapped so the window still comes up (with whatever it managed to read)
             // instead of vanishing; the app-level handler is the backstop if this throws.
@@ -1068,9 +1067,8 @@ public class Instance : INotifyPropertyChanged
     {
         if (!string.IsNullOrEmpty(_name) && !string.IsNullOrEmpty(Name))
         {
-            // MUST follow the rebranded root (InstanceController.appName) or per-instance
-            // writes go to the legacy HKCU\SOFTWARE\DeskFrame tree while InitInstances
-            // reads from HKCU\SOFTWARE\Racks → racks vanish on next launch.
+            // MUST follow the app root (InstanceController.appName): InitInstances reads
+            // from the same tree, so racks written elsewhere vanish on next launch.
             return @$"SOFTWARE\{InstanceController.appName}\Instances\{Name}";
         }
         return "";

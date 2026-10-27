@@ -57,7 +57,7 @@ was not worth the churn; the guards (below) fence the ones that matter. Do not a
    under `HKCU\SOFTWARE\Racks`) go through `Infrastructure/Registry/AppSettings` and `MigrationMarkers`. Per-rack values and
    the 32 global style defaults go through `RackSettingsRepository`, driven by one table, `RackSettingsSchema`. A bad value
    is never applied: the documented default is used and the field, raw value, reason and fallback are written to
-   `audit.log`. Two named exceptions touch the registry directly: `InstanceController.MigrateLegacyRegistry` (one-shot copy of the legacy DeskFrame key tree, risk R-29) and `DefaultStyleReset.Run(RegistryKey)` (called only from `RackSettingsRepository`).
+   `audit.log`. One named exception touches the registry directly: `DefaultStyleReset.Run(RegistryKey)` (called only from `RackSettingsRepository`, risk R-29).
 3. **Presentation does not touch the registry, call shell notifications or reach the updater, and does not mutate files except through the broker** (the rack windows call `FileOperationBroker.Default`; `RackWindow.DragDrop.cs` also has 2 allowlisted `CreateDirectory` calls for Racks-owned sandbox folders). Shell change
    notifications, desktop-icon hiding/arranging and the workspace folder go through
    `Infrastructure/Shell/ShellOperationGateway.Default`. The shell context menu, window geometry/style Win32 calls,
@@ -93,13 +93,13 @@ before anything else can throw), build the services (`AppComposition.Create`), a
 and runs it with a recording host; `AppBootstrapServiceTests`). A step returning false ends the run.
 
 - **Normal:** `ConfigureCulturePreview`, `OverrideWpfLanguage`, `SetRegexDefaultTimeout`, `ApplySafeSvg`,
-  `MigrateLegacyRegistry`, `EnableDarkMode`, `AcquireSingleInstance` (a second Racks shuts down here; mutex
+  `EnableDarkMode`, `AcquireSingleInstance` (a second Racks shuts down here; mutex
   `Local\Racks-SingleInstance-2C9D`, release builds only), `SetBindingTraceLevel`, `InitializeWorkspace`, `SetStartupUri`,
   `RaiseBaseStartup`, `ReadFirstRunMarker`, `RegisterToastActivation`, `PinQuickAccess`, `ScheduleStartupAnimation`
   (500 ms later, on the UI thread).
 - **`--uninstall-cleanup`:** the four common steps, `RunUninstallCleanup` (2-minute watchdog that exits with code 2),
   `ShutdownAfterCleanup`. No migration, no mutex, no UI.
-- **`--uninstall-anim`:** the four common steps, `MigrateLegacyRegistry`, `EnableDarkMode`, `MarkUninstallAnimation`,
+- **`--uninstall-anim`:** the four common steps, `EnableDarkMode`, `MarkUninstallAnimation`,
   `RunUninstallAnimation`. No mutex, no workspace.
 - **Then WPF creates `MainWindow`** from `StartupUri`, after `OnStartup` returns. Its constructor: `ComposeHostServices()`
   (hotkeys, the `WM_RACKS_*` message table, tray toggles, hot corner, double-click hide, update glue, display debounce), then
@@ -142,11 +142,9 @@ and runs it with a recording host; `AppBootstrapServiceTests`). A step returning
   `InstanceController.appName` throws instead of writing `HKCU\SOFTWARE\Racks`.
 - **App-wide registry values.** `Infrastructure/Registry/` (namespace `Racks.Infrastructure.Registry`): `IRegistryRoot`
   (`HkcuRegistryRoot` is the real one and follows `InstanceController.appName`; tests use a throwaway
-  `Software\RacksTests-<guid>` key or a failing root), `AppSettings` (`Default`: start on login incl. the Run entry and the
-  legacy `DeskFrame` one, double-click to hide, ice physics (default ON), hide desktop icons, hot corner, auto update,
-  read-only blur background, `MainHwnd` via `TryPublishMainHwnd`) and `MigrationMarkers` (`Default`: the six one-shot
-  markers). Stored forms are unchanged (REG_SZ `True`/`False`; `MainHwnd` is REG_SZ decimal; marker `_MigratedFromDeskFrame` is
-  REG_SZ `1`). Do not name a test namespace `Racks.Tests.Registry`: it would shadow `Microsoft.Win32.Registry`.
+  `Software\RacksTests-<guid>` key or a failing root), `AppSettings` (`Default`: start on login incl. the Run entry, double-click to hide, ice physics (default ON), hide desktop icons, hot corner, auto update,
+  read-only blur background, `MainHwnd` via `TryPublishMainHwnd`) and `MigrationMarkers` (`Default`: the five one-shot
+  markers). Stored forms are unchanged (REG_SZ `True`/`False`; `MainHwnd` is REG_SZ decimal). Do not name a test namespace `Racks.Tests.Registry`: it would shadow `Microsoft.Win32.Registry`.
 - **Per-rack registry values.** Same namespace. `RackSettingsSchema` is the ONE table of the 67 persisted values (plus the
   discarded legacy `MoveFilesOnDrop`): name, kind, default, limits (reject or clamp), enum type, import-accepted,
   global-default. The import allow-list, the loader, the writers and the 32 global defaults all derive from it.
