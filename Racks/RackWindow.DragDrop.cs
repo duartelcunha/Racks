@@ -64,7 +64,7 @@ namespace Racks
         private void FileWrapPanel_GeneratorStatusChanged(object sender, EventArgs e)
         {
             if (_tilePanelWired) return;
-            
+
             var panel = FindParentOrChild<AnimatedTilePanel>(FileWrapPanel);
             if (panel == null) return;
             panel.ItemMoveRequested += OnTilePanelItemMoveRequested;

@@ -164,7 +164,7 @@ dotnet run --project Racks/Racks.csproj   # run from source
 .\build-installer.ps1                   # -> installer\Output\Racks-Setup-<version>.exe
 ```
 
-Design notes: [`ABOUT.md`](ABOUT.md). Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md). README media: [`docs/media/studio`](docs/media/studio/README.md).
+Design notes: [`ABOUT.md`](ABOUT.md). Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Hardening roadmap and resume point: [`docs/HARDENING-ROADMAP.md`](docs/HARDENING-ROADMAP.md). Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md). README media: [`docs/media/studio`](docs/media/studio/README.md).
 
 <br />
 
