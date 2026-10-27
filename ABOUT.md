@@ -21,9 +21,10 @@ depending on the rack type, it is either **moved into a private sandbox** or the
 
 ## Rack types
 
-- **Virtual rack** ("New rack"): items dropped in are moved into a per-user sandbox under
-  `%UserProfile%\RacksWorkspace` (a hidden folder). The rack "claims" them so they show in
-  the rack and are hidden from the desktop. Removing the rack returns everything.
+- **Virtual rack** ("New rack"): items dropped in are moved into a per-rack private folder under
+  `%AppData%\Racks\VirtualFrames`. A **Desktop rack** (it mirrors the Desktop) keeps its files in the
+  hidden `%UserProfile%\RacksWorkspace` folder and "claims" them so they show in the rack and are
+  hidden from the desktop. Removing a rack returns everything to the Desktop.
 - **Folder rack** ("New folder rack"): bound to a real folder on disk. The rack is a live
   window onto that folder; nothing is moved. Deleting the rack never touches the folder.
 
@@ -61,16 +62,21 @@ a custom title strip, pill buttons, and smooth fade + scale motion. The shared s
 
 ## How it's built (map for developers)
 
-- `App.xaml.cs` — startup, single-instance mutex, global crash handlers (log to
-  `%AppData%\Racks\crash.log`), the signature startup animation.
-- `MainWindow.xaml(.cs)` — the invisible host window that owns the tray icon and menu, global
-  hotkeys, and the desktop auto-router.
+- `App.xaml.cs` — a 38-line lifecycle shell. The startup order, single-instance mutex, migrations and
+  uninstall modes are `UseCases/Startup`; the global crash handlers (log to `%AppData%\Racks\crash.log`)
+  are `Infrastructure/Startup/CrashHooks` + `UseCases/Crash`. See `docs/ARCHITECTURE.md`.
+- `MainWindow.xaml(.cs)` — the invisible host window that owns the tray icon and menu and the `WM_RACKS_*`
+  messages; it wires the services in `UseCases/` (hotkeys, hot corner, double-click hide, Magic Organize,
+  tray switches, updates) and the desktop auto-router (`UseCases/AutoRoute`).
 - `RackWindow.xaml(.cs)` — a single rack: file loading, drag/drop, the shell context menu,
   desktop-child reparenting, per-rack settings, and the physics hooks. (This is the big one.)
 - `Core/InstanceController.cs` — creates/loads/persists racks (each rack = an `Instance`,
   stored under `HKCU\SOFTWARE\Racks\Instances`).
 - `Core/Instance.cs` — the model for one rack (position, style, folder, assigned files).
 - `Core/AutoOrganizer.cs` — the ML.NET desktop-clustering for Magic Organizer.
+- `Infrastructure/FileSystem/FileOperationBroker.cs` — the one gateway for moving, renaming and deleting
+  user files (audited to `%AppData%\Racks\audit.log`); `Infrastructure/Registry/` — typed access to the
+  registry (`AppSettings`, `RackSettingsRepository`).
 - `Util/RackPhysics.cs` — the shared 60fps ice-rink physics loop (self-disables when idle).
 - `Util/ShellContextMenu.cs` — hand-rolled COM wrapper around the native shell context menu,
   with the delete-protection and "Open in File Explorer" injection.
