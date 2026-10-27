@@ -161,4 +161,7 @@ numbers in `Guards/baseline.json` may only go down.
 
 `dotnet test Racks.sln -c Release`. Tests run on real Windows (`windows-latest` in CI) against temp directories,
 real junctions and hardlinks. Registry tests redirect the root with `InstanceController.appName`. Time is faked
-with `Fakes/ManualScheduler` (`IDelayScheduler`). Ratchets live in `Guards/`.
+with `Fakes/ManualScheduler` (`IDelayScheduler`). Ratchets live in `Guards/`. The filesystem regression pass is
+`test/Racks.Tests/Adversarial/` (`dotnet test --filter "Category=Adversarial"`; it also runs in the normal suite): hostile
+paths, links, locked files and name clashes on real NTFS in temp folders, with the internal seams `SafeMove.UseProtectedFoldersForTest`
+and `SafeMove.UseBeforeCopyHookForTest`, `DesktopIconManager.Setup` and `RackMirror.Rebuild(racks, mirrorRoot)`.

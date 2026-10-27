@@ -228,7 +228,10 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   path resolvido fica sob a raiz esperada. (`AssignedFiles`: o load **mantém** as entradas como estão e a verificação
   faz-se no uso, onde `RackWindow` salta as que têm `Path.GetFileName(name) != name`, ver I2.) O nome de uma rack (que é uma chave do registo) é validado no load
   e em cada escrita ou remoção por `RackSettingsSchema.IsValidRackName` (um segmento, sem `\` nem `/`, nem `.`/`..`,
-  até 255 caracteres): o mesmo critério do import (INV-REG-2). *(teste)*
+  até 255 caracteres): o mesmo critério do import (INV-REG-2). *(teste)* Lacuna conhecida (P11, F3): a verificação
+  `Path.GetFileName(name) != name` de `AssignedFiles` aceita `.`, e `WorkspaceReturn.ToDesktop(".")` move a pasta
+  `RacksWorkspace` inteira para o Desktop (`..` é recusado pelo broker); corrigir com `PathPolicy.ValidateLeafName` no
+  `WorkspaceReturn`, no ponto de chamada e no load/import. Fixada em `WorkspaceReturnAdversarialTests`.
 - **INV-FS-1** Toda a operação destrutiva sobre ficheiros do utilizador (mover, renomear, apagar,
   Reciclagem, criar pasta) passa por `Infrastructure/FileSystem/FileOperationBroker`: valida nomes e
   paths (`PathPolicy`), verifica pastas protegidas e aliases (via `SafeMove`/`SafeDelete`, que são
@@ -285,6 +288,12 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   ou pequena demais para o item, o Windows apaga mesmo definitivamente e o resultado é `Succeeded`; por
   isso só se usa depois de a cópia estar confirmada (drag-out). Renomear um link (junção/symlink) renomeia
   o link, não segue o alvo (a pasta protegida real continua recusada).
+  Cópia + apagar (P11b): se a cópia falha a meio, `SafeMove.CopyThenDelete` remove SÓ o que essa chamada criou
+  (cada ficheiro é criado com `CreateNew`, cada pasta com `CreateDirectoryW`, que falha se já existir; os caminhos
+  criados são registados e removidos do mais novo para o mais antigo, sem apagar recursivamente), por isso um destino que
+  apareça entre a verificação e a cópia nunca é fundido nem apagado. Lacunas conhecidas e fixadas em testes
+  (`Known_gap_...`, ver a P11 no roadmap): uma pasta noutro volume é recusada em vez de copiada (F1), um destino
+  chamado `NUL` engole o ficheiro (F2: o `PathPolicy` não verifica o leaf do destino).
 - **INV-FS-2** Um nome escrito pelo utilizador (renomear, nome de pasta do Magic Organize) é um *leaf
   name*: `PathPolicy.ValidateLeafName` recusa vazio, `\` `/`, `..`, `:` (drive e data streams), caracteres
   inválidos e de controlo, ponto ou espaço no fim, mais de 255 caracteres e nomes de dispositivo

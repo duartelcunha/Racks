@@ -691,4 +691,7 @@ Import that file to get them back.</value>
   <data name="Layout.Import.DroppedMore" xml:space="preserve">
     <value>...and {0} more (see audit.log in %AppData%\Racks).</value>
   </data>
+  <data name="RemoveRack.FolderKept" xml:space="preserve">
+    <value>The rack was removed, but its folder "{0}" is still on your Desktop because something in it could not be moved back (for example a file is open). Nothing was deleted. You can delete the folder yourself once it is empty.</value>
+  </data>
 </root>

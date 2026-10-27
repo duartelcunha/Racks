@@ -128,8 +128,9 @@ public sealed class FileOperationBroker
         return MoveChecked(ctx, src, dest, i.SameVolumeRenameOnly);
     }
 
-    // Preflight with SafeMove's own rules (so the reasons users see are unchanged), then the move, then
-    // a look at the disk. After a clean preflight, a SafeMove "Rejected" is an I/O failure, hence Failed.
+    // Preflight with SafeMove's own rules, once (so the reasons users see are unchanged and the ~50 CreateFile calls
+    // of the canonical-path checks are not repeated), then the move, then a look at the disk. After a clean
+    // preflight, a SafeMove "Rejected" is an I/O failure, hence Failed.
     private static FileOperationResult MoveChecked(OperationContext ctx, string src, string dest, bool sameVolumeOnly)
     {
         var verdict = SafeMove.Check(src, dest, out string reason);
@@ -146,7 +147,7 @@ public sealed class FileOperationBroker
         if (sameVolumeOnly && !SameVolume(src, parent))
             return Make(ctx, OperationStatus.Rejected, "The destination is on another volume, and this operation may not copy.", src, dest);
 
-        var moved = SafeMove.TryMove(src, dest, out reason, allowCrossVolumeCopy: !sameVolumeOnly);
+        var moved = SafeMove.MoveAfterCheck(src, dest, out reason, allowCrossVolumeCopy: !sameVolumeOnly);
         return moved switch
         {
             SafeMove.Result.Moved => ConfirmMoved(ctx, src, dest, reason),
