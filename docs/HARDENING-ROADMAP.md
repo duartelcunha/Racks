@@ -7,9 +7,9 @@ which tests were added.
 
 ## Where we are
 
-- **Current phase:** P8 (decompose `App`: bootstrap, migrations, crash reporting, uninstall mode), in review; P7 (`MainWindow`)
+- **Current phase:** P9 (layout import/export: parser, validator, policy, executor, exporter, dialogs), in review; P8 (`App`)
   is its base.
-- **Next step:** P9, layout import/export (parser, validator, policy, executor).
+- **Next step:** P10, `UpdateService` split (behavior tests first; the update path stays fail-closed).
   `MainWindow._controller` is still a public static (20 uses, of which `InstanceController.RefreshMirror` is the only
   one outside presentation). The file allowlist (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned
   state; its numbers only go down.
@@ -33,7 +33,7 @@ which tests were added.
 | P6 | `RackSettingsSchema` + validator + repository (golden fixtures first) | in review |
 | P7 | Decompose `MainWindow` (Magic Organize, hot corner, double-click hide, hotkeys, tray switches, update glue, display debounce) | in review |
 | P8 | Decompose `App` (bootstrap, migrations, crash reporting, uninstall mode) | in review |
-| P9 | Layout import/export: parser, validator, policy, executor | todo |
+| P9 | Layout import/export: parser, validator, policy, executor | in review |
 | P10 | `UpdateService` split (behavior tests first; stays fail-closed) | todo |
 | P11 | Adversarial test gaps and Windows regression pass | todo |
 | P12 | Dependency notes/updates and dead code | todo |
@@ -191,7 +191,7 @@ which tests were added.
   writing `HKCU\SOFTWARE\Racks`.
 - Routed through the repository: rack removal (`RackWindow.Menu`), Magic Organize undo (`MainWindow`), "reset default style"
   (`SettingsWindow`) and the uninstall report's folder-to-title map (`App`). `registry-presentation-allowlist.json` is empty;
-  `controllerUsages` went 30 to 20 (27 real uses before). `RackLayoutIO`'s own five registry accesses stay for P9.
+  `controllerUsages` went 30 to 20 (27 real uses before). `RackLayoutIO`'s own five registry accesses were removed in P9.
   `InstanceController.RefreshMirror` still reads `MainWindow._controller` (P7).
 - **Deliberate behavior changes:** one rack that fails no longer stops the others (and no rack of the session is lost with it);
   loading never writes (before, every non-default value was written back while reading, flipping REG_DWORD to REG_SZ and rewriting
@@ -226,8 +226,8 @@ which tests were added.
   `LastAccessedFiles`/`CustomOrderFiles` value alone while a single-value write stores the empty list (and `AssignedFiles` is removed
   when empty), exactly as before; `BackgroundImagePath` is stored as typed (the local-drive check stays where the image is loaded);
   a `Name` that differs from its key is used as is (audited), so a later save writes under that name.
-- Not done on purpose: `Test-Racks.ps1` and the dev-tools e2e were not run; `RackLayoutIO.Import/Export` still touch the registry
-  directly (P9); `MoveFilesOnDrop` is still importable although it is discarded.
+- Not done on purpose: `Test-Racks.ps1` and the dev-tools e2e were not run; `RackLayoutIO.Import/Export` still touched the registry
+  directly (closed in P9); `MoveFilesOnDrop` is still importable although it is discarded (P9: accepted and not stored).
 
 ### P7 in short (what changed)
 
@@ -290,6 +290,40 @@ which tests were added.
 - Not done on purpose: the real app was not started (`Test-Racks.ps1` and the dev-tools e2e were not run), so the real startup path
   (mutex, toast activation, startup animation, uninstall runs) is covered by the unit tests of the order and the logic only.
 
+### P9 in short (what changed)
+
+- `Util/RackLayoutIO` (327 lines of parsing, validation, security policy, registry snapshot/delete/write/rollback, dialogs and file
+  I/O) is split into `Racks/UseCases/Layout/`: `LayoutParser`, `LayoutValidator`, `LayoutSecurityPolicy`, `LayoutLimits`,
+  `LayoutImportExecutor`, `LayoutExporter`, `LayoutService`, `LayoutMessages`, `LayoutAudit`; `Infrastructure/Layout/LayoutFileWriter`
+  (atomic export); `Views/LayoutDialogs` (save/open dialogs and the messages). `RackLayoutIO` stays as a 30-line `internal` facade
+  (`ParseAndValidate`, `IsSafeImportedPath`, `AllowedValueNames`) because `RackLayoutImportValidationTests` and
+  `RackSettingsSchemaTests` pin the accepted and refused sets through it. Its five direct `Registry.CurrentUser` uses are gone: the
+  executor works on `IRackRegistry` (new default method `ReadValuesExact`, REG_EXPAND_SZ unexpanded, used for snapshots).
+  `MainWindow.xaml.cs` went from 420 to 404 lines (ratchet `mainWindowLines` 404).
+- Risks that went down: a layout file can no longer be arbitrarily big, deep or long (INV-IMPORT-5); a numeric value out of range,
+  NaN or Infinity is refused instead of being written; the restore after a failed replace is checked and a failed restore is no
+  longer swallowed (result `RollbackFailed`, audit record `LayoutImportRollbackFailed`, a message to the user); every import and
+  export failure is shown to the user and audited (before, only `InvalidDataException` was shown and the rest went to
+  `Debug.WriteLine`); the export is written atomically, so a failure keeps the previous file.
+- Deliberate differences from before: (1) `Version` newer than 1, or below 1, is refused; a missing one reads as 1. (2) Values go
+  through `RackSettingsValidator`, so a bad number/switch/enum, or a number the loader would clamp (`IconSize` 5), now refuses the
+  file; list items the loader would drop are dropped. (3) Two racks whose names differ only in case are refused; a `Name` value
+  must equal the rack name (case aside); a rack name with a control character is refused. (4) Text with a NUL and over-long
+  regexes/lists are refused. (5) Stored kinds now follow the repository writer: integers REG_DWORD (were REG_QWORD), switches
+  `True`/`False`, decimals invariant text; the legacy `MoveFilesOnDrop` is accepted but not stored. (6) Replace mode deletes each
+  rack key (it used to delete the whole `Instances` tree, so a stray non-rack subkey is now left). (7) Merge mode is also
+  snapshotted and rolled back. (8) The export is built from the typed racks (`RackSettingsRepository.LoadAll`): a value the loader
+  refuses is not exported and the `Name` value always equals the rack name; an export too big to import again is refused.
+  (9) A file with no racks says so instead of doing nothing. New texts are in `Lang.resx` (English; other languages fall back).
+- Tests: 1381 to 1506 passed (4 skipped): parser (size, depth, count, BOM/encodings, garbage), validator (every new rule and
+  message), executor (in-memory registry that fails on command), full `Import()`/export/round trip/old-format file/rollback of
+  every REG_ kind over the throwaway registry root, atomic export, message texts. One existing test needed one argument
+  (`Every_name_the_loader_applies_is_accepted_by_import_with_its_stored_form` now names its rack "Golden", because a `Name` value must match).
+- Guards: `fs-allowlist.json` `Util/RackLayoutIO.cs` 1 became `Infrastructure/Layout/LayoutFileWriter.cs` 4 (the one allowlist
+  increase of the whole plan, each call justified in the file); `baseline.json` `mainWindowLines` 420 to 404.
+- Not done on purpose: the real app, dialogs, `Test-Racks.ps1` and the dev-tools e2e were not run (the dialogs are covered by the
+  message tests only); a rack key's nested subkeys (the app writes none) are not part of the snapshot.
+
 ### Follow-up recorded by the P8 review (not implemented)
 
 - **Startup failure after the single-instance name is taken.** If any step after `AcquireSingleInstance` throws, the dispatcher
@@ -330,7 +364,7 @@ Good stopping points: after P2 (files), P6 (persistence), P10 (updates), P13 (do
 2. Magic Organize "folders" mode creates directories from an unsanitized cluster name.
 3. Registry load (`InstanceController.InitInstances`) uses one `try` for all racks, accepts NaN/Infinity and undefined enum values, writes doubles with the user's culture, and writes back while reading.
 4. `DesktopRouter` has no watcher `Error` handling, uses `Regex` directly, ignores partial downloads and reparse points, and `Flush` is untested.
-5. `RackLayoutIO.Import()` is untested; failures only reach `Debug.WriteLine`; no size or range limits.
+5. `RackLayoutIO.Import()` is untested; failures only reach `Debug.WriteLine`; no size or range limits. (Fixed in P9.)
 6. `Updater` mixes toasts with logic, has no response size cap on the catalog and `InstallUpdate` is untested.
 7. 185 `Debug.WriteLine` calls, none persisted.
 

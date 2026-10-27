@@ -589,6 +589,113 @@ namespace Racks.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Couldn&apos;t export your racks: {0}
+        ///
+        ///An existing file at that location was not changed..
+        /// </summary>
+        public static string Layout_Export_Failed {
+            get {
+                return ResourceManager.GetString("Layout.Export.Failed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Export racks.
+        /// </summary>
+        public static string Layout_Export_Title {
+            get {
+                return ResourceManager.GetString("Layout.Export.Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Cancel.
+        /// </summary>
+        public static string Layout_Import_Cancel {
+            get {
+                return ResourceManager.GetString("Layout.Import.Cancel", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Importing will REPLACE all your current racks with the layout in the file. Continue?.
+        /// </summary>
+        public static string Layout_Import_Confirm {
+            get {
+                return ResourceManager.GetString("Layout.Import.Confirm", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The file has no racks. Nothing was changed..
+        /// </summary>
+        public static string Layout_Import_Empty {
+            get {
+                return ResourceManager.GetString("Layout.Import.Empty", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The import failed: {0}
+        ///
+        ///Your previous racks were restored..
+        /// </summary>
+        public static string Layout_Import_Failed {
+            get {
+                return ResourceManager.GetString("Layout.Import.Failed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Import cancelled: {0}
+        ///
+        ///Your existing racks are unchanged..
+        /// </summary>
+        public static string Layout_Import_Rejected {
+            get {
+                return ResourceManager.GetString("Layout.Import.Rejected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Replace.
+        /// </summary>
+        public static string Layout_Import_Replace {
+            get {
+                return ResourceManager.GetString("Layout.Import.Replace", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The import failed: {0}
+        ///
+        ///Your previous racks could not be fully restored, so some racks may be missing or changed. Details were saved to audit.log in %AppData%\Racks. Please include it if you report a bug..
+        /// </summary>
+        public static string Layout_Import_RollbackFailed {
+            get {
+                return ResourceManager.GetString("Layout.Import.RollbackFailed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Import racks.
+        /// </summary>
+        public static string Layout_Import_Title {
+            get {
+                return ResourceManager.GetString("Layout.Import.Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The import could not be completed: {0}.
+        /// </summary>
+        public static string Layout_Import_Unexpected {
+            get {
+                return ResourceManager.GetString("Layout.Import.Unexpected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Racks is already running.
         /// </summary>
         public static string Racks_AlreadyRunning {

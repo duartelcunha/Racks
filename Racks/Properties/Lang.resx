@@ -633,4 +633,45 @@
   <data name="AutoRoute.Invalid.Message" xml:space="preserve">
     <value>That pattern can't be used: it is not a valid regular expression, or it takes too long to check a file name. The previous rule was kept. Try a simpler pattern.</value>
   </data>
+  <data name="Layout.Import.Title" xml:space="preserve">
+    <value>Import racks</value>
+  </data>
+  <data name="Layout.Import.Confirm" xml:space="preserve">
+    <value>Importing will REPLACE all your current racks with the layout in the file. Continue?</value>
+  </data>
+  <data name="Layout.Import.Replace" xml:space="preserve">
+    <value>Replace</value>
+  </data>
+  <data name="Layout.Import.Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Layout.Import.Empty" xml:space="preserve">
+    <value>The file has no racks. Nothing was changed.</value>
+  </data>
+  <data name="Layout.Import.Rejected" xml:space="preserve">
+    <value>Import cancelled: {0}
+
+Your existing racks are unchanged.</value>
+  </data>
+  <data name="Layout.Import.Failed" xml:space="preserve">
+    <value>The import failed: {0}
+
+Your previous racks were restored.</value>
+  </data>
+  <data name="Layout.Import.RollbackFailed" xml:space="preserve">
+    <value>The import failed: {0}
+
+Your previous racks could not be fully restored, so some racks may be missing or changed. Details were saved to audit.log in %AppData%\Racks. Please include it if you report a bug.</value>
+  </data>
+  <data name="Layout.Import.Unexpected" xml:space="preserve">
+    <value>The import could not be completed: {0}</value>
+  </data>
+  <data name="Layout.Export.Title" xml:space="preserve">
+    <value>Export racks</value>
+  </data>
+  <data name="Layout.Export.Failed" xml:space="preserve">
+    <value>Couldn't export your racks: {0}
+
+An existing file at that location was not changed.</value>
+  </data>
 </root>

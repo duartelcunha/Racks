@@ -205,28 +205,12 @@ namespace Racks
 
         private async void magicOrganizeDesktop_Click(object sender, RoutedEventArgs e) => await _magicOrganize.RunAsync();
 
-        private void ExportLayout_Click(object sender, RoutedEventArgs e)
-        {
-            try { RackLayoutIO.PromptExport(); }
-            catch (System.Exception ex) { Debug.WriteLine($"Export failed: {ex.Message}"); }
-        }
+        // Layout export/import: dialogs, messages and audit are LayoutDialogs / LayoutService (P9); every failure is shown.
+        private void ExportLayout_Click(object sender, RoutedEventArgs e) => LayoutDialogs.Export();
 
-        private async void ImportLayout_Click(object sender, RoutedEventArgs e)
+        private void ImportLayout_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                if (!RacksMessageBox.Confirm(
-                        "Importing will REPLACE all your current racks with the layout in the file. Continue?",
-                        "Import racks", "Replace", "Cancel")) return;
-                int count = RackLayoutIO.PromptImport(replaceExisting: true);
-                if (count > 0) _controller.CheckFrameWindowsLive(true);
-            }
-            catch (System.IO.InvalidDataException ex)
-            {
-                // Bad/hostile layout file: existing racks were left intact (or rolled back).
-                RacksMessageBox.Show($"Import cancelled: {ex.Message}\n\nYour existing racks are unchanged.", "Import racks");
-            }
-            catch (System.Exception ex) { Debug.WriteLine($"Import failed: {ex.Message}"); }
+            if (LayoutDialogs.Import(replaceExisting: true) > 0) _controller.CheckFrameWindowsLive(true);
         }
 
         private async void CheckUpdates_Click(object sender, RoutedEventArgs e) => await _updates.CheckNowAsync();

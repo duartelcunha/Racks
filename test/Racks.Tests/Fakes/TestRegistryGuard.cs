@@ -14,7 +14,7 @@ namespace Racks.Tests.Fakes;
 /// (<c>InitInstances</c>, the uninstall title map) and a test that forgot the fixture would otherwise just see zero racks. The
 /// guard's own test asserts the list is empty at that point, and a message is written to stderr when the test process ends with
 /// a refusal on record.</para>
-/// <para>What it does NOT cover: <c>RackLayoutIO.Import/Export</c> (own registry calls, P9), the old <c>RegistryHelper</c> root
+/// <para>What it does NOT cover: the layout import executor (it takes an <c>IRackRegistry</c> and is built by the caller, P9), the old <c>RegistryHelper</c> root
 /// writer used by P5 comparisons, <c>AppSettings</c>/<c>MigrationMarkers</c> (they take their root as a parameter or follow
 /// <c>appName</c> themselves), <c>MigrateLegacyRegistry</c> and <c>DefaultStyleReset.Run</c> on a key a test opened.</para>
 /// </summary>

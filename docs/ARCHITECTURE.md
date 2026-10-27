@@ -46,7 +46,7 @@ There is no DI container. `Infrastructure/Startup/AppComposition` (called from t
    `MainWindow.xaml.cs` free of file, registry, updater, hook and cursor code.)
 4. **The update path is fail-closed.** Nothing downloaded runs unless the signed manifest, the host/path
    allowlist, the size and the SHA-256 all check out. See `docs/SECURITY-INVARIANTS.md` (INV-UPDATE-1).
-5. **Imports are validated before any state is written** and a bad file leaves the current layout untouched.
+5. **Imports are validated before any state is written** and a bad file leaves the current layout untouched (layout files: size, depth, counts, version, ranges and paths are checked first, `UseCases/Layout`; INV-IMPORT-5).
 
 Rules 1, 2, 3 (shell and registry parts; updater comes later) and parts of 5 are enforced by tests in `test/Racks.Tests/Guards/`, which work as ratchets: the
 numbers in `Guards/baseline.json` may only go down.
@@ -85,7 +85,7 @@ numbers in `Guards/baseline.json` may only go down.
   `HKCU\SOFTWARE\Racks\Instances\<name>` and runs the post pass (Desktop-rack detection, the two one-shot migrations,
   the folder-missing flag, then the windows); `Core/Instance` writes through `Instance.Store` on every property change.
   Global switches and migration markers live under `HKCU\SOFTWARE\Racks` and are read and written only through
-  `Infrastructure/Registry` (below). Layout export/import is `Util/RackLayoutIO` (its own registry access is P9).
+  `Infrastructure/Registry` (below). Layout export/import is `UseCases/Layout` (P9, below); `Util/RackLayoutIO` is only a thin facade for the tests.
 - **App-wide registry values.** `Infrastructure/Registry/` (namespace `Racks.Infrastructure.Registry`): `IRegistryRoot` (read /
   write / delete values under one key; `HkcuRegistryRoot` is the real one and follows `InstanceController.appName`, tests
   use a throwaway `Software\RacksTests-<guid>` key or a failing root), `AppSettings` (`Default`: start on login incl.
@@ -121,6 +121,19 @@ numbers in `Guards/baseline.json` may only go down.
   (rebuild + rescan for names that were not on the Desktop before, backoff), all on the UI thread through
   `IDelayScheduler`. The service has no WPF types: `MainWindow` supplies the rack list, a save callback and the
   workspace path (`AutoRouteHost`).
+- **Layout import/export (P9).** `UseCases/Layout/` (namespace `Racks.UseCases.Layout`), one job per class, in the order a file travels:
+  `LayoutParser` (bounded read of the file, size/depth/rack-count/entry-count limits from `LayoutLimits`, BOM-aware decoding, an untrusted
+  `LayoutDocument`; never throws), `LayoutValidator` (version, names, duplicates, scalar kinds, every value through
+  `RackSettingsValidator`, a typed `ValidatedRack` with the exact `RegistryWrite`s; whole-file refusal with a message naming rack and
+  value) using `LayoutSecurityPolicy` (allow-list from `RackSettingsSchema`, local-drive paths, fonts/colors via `SafeWpfValues`, list
+  and regex size caps), `LayoutImportExecutor` (snapshot, delete, write, verify, checked rollback over `IRackRegistry`; the only
+  place that writes layouts to the registry), `LayoutExporter` (typed racks from `IRackSettingsStore` to the same JSON shape as ever,
+  written by `Infrastructure/Layout/LayoutFileWriter`: temp file next to the destination, then replace), `LayoutService` (composes
+  them; results, never exceptions; every failure is an audit record: `LayoutImport`, `LayoutExport`, `LayoutImportRollbackFailed`)
+  and `LayoutMessages` (the texts, `Lang.resx`). The dialogs are `Views/LayoutDialogs` (open/save dialog, confirm, shows every
+  failure). `ImportResult` says Imported / Rejected / Failed, and for Failed whether the state changed, was rolled back or the
+  rollback itself failed. `IRackRegistry.ReadValuesExact` (default = `ReadValues`) is the exact read used for snapshots
+  (REG_EXPAND_SZ unexpanded). Limits and the other rules: `SECURITY-INVARIANTS.md`, INV-IMPORT-1, -2, -5.
 - **Updates.** `Util/Updater` (flow), `Util/UpdateManifest` (pure signature/hash/size checks), `Util/UpdateTrust`
   (embedded public key). `tools/RacksSigner` links the last two by path.
 - **Diagnostics.** `Util/CrashLog` (`%AppData%\Racks\crash.log`, rotated), `Infrastructure/Logging` (`audit.log`: one
