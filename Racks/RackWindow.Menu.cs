@@ -644,7 +644,7 @@ namespace Racks
                             // workspace and move an arbitrary file to the desktop.
                             if (string.IsNullOrEmpty(fileName) || System.IO.Path.GetFileName(fileName) != fileName)
                                 continue;
-                            var back = Rack.WorkspaceReturn.ToDesktop(DesktopIconManager.RacksWorkspacePath, desktopPath, fileName);
+                            var back = Rack.WorkspaceReturn.ToDesktop(Racks.Infrastructure.Shell.ShellOperationGateway.Default.WorkspacePath, desktopPath, fileName);
                             if (back != null) returnedToDesktop.Add(back);
                         }
                     }
@@ -657,7 +657,7 @@ namespace Racks
                         if (report.Kept > 0 || report.KeptFolders.Count > 0)
                         {
                             if (returnedToDesktop.Count > 0)
-                                Util.DesktopIconPositioner.ArrangeInGrid(returnedToDesktop);
+                                Racks.Infrastructure.Shell.ShellOperationGateway.Default.ArrangeDesktopIcons(returnedToDesktop);
                             Racks.Views.RacksMessageBox.Show(
                                 $"{report.Kept} item(s) could not be moved back to your Desktop (for example a file is open). " +
                                 "The rack was kept so nothing is lost. Close the file and remove the rack again.",
@@ -677,7 +677,7 @@ namespace Racks
                         Infrastructure.FileSystem.FileOperationBroker.Default.DeleteEmptyDirectory(Instance.Folder, "remove rack: delete the emptied rack folder");
                     }
                     if (returnedToDesktop.Count > 0)
-                        Util.DesktopIconPositioner.ArrangeInGrid(returnedToDesktop);
+                        Racks.Infrastructure.Shell.ShellOperationGateway.Default.ArrangeDesktopIcons(returnedToDesktop);
 
                     try
                     {

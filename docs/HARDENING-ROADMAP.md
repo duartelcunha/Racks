@@ -7,9 +7,9 @@ which tests were added.
 
 ## Where we are
 
-- **Current phase:** P2 (route raw file mutations), in review; P1 (file-safety core) is its base.
-- **Next step:** P3, `ShellOperationGateway` (shell change notifications, desktop icons). The file allowlist
-  (`test/Racks.Tests/Guards/fs-allowlist.json`) is now only Racks-owned state; its numbers only go down.
+- **Current phase:** P3 (`ShellOperationGateway`), in review; P2 (route raw file mutations) is its base.
+- **Next step:** P4, `AutoRouteService` + `RoutingPolicy`. The file allowlist
+  (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned state; its numbers only go down.
 - **Base branch:** `feature/scandi-branding-and-stability` (4 commits not yet on `main`). Phase branches are
   `hardening/pN-<name>`; each PR targets the previous phase's branch until the base lands on `main`.
 - **Baseline (P0):** `dotnet test` = 493 passed, 1 skipped (`Category=ReleaseGate`, only runs in the release
@@ -24,7 +24,7 @@ which tests were added.
 | P0 | Base, `ARCHITECTURE.md`, `AGENTS.md`, this file | in review |
 | P1 | `FileOperationBroker` (facade over `SafeMove`/`SafeDelete`), `PathPolicy`, `AuditLog`, file-mutation guard; fix inline rename and Magic Organize folder names | in review |
 | P2 | Route the remaining raw file mutations through the broker; shrink the allowlist; refuse ancestors of protected folders | in review |
-| P3 | `ShellOperationGateway` (shell change notifications, desktop icons) | todo |
+| P3 | `ShellOperationGateway` (shell change notifications, desktop icons) | in review |
 | P4 | `AutoRouteService` + `RoutingPolicy`, testable `DesktopRouter`, watcher hardening | todo |
 | P5 | Typed `AppSettings` and `MigrationMarkers` for root registry values | todo |
 | P6 | `RackSettingsSchema` + validator + repository (golden fixtures first) | todo |
@@ -94,6 +94,23 @@ which tests were added.
 - Not done on purpose: the Win32/COM and `DirectoryInfo` attribute changes the guard cannot see (listed in the
   guard header) were reviewed by hand, not routed; `Unlink` deletes by path after the checks (a swap of the item
   between the check and the delete is a tiny window; a handle-based delete is a P11 candidate).
+
+### P3 in short (what changed)
+
+- New `Racks/Infrastructure/Shell/ShellOperationGateway` (`Default`, like the broker): `NotifyItemMoved`,
+  `NotifyDirectoryChanged`, `ArrangeDesktopIcons`, `SetDesktopIconsHidden`, `EnsureDesktopVisible`,
+  `FindDesktopIconList`, `RestoreDesktopIconsIfHiddenByRacks`, `InitializeWorkspace`, `WorkspacePath`. Pure
+  delegation: same calls, same thread, notifications stay best-effort (an empty path is skipped, as before).
+- Moved: 6 files (MainWindow.xaml.cs, RackWindow.DragDrop/Menu/Files.cs, App.xaml.cs, plus Core/MagicOrganizeUndo.cs).
+  `DesktopIcons`, `DesktopIconPositioner` and `DesktopIconManager` are now `internal`; `DesktopIconPositioner` lost its
+  duplicate `SHChangeNotify` P/Invoke and uses the one in `Interop` (now `internal`, with `NotifyShell*`). The dead
+  `Interop.RefreshDesktop` (no callers, no tests) was deleted.
+- Guard: `PresentationBoundaryTests` allows zero references to these helpers in presentation files (no baseline
+  file needed). Its blind spots are in the test header.
+- Out of scope on purpose (stays in presentation): `ShellContextMenu`, `ShellMenuHandlers`, `ShellViewWaiter`, window
+  geometry/style/blur/hotkey Win32 calls, `Process.Start` launches, the tray and `ShellLinkHelper` (only
+  `ShortcutFactory` uses it). `UninstallCleanup` still calls `DesktopIcons.ForceShow` and `DesktopRouter` still reads
+  `DesktopIconManager.RacksWorkspacePath` directly: neither is presentation (P4 for the router).
 
 ### Follow-ups recorded by the P2 review (not implemented)
 

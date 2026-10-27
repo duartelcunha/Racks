@@ -123,8 +123,8 @@ namespace Racks
                                 Debug.WriteLine($"Auto-route {result.Status}: {result.Reason}");
                                 return;
                             }
-                            Util.Interop.NotifyShellMove(sourcePath, dest, isDir);
-                            Util.Interop.NotifyShellUpdateDir(System.IO.Path.GetDirectoryName(sourcePath)!);
+                            Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyItemMoved(sourcePath, dest, isDir);
+                            Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyDirectoryChanged(System.IO.Path.GetDirectoryName(sourcePath)!);
                             if (routedRack.IsDesktopFilterRack)
                             {
                                 // A desktop rack lists the files it claims by name: claim it (the rack refreshes itself, it watches the workspace).
@@ -148,10 +148,10 @@ namespace Racks
             {
                 bool hide = _controller.reg.ReadKeyValueRoot("HideDesktopIcons") as bool? ?? false;
                 HideDesktopIconsToggle.IsChecked = hide;
-                if (hide) DesktopIcons.SetHidden(true);
+                if (hide) Racks.Infrastructure.Shell.ShellOperationGateway.Default.SetDesktopIconsHidden(true);
             }
             // A previous version (or one that was killed) may have left the whole desktop hidden.
-            DesktopIcons.EnsureDefViewVisible();
+            Racks.Infrastructure.Shell.ShellOperationGateway.Default.EnsureDesktopVisible();
             if (_controller.reg.KeyExistsRoot("HotCornerHide")
                 && _controller.reg.ReadKeyValueRoot("HotCornerHide") as bool? == true)
             {
@@ -180,7 +180,7 @@ namespace Racks
 
             POINT pt = new POINT { X = e.Position.X, Y = e.Position.Y };
             IntPtr hwndUnderCursor = WindowFromPoint(pt);
-            IntPtr desktopListView = DesktopIcons.FindIconList();
+            IntPtr desktopListView = Racks.Infrastructure.Shell.ShellOperationGateway.Default.FindDesktopIconList();
 
             if (hwndUnderCursor == desktopListView && !IsDesktopIconHit(pt))
             {
@@ -265,18 +265,18 @@ namespace Racks
                             _controller.Instances.Add(inst);
 
                             // Ensure workspace exists before moving
-                            Racks.Core.DesktopIconManager.Initialize();
+                            Racks.Infrastructure.Shell.ShellOperationGateway.Default.InitializeWorkspace();
 
                             // 2. Move files to RacksWorkspace and assign them
                             foreach (var fp in cluster.FilePaths)
                             {
                                 string fileName = System.IO.Path.GetFileName(fp);
-                                string destPath = System.IO.Path.Combine(Racks.Core.DesktopIconManager.RacksWorkspacePath, fileName);
+                                string destPath = System.IO.Path.Combine(Racks.Infrastructure.Shell.ShellOperationGateway.Default.WorkspacePath, fileName);
 
                                 var moveResult = Racks.Infrastructure.FileSystem.FileOperationBroker.Default.Move(fp, destPath, "magic organize: into rack");
                                 if (moveResult.Completed)
                                 {
-                                    Racks.Util.Interop.NotifyShellMove(fp, destPath, System.IO.Directory.Exists(fp));
+                                    Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyItemMoved(fp, destPath, System.IO.Directory.Exists(fp));
                                     // One rack owns the name: take it from any other rack that still claims it.
                                     foreach (var lost in Racks.Rack.DesktopRackClaims.Claim(_controller.Instances, inst, fileName))
                                         _controller.WriteInstanceToKey(lost);
@@ -343,7 +343,7 @@ namespace Racks
                                 var moveResult = Racks.Infrastructure.FileSystem.FileOperationBroker.Default.Move(fp, destPath, "magic organize: into folder");
                                 if (moveResult.Completed)
                                 {
-                                    Racks.Util.Interop.NotifyShellMove(fp, destPath, System.IO.Directory.Exists(fp));
+                                    Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyItemMoved(fp, destPath, System.IO.Directory.Exists(fp));
                                     undo.RecordMove(fp, destPath);
                                     movedFilesCount++;
                                 }
@@ -395,7 +395,7 @@ namespace Racks
                 foreach (var m in undo.Moved)
                     if (System.IO.File.Exists(m.OriginalPath) || System.IO.Directory.Exists(m.OriginalPath))
                         back.Add(m.OriginalPath);
-                if (back.Count > 0) Racks.Util.DesktopIconPositioner.ArrangeInGrid(back);
+                if (back.Count > 0) Racks.Infrastructure.Shell.ShellOperationGateway.Default.ArrangeDesktopIcons(back);
 
                 Racks.Core.MagicOrganizeUndo.Clear();
                 Racks.Views.RacksMessageBox.Show($"Undone. {restored} item(s) are back on your desktop.", "Magic Organize");
@@ -721,7 +721,7 @@ namespace Racks
         {
             bool hide = HideDesktopIconsToggle.IsChecked == true;
             _controller.reg.WriteToRegistryRoot("HideDesktopIcons", hide);
-            DesktopIcons.SetHidden(hide);
+            Racks.Infrastructure.Shell.ShellOperationGateway.Default.SetDesktopIconsHidden(hide);
         }
         private void AutorunToggle_CheckChanged(object sender, RoutedEventArgs e)
         {

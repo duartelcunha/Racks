@@ -7,7 +7,7 @@ namespace Racks.Util;
 /// Racks attaches every rack to that same DefView as a child window, so hiding the DefView hides
 /// every rack too. "Hide desktop icons" therefore hides only the icon list.
 /// </summary>
-public static class DesktopIcons
+internal static class DesktopIcons
 {
     private const int SW_HIDE = 0;
     private const int SW_SHOW = 5;

@@ -3,7 +3,7 @@ using System.IO;
 
 namespace Racks.Core
 {
-    public static class DesktopIconManager
+    internal static class DesktopIconManager
     {
         public static string RacksWorkspacePath { get; private set; } = string.Empty;
 

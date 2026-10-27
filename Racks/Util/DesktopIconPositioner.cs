@@ -4,15 +4,8 @@ using System.Threading.Tasks;
 
 namespace Racks.Util
 {
-    public static class DesktopIconPositioner
+    internal static class DesktopIconPositioner
     {
-        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-        private static extern void SHChangeNotify(int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
-
-        private const int SHCNE_UPDATEDIR = 0x00001000;
-        private const int SHCNE_ASSOCCHANGED = 0x08000000;
-        private const uint SHCNF_PATHW = 0x0005;
-        private const uint SHCNF_FLUSH = 0x1000;
 
         // Lay a set of desktop items out in a clean grid starting from the top-left corner,
         // skipping the very first column rows that Windows' own icons usually occupy. Used
@@ -42,7 +35,7 @@ namespace Racks.Util
                 {
                     // Tell the shell the Desktop folder contents changed so Explorer
                     // re-enumerates and lays out the returned files in its own grid.
-                    SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATHW | SHCNF_FLUSH, pDesktop, IntPtr.Zero);
+                    Interop.SHChangeNotify((uint)Interop.SHCNE_UPDATEDIR, Interop.SHCNF_PATHW | Interop.SHCNF_FLUSH, pDesktop, IntPtr.Zero);
                 }
                 finally
                 {

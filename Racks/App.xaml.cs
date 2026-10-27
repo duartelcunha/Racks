@@ -231,7 +231,7 @@ namespace Racks
             catch { }
 
             // Fences-style Desktop Integration
-            Racks.Core.DesktopIconManager.Initialize();
+            Racks.Infrastructure.Shell.ShellOperationGateway.Default.InitializeWorkspace();
 
             ToastNotificationManagerCompat.OnActivated += ToastActivatedHandler;
             // Once-only: pin %USERPROFILE%\Racks to the Explorer / file-picker
@@ -272,7 +272,7 @@ namespace Racks
         {
             // "Hide desktop icons" only lasts while Racks runs: put the icons back on a normal exit
             // (tray Exit, update, Windows shutdown).
-            try { Racks.Util.DesktopIcons.RestoreIfHiddenByRacks(); } catch { }
+            try { Racks.Infrastructure.Shell.ShellOperationGateway.Default.RestoreDesktopIconsIfHiddenByRacks(); } catch { }
 
             _singleInstanceMutex?.ReleaseMutex();
             _singleInstanceMutex?.Dispose();

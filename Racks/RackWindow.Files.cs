@@ -104,7 +104,7 @@ namespace Racks
                     _fileWatcherWired = true;
                 }
                 // A desktop rack lists the Desktop but its files live in the workspace: watch both, so moving an item out refreshes the rack.
-                _fileWatcherService.Initialize(Instance.Folder, _currentFolderPath, Instance.IsDesktopFilterRack ? DesktopIconManager.RacksWorkspacePath : null);
+                _fileWatcherService.Initialize(Instance.Folder, _currentFolderPath, Instance.IsDesktopFilterRack ? Racks.Infrastructure.Shell.ShellOperationGateway.Default.WorkspacePath : null);
             }
 
             if (!Path.Exists(Instance.Folder) && Instance.Folder != "empty")
@@ -307,7 +307,7 @@ namespace Racks
 
                     if (Instance.IsDesktopFilterRack)
                     {
-                        ScanDir(DesktopIconManager.RacksWorkspacePath);
+                        ScanDir(Racks.Infrastructure.Shell.ShellOperationGateway.Default.WorkspacePath);
                     }
 
                     // Remove duplicates by name (if a file somehow exists in both, prefer Workspace)

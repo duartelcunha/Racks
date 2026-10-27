@@ -31,12 +31,17 @@ There is no DI container. `App.OnStartup` wires services by hand; the legacy sta
    outside it, except those listed in `Guards/fs-allowlist.json` (the list only shrinks; after P2 it holds only Racks-owned state).
 2. **The registry is read and written through a typed schema + repository** (phase P6). A bad value is rejected,
    logged with field, raw value, reason and fallback, and never applied.
-3. **Presentation does not touch the registry, mutate files, call shell notifications or the updater.**
+3. **Presentation does not touch the registry, mutate files, call shell notifications or the updater.** Shell
+   change notifications, desktop-icon hiding/arranging and the workspace folder go through
+   `Infrastructure/Shell/ShellOperationGateway.Default`; `Guards/PresentationBoundaryTests` allows zero direct
+   references to `Interop.NotifyShell*`, `DesktopIcons`, `DesktopIconPositioner` and `DesktopIconManager` in
+   `MainWindow*`, `RackWindow*`, `App`, the dialogs, `Views/`, `ViewModels/` and `Converters/`. (The shell context
+   menu, window geometry/style Win32 calls, hotkeys, `Process.Start` and the tray stay in presentation on purpose.)
 4. **The update path is fail-closed.** Nothing downloaded runs unless the signed manifest, the host/path
    allowlist, the size and the SHA-256 all check out. See `docs/SECURITY-INVARIANTS.md` (INV-UPDATE-1).
 5. **Imports are validated before any state is written** and a bad file leaves the current layout untouched.
 
-Rules 1, 3 and parts of 5 are enforced by tests in `test/Racks.Tests/Guards/`, which work as ratchets: the
+Rules 1, 3 (shell part; registry and updater come later) and parts of 5 are enforced by tests in `test/Racks.Tests/Guards/`, which work as ratchets: the
 numbers in `Guards/baseline.json` may only go down.
 
 ## Where things live today
@@ -51,6 +56,9 @@ numbers in `Guards/baseline.json` may only go down.
   (canonicalization, protected roots, cross-volume copy-then-delete) and `Util/SafeDelete` (reparse-point-aware
   tree delete, Recycle Bin), `Rack/WorkspaceReturn` (back to Desktop),
   `Util/UninstallCleanup` (returns user files on uninstall, rename-only).
+- **Shell gateway.** `Infrastructure/Shell/ShellOperationGateway` delegates (no logic) to `Util/Interop`
+  (`SHChangeNotify`, one declaration), `Util/DesktopIcons`, `Util/DesktopIconPositioner` and
+  `Core/DesktopIconManager`, which are `internal`. Tests replace the calls through an internal `ShellBackend`.
 - **Auto-route.** `Util/DesktopRouter` watches the Desktop and routes new files into racks by regex
   (`Util/SafeRegex` bounds every regex with a timeout).
 - **Updates.** `Util/Updater` (flow), `Util/UpdateManifest` (pure signature/hash/size checks), `Util/UpdateTrust`
