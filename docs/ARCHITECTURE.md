@@ -57,7 +57,7 @@ was not worth the churn; the guards (below) fence the ones that matter. Do not a
    under `HKCU\SOFTWARE\Racks`) go through `Infrastructure/Registry/AppSettings` and `MigrationMarkers`. Per-rack values and
    the 32 global style defaults go through `RackSettingsRepository`, driven by one table, `RackSettingsSchema`. A bad value
    is never applied: the documented default is used and the field, raw value, reason and fallback are written to
-   `audit.log`.
+   `audit.log`. Two named exceptions touch the registry directly: `InstanceController.MigrateLegacyRegistry` (one-shot copy of the legacy DeskFrame key tree, risk R-29) and `DefaultStyleReset.Run(RegistryKey)` (called only from `RackSettingsRepository`).
 3. **Presentation does not touch the registry, call shell notifications or reach the updater, and does not mutate files except through the broker** (the rack windows call `FileOperationBroker.Default`; `RackWindow.DragDrop.cs` also has 2 allowlisted `CreateDirectory` calls for Racks-owned sandbox folders). Shell change
    notifications, desktop-icon hiding/arranging and the workspace folder go through
    `Infrastructure/Shell/ShellOperationGateway.Default`. The shell context menu, window geometry/style Win32 calls,
