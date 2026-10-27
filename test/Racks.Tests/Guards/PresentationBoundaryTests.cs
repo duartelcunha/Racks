@@ -80,6 +80,51 @@ public class PresentationBoundaryTests
         Assert.True(File.Exists(Path.Combine(Root, "Racks", "Infrastructure", "Shell", "ShellOperationGateway.cs")));
     }
 
+    // ---- MainWindow in particular (P7) ----------------------------------------------------------
+
+    // MainWindow only wires and shows. The work it used to do lives in Racks/UseCases (Magic Organize, hot corner,
+    // double-click hide, hotkeys, tray switches, update glue, display-change debounce) and behind Infrastructure/Shell
+    // (H.Hooks, RegisterHotKey, WindowFromPoint, UI Automation, the cursor and the screens).
+    private static readonly (string Why, Regex Pattern)[] MainWindowForbidden =
+    [
+        ("raw file or folder access", new Regex(@"\b(File|Directory|FileInfo|DirectoryInfo)\s*\.", RegexOptions.Compiled)),
+        ("file broker (Magic Organize owns it)", new Regex(@"\b(FileOperationBroker|SafeMove|SafeDelete)\b", RegexOptions.Compiled)),
+        ("registry", new Regex(@"\b(RegistryKey|RegistryHelper)\b|\bRegistry\s*\.\s*(CurrentUser|LocalMachine)", RegexOptions.Compiled)),
+        ("updater internals", new Regex(@"\bUpdater\s*\.|\b(UpdateManifest|UpdateTrust)\b", RegexOptions.Compiled)),
+        ("mouse hook / UI Automation / hit testing", new Regex(@"\bH\.Hooks\b|\b(LowLevelMouseHook|AutomationElement|WindowFromPoint)\b", RegexOptions.Compiled)),
+        ("hotkey Win32 calls", new Regex(@"\b(Un)?[Rr]egisterHotKey\b", RegexOptions.Compiled)),
+        ("polling the pointer or the screens", new Regex(@"\bCursor\s*\.\s*Position\b|\bScreen\s*\.\s*PrimaryScreen\b|\bGetCursorPos\b", RegexOptions.Compiled)),
+        ("shell helpers behind the gateway", Forbidden),
+    ];
+
+    [Fact]
+    public void MainWindow_delegates_instead_of_doing_the_work()
+    {
+        string code = StripComments(File.ReadAllText(Path.Combine(Root, "Racks", "MainWindow.xaml.cs")));
+        var problems = MainWindowForbidden
+            .Select(f => (f.Why, Count: f.Pattern.Matches(code).Count))
+            .Where(f => f.Count > 0)
+            .Select(f => $"{f.Why}: {f.Count} reference(s)")
+            .ToList();
+        Assert.True(problems.Count == 0,
+            "MainWindow.xaml.cs must hand this to a class under Racks/UseCases or Racks/Infrastructure:\n" + string.Join("\n", problems));
+
+        // The one timer left is the tray-icon retry; polling (the hot corner) is a service with an injected scheduler.
+        Assert.True(Regex.Matches(code, @"\bDispatcherTimer\b").Count <= 1, "MainWindow may own at most the tray retry timer.");
+    }
+    public void The_MainWindow_scanner_catches_what_it_claims_to()
+    {
+        string Hit(string snippet) => string.Join("|", MainWindowForbidden.Where(f => f.Pattern.IsMatch(StripComments(snippet))).Select(f => f.Why));
+        Assert.Contains("raw file", Hit("File.Exists(p);"));
+        Assert.Contains("registry", Hit("Registry.CurrentUser.OpenSubKey(k);"));
+        Assert.Contains("updater", Hit("await Updater.CheckUpdateAsync(u, true);"));
+        Assert.Contains("mouse hook", Hit("new LowLevelMouseHook();"));
+        Assert.Contains("hotkey", Hit("Interop.RegisterHotKey(h, 1, 2, 3);"));
+        Assert.Contains("polling", Hit("var p = System.Windows.Forms.Cursor.Position;"));
+        Assert.Equal("", Hit("// File.Exists(p); Updater.Check()"));                      // comments are ignored
+        Assert.Equal("", Hit("_hotkeys.RegisterAll(h); _updates.CheckNowAsync();"));        // the use cases' own names are fine
+    }
+
     // ---- the scanner itself ------------------------------------------------------------------
 
     [Theory]

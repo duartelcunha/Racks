@@ -39,8 +39,11 @@ namespace Racks.Core
 
         // Move everything back where it came from. Returns how many items were restored.
         // Leaves the undo record cleared afterwards (can only undo once).
-        public int RestoreFiles()
+        // The broker and the shell gateway default to the app's own; tests pass their own.
+        public int RestoreFiles(Racks.Infrastructure.FileSystem.FileOperationBroker? broker = null, Racks.Infrastructure.Shell.ShellOperationGateway? shell = null)
         {
+            broker ??= Racks.Infrastructure.FileSystem.FileOperationBroker.Default;
+            shell ??= Racks.Infrastructure.Shell.ShellOperationGateway.Default;
             int restored = 0;
             foreach (var m in Moved)
             {
@@ -50,9 +53,9 @@ namespace Racks.Core
                     // If something already sits at the original spot, don't clobber it.
                     if (File.Exists(m.OriginalPath) || Directory.Exists(m.OriginalPath)) continue;
 
-                    if (Racks.Infrastructure.FileSystem.FileOperationBroker.Default.Move(m.NewPath, m.OriginalPath, "magic organize: undo").Completed)
+                    if (broker.Move(m.NewPath, m.OriginalPath, "magic organize: undo").Completed)
                     {
-                        Racks.Infrastructure.Shell.ShellOperationGateway.Default.NotifyItemMoved(m.NewPath, m.OriginalPath, Directory.Exists(m.OriginalPath));
+                        shell.NotifyItemMoved(m.NewPath, m.OriginalPath, Directory.Exists(m.OriginalPath));
                         restored++;
                     }
                 }
@@ -63,15 +66,16 @@ namespace Racks.Core
 
         // Remove the empty desktop folders this run created (Folders mode). Only deletes them
         // if they're empty after files were moved back, so we never delete user data.
-        public void RemoveCreatedFolders()
+        public void RemoveCreatedFolders(Racks.Infrastructure.FileSystem.FileOperationBroker? broker = null)
         {
+            broker ??= Racks.Infrastructure.FileSystem.FileOperationBroker.Default;
             foreach (var f in CreatedFolders)
             {
                 try
                 {
                     // The broker refuses anything that is not an empty, real, unprotected folder (never recursive).
                     if (Directory.Exists(f))
-                        Racks.Infrastructure.FileSystem.FileOperationBroker.Default.DeleteEmptyDirectory(f, "magic organize: undo, remove the folder it created");
+                        broker.DeleteEmptyDirectory(f, "magic organize: undo, remove the folder it created");
                 }
                 catch { }
             }

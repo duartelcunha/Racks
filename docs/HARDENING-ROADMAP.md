@@ -7,11 +7,12 @@ which tests were added.
 
 ## Where we are
 
-- **Current phase:** P6 (`RackSettingsSchema` + validator + repository), in review; P5 (typed `AppSettings` and
-  `MigrationMarkers`) is its base.
-- **Next step:** P7, decompose `MainWindow` (it still owns the static `MainWindow._controller`: 20 uses, of which
-  `InstanceController.RefreshMirror` is the only one outside presentation). The file allowlist
-  (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned state; its numbers only go down.
+- **Current phase:** P7 (decompose `MainWindow` into use cases), in review; P6 (`RackSettingsSchema` + validator +
+  repository) is its base.
+- **Next step:** P8, decompose `App` (bootstrap, migrations, crash reporting, uninstall mode; the `OnStartup` order stays).
+  `MainWindow._controller` is still a public static (20 uses, of which `InstanceController.RefreshMirror` is the only
+  one outside presentation). The file allowlist (`test/Racks.Tests/Guards/fs-allowlist.json`) is only Racks-owned
+  state; its numbers only go down.
 - **Base branch:** `feature/scandi-branding-and-stability` (4 commits not yet on `main`). Phase branches are
   `hardening/pN-<name>`; each PR targets the previous phase's branch until the base lands on `main`.
 - **Baseline (P0):** `dotnet test` = 493 passed, 1 skipped (`Category=ReleaseGate`, only runs in the release
@@ -30,7 +31,7 @@ which tests were added.
 | P4 | `AutoRouteService` + `RoutingPolicy`, testable `DesktopRouter`, watcher hardening | in review |
 | P5 | Typed `AppSettings` and `MigrationMarkers` for root registry values | in review |
 | P6 | `RackSettingsSchema` + validator + repository (golden fixtures first) | in review |
-| P7 | Decompose `MainWindow` | todo |
+| P7 | Decompose `MainWindow` (Magic Organize, hot corner, double-click hide, hotkeys, tray switches, update glue, display debounce) | in review |
 | P8 | Decompose `App` (bootstrap, migrations, crash reporting, uninstall mode) | todo |
 | P9 | Layout import/export: parser, validator, policy, executor | todo |
 | P10 | `UpdateService` split (behavior tests first; stays fail-closed) | todo |
@@ -227,6 +228,45 @@ which tests were added.
   a `Name` that differs from its key is used as is (audited), so a later save writes under that name.
 - Not done on purpose: `Test-Racks.ps1` and the dev-tools e2e were not run; `RackLayoutIO.Import/Export` still touch the registry
   directly (P9); `MoveFilesOnDrop` is still importable although it is discarded.
+
+### P7 in short (what changed)
+
+- `MainWindow.xaml.cs` went from 885 to 420 lines (longest method about 150 to 59; ratchets `mainWindowLines` 420 and
+  `mainWindowMethodMaxLines` 59 in `Guards/baseline.json`, plus "it is one file": no `MainWindow.*.cs` partial). It builds the
+  services by hand (no container), forwards events and shows windows and dialogs. Pure refactor: same order, threads, timing,
+  messages and registry values.
+- New in `Racks/UseCases/` (namespace `Racks.UseCases.*`): `MagicOrganize/MagicOrganizeService` (analyze, preview, Racks mode,
+  Folders mode, undo; talks to the UI through `IMagicOrganizeHost`), `HotCorner/HotCornerService` (the 100 ms poll as a two-state
+  machine; `IRepeatingScheduler` + `IHotCornerProbe` injected), `DoubleClickHide/DoubleClickHideService` (hook life + the pure
+  decision; `IGlobalMouseHook`, `IDesktopHitTest`), `Hotkeys/HotkeyController` (register, conflict report through a callback,
+  dispatch table, unregister; `IHotkeyApi`), `Tray/TrayToggleService` (what each tray switch does once flipped, over
+  `AppSettings` and the shell gateway; `IRackWindowControl`), `Updates/UpdateCheckService` (20 s background check, manual check,
+  1 min clean-up of old download folders; `Util/Updater` untouched), `Display/DisplayChangeDebouncer` (the
+  WM_DISPLAYCHANGE debounce).
+- Infrastructure side: `Infrastructure/Shell/GlobalMouseHook` + `DesktopHitTest` (the only code that touches H.Hooks, `WindowFromPoint`
+  and UI Automation), `Win32HotkeyApi`, `ScreenHotCornerProbe`. `Core/Abstractions` gained `IRepeatingScheduler` /
+  `DispatcherRepeatingScheduler`. Presentation adapters in `Views/`: `MagicOrganizeHost` (preview dialog, message boxes, rack windows
+  and the 100 ms stagger), `ControllerRackWindows`, `HotkeyConflictToast`, `SingleInstanceWindow<T>` (settings, help, dev
+  diagnostics), `TrayIconRegistrar`. `MagicOrganizeUndo.RestoreFiles/RemoveCreatedFolders` take an optional broker/gateway for tests.
+- **Kept on purpose, now documented and tested:** the constructor of `MainWindow` still assigns `IsChecked` on the tray switches
+  from the saved values, which fires their handlers, so each handler runs once at startup and re-writes what it just read (a
+  fresh install gets `IcePhysics=True` in the registry on the first start). The `WM_RACKS_TOGGLE_*` messages set `IsChecked` (the
+  event runs the handler) AND call the handler by hand (`FlipAndRun`), so the handler runs twice per message; every effect is
+  idempotent (the hot corner starts once), `TrayToggleServiceTests` pins both, including a real `Wpf.Ui.ToggleSwitch`.
+  `OnSourceInitialized` runs inside the constructor (`EnsureHandle` raises it, measured), before `_controller` exists, so the services
+  that WndProc and the hotkeys need are built in `ComposeHostServices()` BEFORE `EnsureHandle`, and the ones that hold the controller
+  after it (`ComposeRackServices()`).
+- Quirks found and kept (not fixed in a refactor): the second display message is tested as `0x001C`, which is `WM_ACTIVATEAPP` (the old comment
+  called it WM_WININICHANGE, 0x001A); Magic Organize asks `Directory.Exists(source)` AFTER the move to tell the shell whether the item
+  was a folder, so a moved folder is announced as a file; without Explorer the desktop hit test compares 0 with 0 and passes.
+- Removed: the unused `MainWindow._mainWindow` static and the `startOnLogin` field. `controllerUsages` stays 20 (the uses in
+  `MainWindow.xaml.cs` are the bare `_controller`, not counted by that regex); `MainWindow._controller` itself stays public.
+- Tests: 1225 to 1320 passed (+95, 4 skipped): fakes for time (`ManualRepeatingScheduler`), the registry (`InMemoryRegistryRoot`), the
+  shell and the UI; Magic Organize runs against temp folders and a throwaway registry key.
+- Guards: `PresentationBoundaryTests.MainWindow_delegates_instead_of_doing_the_work` (no file/registry/updater/hook/hotkey/cursor
+  code in `MainWindow.xaml.cs`, at most one `DispatcherTimer`).
+- Not done on purpose: `Test-Racks.ps1` and the dev-tools e2e were not run (they kill the running Racks and drive the real desktop);
+  no real tray, hotkey, mouse hook, display change or Explorer was exercised, only the logic behind them.
 
 ### Follow-ups recorded by the P2 review (not implemented)
 

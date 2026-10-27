@@ -40,6 +40,31 @@ public class ArchitectureRatchetTests
             $"RackWindow*.cs total {total} lines, baseline is {Baseline["rackWindowTotalLines"]}. Move logic out of the window instead of adding to it.");
     }
 
+    // MainWindow is the hidden host window: tray, hotkeys, IPC and delegation to Racks/UseCases (P7). It must not grow back,
+    // and a MainWindow.*.cs partial must not become the place where the growth hides (RackWindow's split taught us that).
+    [Fact]
+    public void MainWindow_code_behind_does_not_grow_and_is_one_file()
+    {
+        var parts = Directory.EnumerateFiles(Path.Combine(Root, "Racks"), "MainWindow*.cs").Select(Path.GetFileName).ToList();
+        Assert.Equal(new[] { "MainWindow.xaml.cs" }, parts);
+
+        var lines = File.ReadAllLines(Path.Combine(Root, "Racks", "MainWindow.xaml.cs"));
+        Assert.True(lines.Length <= Baseline["mainWindowLines"],
+            $"MainWindow.xaml.cs has {lines.Length} lines, baseline is {Baseline["mainWindowLines"]}. Put the logic in a class under Racks/UseCases instead.");
+
+        // Longest method with a block body at class level (8 spaces: "name(...)" on one line, "{" on the next, "}" at the same indent).
+        int longest = 0;
+        for (int i = 0; i + 1 < lines.Length; i++)
+        {
+            if (!Regex.IsMatch(lines[i], @"^ {8}\S") || !Regex.IsMatch(lines[i + 1], @"^ {8}\{\s*$")) continue;
+            int j = i + 2;
+            while (j < lines.Length && !Regex.IsMatch(lines[j], @"^ {8}\}\s*$")) j++;
+            longest = Math.Max(longest, j - i + 1);
+        }
+        Assert.True(longest <= Baseline["mainWindowMethodMaxLines"],
+            $"A MainWindow method has {longest} lines, the largest allowed is {Baseline["mainWindowMethodMaxLines"]}. Extract a use case.");
+    }
+
     [Fact]
     public void Static_service_locator_usage_does_not_grow()
     {

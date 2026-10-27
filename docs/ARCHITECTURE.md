@@ -14,7 +14,7 @@ the reverse).
 | Layer | What it may do | Folders today | New code goes in |
 |---|---|---|---|
 | Presentation | WPF only: windows, bindings, dialogs, delegating to services | `MainWindow*`, `RackWindow*`, `*Window.xaml.cs`, `RackSettingsDialog*`, `Views/`, `ViewModels/`, `Converters/`, `ColorPicker/`, `Shaders/` | stays here, shrinks |
-| Application (folder `UseCases/`) | Use cases and orchestration (what happens when a file is dropped, a route fires, an update is found) | `UseCases/AutoRoute/` (first use-case code, P4), parts of `Core/` (`AutoOrganizer`, `MagicOrganize*`), `Rack/` (`WorkspaceReturn`, `DesktopRackClaims`) | `Racks/UseCases/` (namespace `Racks.UseCases.*`; not `Racks.Application`, which would shadow `System.Windows.Application`) |
+| Application (folder `UseCases/`) | Use cases and orchestration (what happens when a file is dropped, a route fires, an update is found) | `UseCases/AutoRoute/` (P4), `UseCases/{MagicOrganize,HotCorner,DoubleClickHide,Hotkeys,Tray,Updates,Display}/` (P7), parts of `Core/` (`AutoOrganizer`, `MagicOrganize*`), `Rack/` (`WorkspaceReturn`, `DesktopRackClaims`) | `Racks/UseCases/` (namespace `Racks.UseCases.*`; not `Racks.Application`, which would shadow `System.Windows.Application`) |
 | Domain | Entities and rules, no I/O | `Core/Instance.cs`, `Core/FileItem.cs`, `Rack/RackNames.cs`, `Rack/Sorting/` | `Racks/Core/` |
 | Infrastructure | Everything that touches Windows: filesystem, shell, registry, HTTP, process, logging | most of `Util/` (`Safe*`, `Shell*`, `Interop`, `RegistryHelper`, `Updater`, `JunctionHelper`, ...), `Services/` | `Racks/Infrastructure/{FileSystem,Shell,Registry,Update,Logging}/` |
 | Shared | Small pure helpers used by every layer | `SafeRegex`, `SafeWpfValues`, path and name validation | `Racks/Infrastructure/` until a split is needed |
@@ -39,7 +39,9 @@ There is no DI container. `App.OnStartup` wires services by hand; the legacy sta
    `Infrastructure/Shell/ShellOperationGateway.Default`; `Guards/PresentationBoundaryTests` allows zero direct
    references to `Interop.NotifyShell*`, `DesktopIcons`, `DesktopIconPositioner` and `DesktopIconManager` in
    `MainWindow*`, `RackWindow*`, `App`, the dialogs, `Views/`, `ViewModels/` and `Converters/`. (The shell context
-   menu, window geometry/style Win32 calls, hotkeys, `Process.Start` and the tray stay in presentation on purpose.)
+   menu, window geometry/style Win32 calls, `Process.Start` and the tray control stay in presentation on purpose; since P7 the hotkeys,
+   the mouse hook, the hot-corner polling and the update glue are use cases, and `Guards/PresentationBoundaryTests` keeps
+   `MainWindow.xaml.cs` free of file, registry, updater, hook and cursor code.)
 4. **The update path is fail-closed.** Nothing downloaded runs unless the signed manifest, the host/path
    allowlist, the size and the SHA-256 all check out. See `docs/SECURITY-INVARIANTS.md` (INV-UPDATE-1).
 5. **Imports are validated before any state is written** and a bad file leaves the current layout untouched.
@@ -49,9 +51,21 @@ numbers in `Guards/baseline.json` may only go down.
 
 ## Where things live today
 
-- **Window hosting.** `MainWindow` is a hidden host: tray icon, global hotkeys, IPC (`WM_RACKS_*`), update
-  checks and Magic Organize. `RackWindow*` (partial class) is one rack. Both are larger than they should be and
-  are being split (phases P7, P8).
+- **Window hosting.** `MainWindow` is a hidden zero-size host: tray icon and its menu, the `WM_RACKS_*` IPC table, `WndProc`,
+  dialogs. Since P7 it only builds the services below by hand, forwards events and shows windows (one file, 420 lines, ratcheted).
+  `RackWindow*` (partial class) is one rack and is still larger than it should be. Order that matters: `OnSourceInitialized` runs
+  inside the constructor (`EnsureHandle`), before the controller exists, so `ComposeHostServices()` runs before `EnsureHandle` and
+  `ComposeRackServices()` after the controller.
+- **Host use cases (P7).** `UseCases/MagicOrganize/MagicOrganizeService` (analyze, preview, Racks or Folders mode, undo; every move
+  through the broker, windows and dialogs behind `IMagicOrganizeHost`, implemented by `Views/MagicOrganizeHost`),
+  `UseCases/HotCorner/HotCornerService` (100 ms poll, 16 px zone, 64 px leave margin, primary monitor only; scheduler and probe
+  injected), `UseCases/DoubleClickHide/DoubleClickHideService` (hook life and the pure decision; H.Hooks and UI Automation only in
+  `Infrastructure/Shell/GlobalMouseHook` and `DesktopHitTest`), `UseCases/Hotkeys/HotkeyController` (ids 0xB0CC/CD/CE, conflict
+  callback, dispatch), `UseCases/Tray/TrayToggleService` (what each tray switch does: `AppSettings`, shell gateway, hot corner, lock
+  all), `UseCases/Updates/UpdateCheckService` (background and manual check, old-download clean-up; the updater itself is untouched)
+  and `UseCases/Display/DisplayChangeDebouncer` (one reposition pass per burst). Composition is manual, no container; the static
+  `MainWindow._controller` stays for the rack windows. Tests use `ManualRepeatingScheduler`, `InMemoryRegistryRoot` and fakes for the
+  hook, hit test, hotkey API and host; none touches the real Desktop, shell, hotkeys or `HKCU\SOFTWARE\Racks`.
 - **Persistence.** `Core/InstanceController` asks the settings repository for the racks under
   `HKCU\SOFTWARE\Racks\Instances\<name>` and runs the post pass (Desktop-rack detection, the two one-shot migrations,
   the folder-missing flag, then the windows); `Core/Instance` writes through `Instance.Store` on every property change.
