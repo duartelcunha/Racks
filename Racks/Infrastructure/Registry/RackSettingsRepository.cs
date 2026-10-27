@@ -5,7 +5,14 @@ using Racks.Infrastructure.Logging;
 namespace Racks.Infrastructure.Registry;
 
 /// <summary>One rack as the loader found it: the registry key it came from and its validated settings.</summary>
-public sealed record LoadedRack(string KeyName, RackSettings Settings);
+public sealed record LoadedRack(string KeyName, RackSettings Settings)
+{
+    /// <summary>
+    /// True when the only things found were benign normalisations (a stored number clamped, no Name value): the caller may
+    /// save the rack once in normal form with <see cref="IRackSettingsStore.Normalize"/>. Never true for a rack that had a refused value.
+    /// </summary>
+    public bool NeedsNormalization { get; init; }
+}
 
 /// <summary>What <see cref="IRackSettingsStore.LoadAll"/> found: the racks that can be loaded, and every value that was refused or changed on the way.</summary>
 public sealed record RackLoadResult(IReadOnlyList<LoadedRack> Racks, IReadOnlyList<SettingIssue> Issues);
@@ -25,6 +32,12 @@ public interface IRackSettingsStore
 
     /// <summary>Writes every persisted value of <paramref name="rack"/> (a full save, as <c>WriteInstanceToKey</c> always did).</summary>
     bool Save(Instance rack);
+
+    /// <summary>
+    /// One explicit full save of a rack whose only findings were benign normalisations, audited as <c>SettingNormalized</c>.
+    /// Racks with refused values are never passed here: their raw data stays as the user left it.
+    /// </summary>
+    bool Normalize(Instance rack);
 
     /// <summary>Writes one value after it changed (the write-through of <c>Instance</c>).</summary>
     bool SaveField(Instance rack, string propertyName);
@@ -65,6 +78,8 @@ public sealed class RackSettingsRepository : IRackSettingsStore
     private readonly IAuditSink _audit;
     private readonly Func<RegistryKey?>? _openRootWritable;
     private readonly HashSet<string> _reportedGlobals = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _reportedRackIssues = new(StringComparer.Ordinal);
+    private const int MaxRememberedIssues = 4096;
 
     public RackSettingsRepository(IRackRegistry racks, IRegistryRoot root, IAuditSink? audit = null, Func<RegistryKey?>? openRootWritable = null)
     {
@@ -102,14 +117,18 @@ public sealed class RackSettingsRepository : IRackSettingsStore
             {
                 var values = _racks.ReadValues(keyName);
                 var settings = RackSettingsValidator.ValidateRack(keyName, values, rackIssues);
-                if (settings != null) racks.Add(new LoadedRack(keyName, settings));
+                if (settings != null)
+                    racks.Add(new LoadedRack(keyName, settings) { NeedsNormalization = rackIssues.Count > 0 && rackIssues.All(i => i.Normalizes) });
             }
             catch (Exception ex)
             {
                 rackIssues.Add(new SettingIssue(keyName, "(rack)", "(unreadable)", $"load failed: {ex.GetType().Name}: {ex.Message}",
                     "rack not loaded; its registry data is left untouched", "Failed"));
             }
-            foreach (var issue in rackIssues) Report(issue, _racks.Path + @"\" + issue.Rack + @"\" + issue.Field);
+            // The source is the real registry key, not the Name value (they can differ). A load no longer writes normalised
+            // values back, so the same finding would repeat on every start and reload: once per process is enough.
+            foreach (var issue in rackIssues)
+                if (FirstTime(keyName + "|" + issue.Field + "|" + issue.Raw)) Report(issue, _racks.Path + @"\" + keyName + @"\" + issue.Field);
             issues.AddRange(rackIssues);
         }
         return new RackLoadResult(racks, issues);
@@ -141,6 +160,22 @@ public sealed class RackSettingsRepository : IRackSettingsStore
 
     public bool Save(Instance rack) => WriteRack(rack, RackSettingsSchema.Persisted.OrderBy(d => d.Name == RackSettingsSchema.NameField ? 0 : 1), bulk: true);
 
+    public bool Normalize(Instance rack)
+    {
+        bool ok = Save(rack);
+        if (!ok) return false;
+        try
+        {
+            _audit.Write(new AuditEvent(Guid.NewGuid().ToString("N"), DateTime.UtcNow, "SettingNormalized", _racks.Path + @"\" + rack.Name, null,
+                "stored values were clamped or the Name was missing", "Succeeded", $"rack={rack.Name}; the rack was saved once in normal form"));
+        }
+        catch
+        {
+            // best-effort
+        }
+        return true;
+    }
+
     public bool SaveField(Instance rack, string propertyName)
     {
         // A name the schema does not know is not stored (IsShortcutsOnly, SettingDefault). The Name is written by a full
@@ -152,6 +187,8 @@ public sealed class RackSettingsRepository : IRackSettingsStore
     private bool WriteRack(Instance rack, IEnumerable<SettingDescriptor> descriptors, bool bulk)
     {
         string? name = rack.Name;
+        // A rack with no name has no key (a rack on a drive root has an empty name): there is nothing to write and nothing to report.
+        if (string.IsNullOrEmpty(name)) return false;
         if (!RackSettingsSchema.IsValidRackName(name))
         {
             ReportWriteFailed(_racks.Path + @"\" + name, "unsafe rack name", $"rack={name}");
@@ -240,6 +277,15 @@ public sealed class RackSettingsRepository : IRackSettingsStore
     }
 
     // ---- audit ---------------------------------------------------------------------------------------------------------
+
+    private bool FirstTime(string key)
+    {
+        lock (_reportedRackIssues)
+        {
+            if (_reportedRackIssues.Count >= MaxRememberedIssues) _reportedRackIssues.Clear();   // bounded; at worst a line repeats
+            return _reportedRackIssues.Add(key);
+        }
+    }
 
     private void ReportGlobalOnce(SettingIssue issue)
     {

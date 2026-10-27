@@ -106,11 +106,14 @@ public sealed class RackSettingsGoldenTests : IDisposable
 
     [Theory]
     [InlineData("en-US", GoldenRack.RawStyle.Invariant)]
-    [InlineData("pt-PT", GoldenRack.RawStyle.Invariant)]   // invariant text read under a comma culture: the doubles are only readable since P6b (the filter below)
+    [InlineData("pt-PT", GoldenRack.RawStyle.Invariant)]   // dot text on a comma machine: what this build writes
+    [InlineData("de-DE", GoldenRack.RawStyle.Invariant)]
     [InlineData("en-US", GoldenRack.RawStyle.CultureText)]
     [InlineData("pt-PT", GoldenRack.RawStyle.CultureText)] // "123,5": what a pt-PT install wrote
+    [InlineData("de-DE", GoldenRack.RawStyle.CultureText)]
     [InlineData("en-US", GoldenRack.RawStyle.Qword)]
     [InlineData("pt-PT", GoldenRack.RawStyle.Qword)]
+    [InlineData("de-DE", GoldenRack.RawStyle.Qword)]
     public void Hand_written_values_in_every_stored_form_load_back(string culture, GoldenRack.RawStyle style)
     {
         RackRegistryFixture.WithCulture(culture, () =>
@@ -119,16 +122,7 @@ public sealed class RackSettingsGoldenTests : IDisposable
 
             var loaded = _reg.LoadSingle(GoldenRack.Name);
 
-            var mismatches = GoldenRack.Mismatches(loaded);
-            if (culture == "pt-PT" && style != GoldenRack.RawStyle.CultureText)
-            {
-                // Before P6b "123.5" under pt-PT was not a number, so these doubles were ignored; P6b reads invariant text first
-                // (see RackSettingsValidationTests), so the filter only keeps this test valid for old builds' behaviour too.
-                mismatches = mismatches.Where(m => !m.StartsWith("PosX") && !m.StartsWith("PosY") && !m.StartsWith("Width")
-                    && !m.StartsWith("Height") && !m.StartsWith("IdleOpacity") && !m.StartsWith("AnimationSpeed")
-                    && !m.StartsWith("MaxGrayScaleStrength") && !m.StartsWith("TitleFontSize")).ToList();
-            }
-            Assert.Empty(mismatches);
+            Assert.Empty(GoldenRack.Mismatches(loaded));
         });
     }
 

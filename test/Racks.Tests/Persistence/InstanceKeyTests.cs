@@ -103,11 +103,23 @@ public sealed class InstanceKeyTests : IDisposable
         "SettingDefault",    // a mode flag of the "Default Style" instance
     };
 
+    private static readonly HashSet<string> TransientFields = new()
+    {
+        "isWindowClosing",   // set while a window closes, so nothing is saved
+        "IsFolderMissing",   // computed at load from the folder
+    };
+
     [Fact]
     public void Every_persisted_property_round_trips_through_write_and_load()
     {
+        // Public fields have no change event, so a full save is the only thing that writes them. Found by reflection; the two
+        // that are only run-time state are listed.
+        var persistedFields = typeof(Instance).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .Select(f => f.Name).Where(n => !TransientFields.Contains(n)).ToHashSet();
+        Assert.Equal(GoldenRack.Fields.Order().ToList(), persistedFields.Order().ToList());
+
         var persisted = AnnouncedProperties().Where(n => !NotPersistedOnPurpose.Contains(n))
-            .Concat(GoldenRack.Fields).ToHashSet();
+            .Concat(persistedFields).ToHashSet();
 
         Assert.True(persisted.Count > 50, "the property scan found too few properties");
         Assert.Empty(persisted.Except(GoldenRack.Names).Order().ToList());   // a new persisted member: add it to GoldenRack
@@ -131,25 +143,31 @@ public sealed class InstanceKeyTests : IDisposable
             using var noWrites = probe.SuspendPersistence();
             bool raised = false;
             probe.PropertyChanged += (_, e) => raised |= e.PropertyName == p.Name;
-            object? candidate = GoldenRack.NonDefault.TryGetValue(p.Name, out var golden) ? golden : Candidate(p);
-            if (candidate == null) continue;
-            try { p.SetValue(probe, candidate); } catch { continue; }
-            if (raised) found.Add(p.Name);
+            // A new bool that defaults to true must not slip by: try the value that differs from the current one, then the other.
+            var candidates = GoldenRack.NonDefault.TryGetValue(p.Name, out var golden)
+                ? new List<object?> { golden }
+                : Candidates(p, p.GetValue(probe));
+            foreach (var candidate in candidates)
+            {
+                if (candidate == null) continue;
+                try { p.SetValue(probe, candidate); } catch { continue; }
+                if (raised) { found.Add(p.Name); break; }
+            }
         }
         return found;
     }
 
-    private static object? Candidate(System.Reflection.PropertyInfo p)
+    private static List<object?> Candidates(System.Reflection.PropertyInfo p, object? current)
     {
         var t = p.PropertyType;
-        if (t == typeof(bool)) return true;
-        if (t == typeof(int)) return 7;
-        if (t == typeof(double)) return 7.5;
-        if (t == typeof(string)) return p.Name.EndsWith("Color") ? "#010203" : p.Name.EndsWith("FontFamily") ? "Arial" : "zz";
-        if (t == typeof(List<string>)) return new List<string> { "q" };
-        if (t == typeof(int[])) return new[] { 7 };
-        if (t == typeof(List<Tuple<string, string>>)) return new List<Tuple<string, string>> { Tuple.Create("q", "1") };
-        if (t.IsEnum) return Enum.GetValues(t).Cast<object>().Last();
-        return null;
+        if (t == typeof(bool)) return new List<object?> { !(bool)current!, (bool)current! };
+        if (t == typeof(int)) return new List<object?> { (int)current! + 1, 7 };
+        if (t == typeof(double)) return new List<object?> { (double)current! + 1.5, 7.5 };
+        if (t == typeof(string)) return new List<object?> { p.Name.EndsWith("Color") ? "#010203" : p.Name.EndsWith("FontFamily") ? "Arial" : "zz" };
+        if (t == typeof(List<string>)) return new List<object?> { new List<string> { "q" } };
+        if (t == typeof(int[])) return new List<object?> { new[] { 7 } };
+        if (t == typeof(List<Tuple<string, string>>)) return new List<object?> { new List<Tuple<string, string>> { Tuple.Create("q", "1") } };
+        if (t.IsEnum) return Enum.GetValues(t).Cast<object?>().Where(v => !Equals(v, current)).ToList();
+        return new List<object?>();
     }
 }

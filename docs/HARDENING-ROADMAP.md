@@ -203,11 +203,24 @@ which tests were added.
   `Folder`/`BackgroundImagePath` containing control characters are refused (a NUL in `Folder` used to abort the whole load);
   `Enum.TryParse` combinations such as `Left, Right` are refused; `IsShortcutsOnly` is no longer written to the rack key (it was
   never read back); the junk text `System.Collections.Generic.List...` is no longer written to the root by a "Default Style" instance.
-- **Culture and downgrade.** Doubles (`PosX`, `Width`, `IdleOpacity`, ...) are written as invariant text (`123.5`) whatever the culture;
-  the reader tries invariant first, then the current culture, so values written by older builds (`123,5` on pt-PT) still load. An
-  **older build on a comma-decimal machine cannot read `123.5`** and keeps the default for that value after a downgrade. Integers stay
-  REG_DWORD (the write-through used to store them as REG_SZ), switches stay `True`/`False`, lists as before; the global defaults stay
-  REG_SZ text (an older build reads the root with a text reader).
+- **Culture and downgrade.** Doubles (`PosX`, `Width`, `IdleOpacity`, ...) are written as invariant text (`123.5`) whatever the culture.
+  The reader tries invariant text first, then the current culture. The real rule: **invariant text is read correctly in every culture;
+  legacy culture text (`123,5`) is read correctly only in the culture that wrote it** (an en-US machine reads `321,75` as 32175, as the
+  old reader did). A **downgrade is unsafe**: an older build on a culture whose group separator is a space (pt-PT, fr-FR) does not
+  parse `123.5` and uses the defaults; on cultures whose group separator is '.' (de-DE, es-ES, it-IT, pt-BR, nl-NL) the old parser
+  (`AllowThousands`) reads `0.4` as 4 and `321.75` as 32175, which can corrupt geometry and opacity. Recommendation: do not downgrade
+  (or re-save the racks there). Integers stay REG_DWORD (the write-through used to store them as REG_SZ), switches stay `True`/`False`,
+  lists as before; the global defaults stay REG_SZ text (an older build reads the root with a text reader).
+- **Audit volume and normalisation (review fixes).** A load no longer writes normalised values back, so the same finding would repeat on every
+  start: findings are logged once per process per (rack key, field, raw value). A rack whose ONLY findings are benign (a stored
+  number clamped, a missing/empty `Name`) is saved once in full, explicitly, as `SettingNormalized`, so the registry is corrected
+  once and later loads are silent; a rack with any refused value or dropped list item is never rewritten (the user's raw data stays
+  until they change it). A `Name` that differs from its key only in case (a case-only rename) is not a finding. A hand-edited rack
+  whose `Name` differs from its key in more than case gets its one-shot migrations in memory only (a write would create a
+  skeleton key under that name that loads as a "folder missing" ghost).
+- Behaviour note: `ShowOnVirtualDesktops` `1,abc` now becomes `[1]` (it used to be dropped whole, meaning "all desktops").
+- Follow-up (pre-existing, not fixed): a rack whose folder is a drive root has the name `""`; it has no registry key, so it is never
+  persisted. Saving it is now a silent skip (it used to log a write failure on every change).
 - Kept on purpose: the two one-shot migrations still write through the setters after a load; a full save leaves an empty
   `LastAccessedFiles`/`CustomOrderFiles` value alone while a single-value write stores the empty list (and `AssignedFiles` is removed
   when empty), exactly as before; `BackgroundImagePath` is stored as typed (the local-drive check stays where the image is loaded);

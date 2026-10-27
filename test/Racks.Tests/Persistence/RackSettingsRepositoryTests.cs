@@ -210,6 +210,18 @@ public sealed class RackSettingsRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void A_rack_without_a_name_is_not_saved_and_not_reported()
+    {
+        // A rack whose folder is a drive root has no name (pre-existing): there is no key to write, and nothing to report on every change.
+        var rack = new Instance("", false);
+        rack.IconSize = 64;
+        rack.PosX = 5;
+        Assert.False(_reg.Repository.Save(rack));
+        Assert.Empty(_reg.Audit.Events);
+        Assert.False(_reg.RackKeyExists(""));
+    }
+
+    [Fact]
     public void A_failing_root_still_gives_a_new_rack_its_built_in_defaults()
     {
         var previous = Instance.Store;
@@ -240,6 +252,7 @@ public sealed class RackSettingsRepositoryTests : IDisposable
         public RackLoadResult LoadAll() => new(Array.Empty<LoadedRack>(), Array.Empty<SettingIssue>());
         public RackSettings ReadGlobalStyleDefaults() => new();
         public bool Save(Instance rack) => true;
+        public bool Normalize(Instance rack) => true;
         public bool SaveField(Instance rack, string propertyName) { Fields.Add(propertyName); return true; }
         public bool SaveGlobalDefault(Instance rack, string propertyName) => true;
         public bool Delete(string name) => true;

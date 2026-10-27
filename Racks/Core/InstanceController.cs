@@ -453,6 +453,15 @@ public class InstanceController
                 if (rack.Settings.Name == "empty") continue;
                 Instance temp = Racks.Infrastructure.Registry.RackSettingsMapper.ToInstance(rack.Settings);
 
+                // Benign findings only (a clamped number, no Name value): save the rack once in normal form, audited.
+                if (rack.NeedsNormalization) Instance.Store.Normalize(temp);
+
+                // A hand-edited rack whose Name differs from its key (beyond case) has no key under its Name. A write
+                // there would create a skeleton key without a Name, which loads as a "folder missing" ghost next time, so
+                // the one-shot migrations below change such a rack in memory only (it is audited as a Name mismatch).
+                bool nameMatchesKey = string.Equals(rack.KeyName, temp.Name, StringComparison.OrdinalIgnoreCase);
+                using var quiet = nameMatchesKey ? null : temp.SuspendPersistence();
+
                 // Auto-detect Desktop Filter Racks: if the rack's
                 // Folder points at the user's Desktop, mark it as a
                 // Desktop Filter Rack even if the registry flag was

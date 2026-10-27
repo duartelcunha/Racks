@@ -155,13 +155,15 @@ public sealed class RackSettingsValidationTests : IDisposable
 
     // ---- numbers and cultures --------------------------------------------------------------------------------------------------
 
+    // The real rule: invariant text ("0.5", what this build writes) is read correctly in EVERY culture; legacy culture text
+    // ("0,5", what older builds wrote) is read correctly only in the culture that wrote it (see the en-US test below).
     [Theory]
-    [InlineData("pt-PT", "0,5")]   // what an older build wrote on a comma machine
-    [InlineData("pt-PT", "0.5")]   // what this build writes, read on the same machine
-    [InlineData("en-US", "0.5")]
+    [InlineData("pt-PT", "0,5")]   // legacy text, in the culture that wrote it
     [InlineData("de-DE", "0,5")]
+    [InlineData("pt-PT", "0.5")]   // invariant text, in a comma culture
     [InlineData("de-DE", "0.5")]
-    public void Both_decimal_spellings_are_read_in_every_culture(string culture, string text)
+    [InlineData("en-US", "0.5")]
+    public void Invariant_text_is_read_in_every_culture_and_legacy_text_in_the_culture_that_wrote_it(string culture, string text)
     {
         RackRegistryFixture.WithCulture(culture, () =>
         {
@@ -169,6 +171,18 @@ public sealed class RackSettingsValidationTests : IDisposable
             var rack = _reg.LoadSingle("Cult");
             Assert.Equal(0.5, rack.IdleOpacity);
             if (culture != "en-US") Assert.Equal(12.5, rack.TitleFontSize);
+        });
+    }
+
+    [Fact]
+    public void Legacy_comma_text_read_in_a_dot_culture_means_what_it_always_did()
+    {
+        // en-US reads "321,75" as 32175 (comma = thousands), exactly like the old reader. Only the culture that wrote the
+        // text reads it back correctly, which is why new writes are invariant.
+        RackRegistryFixture.WithCulture("en-US", () =>
+        {
+            _reg.SeedRack("Legacy", Rack("Legacy", ("Width", "321,75", RegistryValueKind.String)));
+            Assert.Equal(32175, _reg.LoadSingle("Legacy").Width);
         });
     }
 
@@ -275,11 +289,38 @@ public sealed class RackSettingsValidationTests : IDisposable
     }
 
     [Fact]
-    public void A_Name_that_differs_from_its_key_is_used_and_recorded()
+    public void A_Name_that_differs_from_its_key_is_used_and_recorded_with_the_key_as_source()
     {
         _reg.SeedRack("key-name", Rack("Value Name"));
         Assert.Equal("Value Name", Assert.Single(_reg.Load()).Name);
-        Assert.Single(Fallbacks("Name"));
+        var record = Assert.Single(Fallbacks("Name"));
+        Assert.EndsWith(@"\Instances\key-name\Name", record.Source);   // the registry key, not the Name value
+    }
+
+    [Fact]
+    public void A_Name_that_differs_from_its_key_only_in_case_is_not_a_finding()
+    {
+        // Renaming "work" to "Work" reopens the same key (the registry ignores case) and stores Name "Work" under key "work".
+        _reg.SeedRack("work", Rack("Work"));
+        Assert.Equal("Work", Assert.Single(_reg.Load()).Name);
+        _reg.Load();
+        Assert.Empty(Fallbacks());
+    }
+
+    [Fact]
+    public void A_Name_that_differs_in_more_than_case_leaves_the_key_alone_when_the_migrations_run()
+    {
+        string virtualFolder = Path.Combine(InstanceController.VirtualFramesRoot, "Other");
+        _reg.SeedRack("key-name", Rack("Other", ("Folder", virtualFolder, RegistryValueKind.String),
+            ("LinkOnDrop", "True", RegistryValueKind.String), ("FolderOpenInsideFrame", "True", RegistryValueKind.String)));
+        string before = _reg.SnapshotAll();
+
+        var rack = Assert.Single(_reg.Load(revertMigration: true, folderOpenMigration: true));
+
+        Assert.False(rack.LinkOnDrop);                       // changed in memory
+        Assert.False(rack.FolderOpenInsideFrame);
+        Assert.Equal(before, _reg.SnapshotAll());            // and nothing written: no skeleton key under "Other"
+        Assert.False(_reg.RackKeyExists("Other"));
     }
 
     [Theory]
@@ -351,6 +392,80 @@ public sealed class RackSettingsValidationTests : IDisposable
         var repo = new RackSettingsRepository(new FailingRackRegistry(HkcuRackRegistry.ForApp()) { FailList = true }, HkcuRegistryRoot.ForApp(), _reg.Audit);
         Assert.Empty(repo.LoadAll().Racks);
         Assert.Single(Fallbacks());
+    }
+
+    // ---- the same finding is not logged on every start ------------------------------------------------------------------------------------
+
+    [Fact]
+    public void A_second_load_of_the_same_state_adds_no_audit_records()
+    {
+        _reg.SeedRack("A", Rack("A", ("PosX", "NaN", RegistryValueKind.String), ("ShowOnVirtualDesktops", "1,x", RegistryValueKind.String)));
+        _reg.SeedRack("B", Rack("B", ("TitleFontFamily", @"\\h\s\#F", RegistryValueKind.String)));
+
+        _reg.Load();
+        int first = _reg.Audit.Events.Count;
+        Assert.Equal(3, first);
+        _reg.Load();
+        _reg.Repository.LoadAll();
+
+        Assert.Equal(first, _reg.Audit.Events.Count);
+    }
+
+    [Fact]
+    public void A_changed_stored_value_is_a_new_finding()
+    {
+        _reg.SeedRack("A", Rack("A", ("PosX", "NaN", RegistryValueKind.String)));
+        _reg.Load();
+        _reg.SeedRack("A", "PosX", "Infinity", RegistryValueKind.String);
+        _reg.Load();
+        Assert.Equal(2, Fallbacks("PosX").Count);
+    }
+
+    [Fact]
+    public void Benign_findings_normalise_the_rack_exactly_once()
+    {
+        // What the old write-through left behind: an unclamped IconSize as text, and a rack with no Name value.
+        _reg.SeedRack("Old", new (string, object, RegistryValueKind)[]
+        {
+            ("Folder", Path.GetTempPath(), RegistryValueKind.String),
+            ("IconSize", "4", RegistryValueKind.String),
+            ("PosX", "12", RegistryValueKind.String),
+        });
+
+        var rack = Assert.Single(_reg.Load());
+
+        Assert.Equal(16, rack.IconSize);
+        Assert.Equal("Old", rack.Name);
+        Assert.Equal((16, RegistryValueKind.DWord), ((int)_reg.RawRack("Old", "IconSize").Data!, _reg.RawRack("Old", "IconSize").Kind!.Value));
+        Assert.Equal("Old", _reg.RawRack("Old", "Name").Data);
+        Assert.Single(_reg.Audit.Events, e => e.Kind == "SettingNormalized");
+        int records = _reg.Audit.Events.Count;
+
+        var freshRepository = new RackSettingsRepository(HkcuRackRegistry.ForApp(), HkcuRegistryRoot.ForApp(), new Racks.Tests.Fakes.RecordingAuditSink());
+        Assert.Empty(freshRepository.LoadAll().Issues);       // nothing left to report, even to a repository that has not seen it before
+        _reg.Load();
+        Assert.Equal(records, _reg.Audit.Events.Count);
+    }
+
+    [Fact]
+    public void A_rack_with_a_refused_value_is_never_normalised_so_the_raw_data_stays()
+    {
+        _reg.SeedRack("Mixed", Rack("Mixed", ("IconSize", "4", RegistryValueKind.String), ("PosX", "NaN", RegistryValueKind.String)));
+        string before = _reg.SnapshotAll();
+
+        _reg.Load();
+
+        Assert.Equal(before, _reg.SnapshotAll());
+        Assert.DoesNotContain(_reg.Audit.Events, e => e.Kind == "SettingNormalized");
+    }
+
+    [Fact]
+    public void Dropped_list_items_are_not_normalised_away()
+    {
+        _reg.SeedRack("Lst", Rack("Lst", ("ShowOnVirtualDesktops", "1,x,3", RegistryValueKind.String)));
+        string before = _reg.SnapshotAll();
+        _reg.Load();
+        Assert.Equal(before, _reg.SnapshotAll());
     }
 
     // ---- loading never writes ---------------------------------------------------------------------------------------------------------------------

@@ -13,7 +13,8 @@ namespace Racks.Infrastructure.Registry;
 /// <param name="Reason">Why it was not used as stored.</param>
 /// <param name="Fallback">What applies instead.</param>
 /// <param name="Status">Rejected (a fallback applies), or Skipped (the whole rack was not loaded).</param>
-public sealed record SettingIssue(string Rack, string Field, string Raw, string Reason, string Fallback, string Status = "Rejected");
+/// <param name="Normalizes">True for the two benign cases (a stored number clamped, a missing Name): the stored value is not wrong data, so the rack may be saved once in normal form.</param>
+public sealed record SettingIssue(string Rack, string Field, string Raw, string Reason, string Fallback, string Status = "Rejected", bool Normalizes = false);
 
 public enum ParseStatus
 {
@@ -27,7 +28,7 @@ public enum ParseStatus
     Rejected,
 }
 
-public readonly record struct ParseResult(ParseStatus Status, object? Value = null, string Reason = "", string Fallback = "");
+public readonly record struct ParseResult(ParseStatus Status, object? Value = null, string Reason = "", string Fallback = "", bool Normalizes = false);
 
 /// <summary>
 /// Strict parsing of stored rack values (INV-REG-2). Every value passes through <see cref="Parse"/> before it can
@@ -78,7 +79,7 @@ public static class RackSettingsValidator
                 break;
             case ParseStatus.Changed:
                 settings.Set(descriptor.Name, result.Value);
-                issues.Add(new SettingIssue(rack, descriptor.Name, Describe(raw), result.Reason, result.Fallback));
+                issues.Add(new SettingIssue(rack, descriptor.Name, Describe(raw), result.Reason, result.Fallback, Normalizes: result.Normalizes));
                 break;
             case ParseStatus.Rejected:
                 issues.Add(new SettingIssue(rack, descriptor.Name, Describe(raw), result.Reason, DefaultText(descriptor)));
@@ -107,7 +108,8 @@ public static class RackSettingsValidator
         }
         else
         {
-            if (!string.Equals(text, keyName, StringComparison.Ordinal))
+            // The registry compares key names without regard to case: a case-only rename keeps the old key spelling.
+            if (!string.Equals(text, keyName, StringComparison.OrdinalIgnoreCase))
                 issues.Add(new SettingIssue(text, RackSettingsSchema.NameField, keyName,
                     "the Name value differs from the registry key it is stored in", "the Name value is used"));
             return text;
@@ -119,8 +121,9 @@ public static class RackSettingsValidator
                 fallbackReason + ", and the key name is not a safe rack name", "rack not loaded; its registry data is left untouched", "Skipped"));
             return null;
         }
+        bool benign = stored == null || fallbackReason == "the Name value is empty";
         issues.Add(new SettingIssue(keyName, RackSettingsSchema.NameField, stored == null ? "(missing)" : Describe(stored.Value),
-            fallbackReason, "the registry key name is used"));
+            fallbackReason, "the registry key name is used", Normalizes: benign));
         return keyName;
     }
 
@@ -167,7 +170,7 @@ public static class RackSettingsValidator
         if (v >= d.Min && v <= d.Max) return new ParseResult(ParseStatus.Accepted, (int)v);
         if (d.Range == RangePolicy.Reject) return Rejected($"out of range ({Num(d.Min)} to {Num(d.Max)})");
         int clamped = (int)Math.Clamp(v, d.Min, d.Max);
-        return new ParseResult(ParseStatus.Changed, clamped, $"out of range ({Num(d.Min)} to {Num(d.Max)})", $"clamped to {clamped}");
+        return new ParseResult(ParseStatus.Changed, clamped, $"out of range ({Num(d.Min)} to {Num(d.Max)})", $"clamped to {clamped}", Normalizes: true);
     }
 
     private static ParseResult ParseBool(RegistryValue raw)

@@ -131,7 +131,8 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   `Nothing_outside_SafeMove_deletes_folders_recursively`)*
 - **INV-IDS-1** Identificadores persistidos são leaf names por contrato: no load, descartar entradas
   onde `Path.GetFileName(name) != name`; após cada `Path.Combine` com dados guardados, afirmar que o
-  path resolvido fica sob a raiz esperada. O nome de uma rack (que é uma chave do registo) é validado no load
+  path resolvido fica sob a raiz esperada. (`AssignedFiles`: o load **mantém** as entradas como estão e a verificação
+  faz-se no uso, onde `RackWindow` salta as que têm `Path.GetFileName(name) != name`, ver I2.) O nome de uma rack (que é uma chave do registo) é validado no load
   e em cada escrita ou remoção por `RackSettingsSchema.IsValidRackName` (um segmento, sem `\` nem `/`, nem `.`/`..`,
   até 255 caracteres): o mesmo critério do import (INV-REG-2). *(teste)*
 - **INV-FS-1** Toda a operação destrutiva sobre ficheiros do utilizador (mover, renomear, apagar,
@@ -240,7 +241,7 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   (nome, tipo, limites, valor por omissão, se o import o aceita, se é estilo global). Essa tabela deriva a lista
   de importação (`RackLayoutIO`), o leitor, os escritores e a leitura dos estilos globais. No load cada valor
   passa por `RackSettingsValidator` **antes** de chegar ao modelo e um valor inválido **nunca é aplicado**: números
-  em texto invariante primeiro e depois na cultura atual (`0.5` e `0,5` lêem-se em qualquer cultura), NaN/Infinity/
+  em texto invariante primeiro e depois na cultura atual (o texto invariante, `0.5`, lê-se bem em qualquer cultura; o texto antigo de cultura, `0,5`, só se lê bem na cultura que o escreveu: em en-US `0,5` lê-se como 5, como no leitor antigo), NaN/Infinity/
   overflow recusados, limites por campo (`IconSize` 16-256 e `GridSize` 2-256 são cortados como os setters; os
   outros números fora do intervalo são recusados e vale o valor por omissão), booleanos só `True`/`False`, enums só
   membros definidos, fontes e cores só pelo `SafeWpfValues`, caminhos sem caracteres de controlo, nome da rack um
@@ -252,7 +253,7 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   valor em bruto até 200 caracteres, motivo, valor usado); um valor simplesmente em falta não gera registo. Uma
   escrita falhada devolve `false` e deixa um registo `SettingWriteFailed`; nada disto lança para a interface. Os tipos
   de valor gravados mantêm-se (inteiros REG_DWORD, interruptores `True`/`False`, listas como antes); os números
-  decimais passam a ser gravados em texto invariante. *(teste: `RackSettingsGoldenTests`, `RackSettingsValidationTests`,
+  decimais passam a ser gravados em texto invariante (um build antigo numa cultura com vírgula ou com ponto como separador de milhares lê mal esse texto: não recuar de versão). Cada achado regista-se uma vez por processo (rack, campo, valor); uma rack só com achados benignos (número cortado, `Name` em falta) é guardada uma vez em forma normal (`SettingNormalized`), nunca uma rack com valores recusados; um `Name` que difere da chave só em maiúsculas não é achado. *(teste: `RackSettingsGoldenTests`, `RackSettingsValidationTests`,
   `RackSettingsRepositoryTests`, `RackSettingsSchemaTests`; raiz descartável `Software\RacksTests-<guid>`, nunca
   a chave real)*
 ---
