@@ -1,64 +1,32 @@
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Racks.Util;
+using Racks.Views;
 
 namespace Racks.Tests.AutoRoute;
 
-// Instance.AutoRouteRegex keeps only a pattern that can run (INV-ROUTE-1, INV-REGEX-1). Like the font and color
-// setters, a value that is not usable is ignored and the previous one stays. The registry load and the layout
-// import both assign through this setter, so they behave the same way.
+// Instance.AutoRouteRegex stores exactly what it is given (INV-ROUTE-1): a saved rule is never lost because a
+// check failed while loading (the slow-pattern probe is a wall-clock test, and a busy machine can fail it for a
+// fine pattern). The registry load and the layout import assign through this setter. Whether a rule can run is
+// decided by AutoRouteService (see AutoRouteServiceTests); whether a NEW rule may be saved, by the rule dialog.
 public class AutoRouteRegexSetterTests
 {
-    private static Instance NewRack()
-    {
-        var rack = new Instance("R", false);
-        return rack;
-    }
+    private static Instance NewRack() => new("R", false);
 
     [Theory]
     [InlineData(@"\.pdf$")]
-    [InlineData(@"^report-.*\.pdf$")]
-    [InlineData(@".*screenshot.*")]
-    [InlineData(@"(jpg|png|gif)$")]
-    public void A_valid_pattern_is_kept(string pattern)
-    {
-        var rack = NewRack();
-        using (rack.SuspendPersistence()) rack.AutoRouteRegex = pattern;
-        Assert.Equal(pattern, rack.AutoRouteRegex);
-    }
-
-    [Theory]
     [InlineData("([unclosed")]
-    [InlineData("*leading-star")]
-    [InlineData("(?<n>a)(?<n")]
-    public void An_invalid_pattern_is_rejected_and_the_previous_one_stays(string pattern)
-    {
-        var rack = NewRack();
-        using (rack.SuspendPersistence())
-        {
-            rack.AutoRouteRegex = @"\.pdf$";
-            rack.AutoRouteRegex = pattern;
-        }
-        Assert.Equal(@"\.pdf$", rack.AutoRouteRegex);
-    }
-
-    [Theory]
     [InlineData("(a+)+$")]
-    [InlineData("(a|aa)+$")]
+    [InlineData("  spaced  ")]
     [InlineData(@"^(\w+\s?)*$")]
-    [InlineData("(.*a){30}")]
-    public void A_pattern_that_is_too_slow_is_rejected_and_the_check_is_bounded(string pattern)
+    public void The_text_is_kept_as_given_even_when_it_cannot_run(string pattern)
     {
         var rack = NewRack();
-        var sw = Stopwatch.StartNew();
         using (rack.SuspendPersistence())
         {
-            rack.AutoRouteRegex = "keep";
+            rack.AutoRouteRegex = @"\.old$";
             rack.AutoRouteRegex = pattern;
         }
-        sw.Stop();
-        Assert.Equal("keep", rack.AutoRouteRegex);
-        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5), "the probe is bounded by the match timeout");
+        Assert.Equal(pattern, rack.AutoRouteRegex);
     }
 
     [Fact]
@@ -77,13 +45,40 @@ public class AutoRouteRegexSetterTests
     }
 
     [Fact]
-    public void A_rejected_value_raises_no_change_notification()
+    public void A_change_raises_one_notification_and_the_same_text_none()
     {
         var rack = NewRack();
         int changes = 0;
         rack.PropertyChanged += (_, _) => changes++;
-        using (rack.SuspendPersistence()) rack.AutoRouteRegex = "([unclosed";
-        Assert.Equal(0, changes);
+        using (rack.SuspendPersistence())
+        {
+            rack.AutoRouteRegex = "([unclosed";
+            rack.AutoRouteRegex = "([unclosed";
+        }
+        Assert.Equal(1, changes);
+    }
+
+    // ---- the edit-time check (rule dialog) --------------------------------------------------
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(@"\.pdf$")]
+    [InlineData(@"^report-.*\.pdf$")]
+    [InlineData("(jpg|png|gif)$")]
+    public void The_editor_accepts_empty_and_usable_patterns(string text) => Assert.True(AutoRouteRuleDialog.IsSavable(text));
+
+    [Theory]
+    [InlineData("([unclosed")]
+    [InlineData("*leading-star")]
+    [InlineData("(a+)+$")]
+    [InlineData("(a|aa)+$")]
+    [InlineData(@"^(\w+\s?)*$")]
+    [InlineData("(.*a){30}")]
+    public void The_editor_refuses_invalid_and_too_slow_patterns_within_a_bounded_time(string text)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Assert.False(AutoRouteRuleDialog.IsSavable(text));
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5), "the probe is bounded by the match timeout");
     }
 
     [Fact]

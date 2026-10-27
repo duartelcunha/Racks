@@ -27,7 +27,7 @@ namespace Racks.Util
             // Let the startup animation play out first, then follow with the toast.
             Task.Delay(3000).ContinueWith(_ =>
             {
-                System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                 {
                     try { ShowToast(); } catch { /* toast is best-effort */ }
                 }));

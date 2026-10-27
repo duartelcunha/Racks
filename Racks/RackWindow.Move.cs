@@ -79,7 +79,7 @@ namespace Racks
                 int windowRight = windowRect.Right;
                 int windowBottom = windowRect.Bottom;
 
-                var mainWindow = System.Windows.Application.Current.MainWindow as MainWindow;
+                var mainWindow = Application.Current.MainWindow as MainWindow;
                 if (mainWindow == null) return;
 
                 int newWindowLeft = windowLeft;
@@ -180,7 +180,7 @@ namespace Racks
                 int windowRight = windowRect.Right;
                 int windowBottom = windowRect.Bottom;
 
-                var mainWindow = System.Windows.Application.Current.MainWindow as MainWindow;
+                var mainWindow = Application.Current.MainWindow as MainWindow;
                 if (mainWindow == null) return;
 
                 int newWindowLeft = windowLeft;
@@ -406,7 +406,7 @@ namespace Racks
                 // friction and bouncing off screen edges. The pushed rack, once moving, imparts
                 // to its own neighbours through the same loop, so pushes chain A -> B -> C.
                 var myRect = new Rect(this.Left, this.Top, this.Width, this.Height);
-                foreach (var win in System.Windows.Application.Current.Windows)
+                foreach (var win in Application.Current.Windows)
                 {
                     if (win is not RackWindow other || other == this
                         || other._isTopmost || other._isLocked || other._physics == null) continue;

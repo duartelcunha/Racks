@@ -27,7 +27,7 @@ namespace Racks
         private LowLevelMouseHook? _lowLevelMouseHook;
         private QuickFinderWindow? _quickFinder;
         private DesktopRouter _desktopRouter = null!;
-        private Racks.Application.AutoRoute.AutoRouteService _autoRouteService = null!;
+        private Racks.UseCases.AutoRoute.AutoRouteService _autoRouteService = null!;
         private System.Windows.Threading.DispatcherTimer? _hotCornerTimer;
         private bool _hotCornerHidden; // tracks whether racks are currently hidden by hot-corner
         private const int QUICK_FINDER_HOTKEY_ID = 0xB0CC;
@@ -77,7 +77,7 @@ namespace Racks
 
         public MainWindow()
         {
-            System.Windows.Application.Current.MainWindow = this;
+            Application.Current.MainWindow = this;
             _mainWindow = this;
             InitializeComponent();
             new WindowInteropHelper(this).EnsureHandle();
@@ -88,10 +88,10 @@ namespace Racks
             // becomes Application.MainWindow" default would otherwise leave MainWindow
             // pointing at the animation window - which closes itself a couple seconds
             // later. Wpf.Ui.Tray's TrayManager resolves the tray icon's owner HWND via
-            // System.Windows.Application.Current.MainWindow, and RackWindow's drag/snap logic does the
+            // Application.Current.MainWindow, and RackWindow's drag/snap logic does the
             // same via an "as MainWindow" cast, so both silently broke once that window
             // closed / never matched. Claim the slot explicitly so it always points here.
-            System.Windows.Application.Current.MainWindow = this;
+            Application.Current.MainWindow = this;
 
             // Tray-menu header shows just "Racks" in a clean font. The version is still
             // available in the About window and as the ToolTip on this header for nerds.
@@ -105,8 +105,8 @@ namespace Racks
             // only hands it the racks, a way to save one, and the workspace folder.
             try
             {
-                _autoRouteService = new Racks.Application.AutoRoute.AutoRouteService(
-                    new Racks.Application.AutoRoute.AutoRouteHost(
+                _autoRouteService = new Racks.UseCases.AutoRoute.AutoRouteService(
+                    new Racks.UseCases.AutoRoute.AutoRouteHost(
                         () => _controller.Instances.ToArray(),
                         rack => _controller.WriteInstanceToKey(rack),
                         () => Racks.Infrastructure.Shell.ShellOperationGateway.Default.WorkspacePath),
@@ -161,7 +161,7 @@ namespace Racks
 
             if (hwndUnderCursor == desktopListView && !IsDesktopIconHit(pt))
             {
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                Application.Current.Dispatcher.Invoke(() =>
                 {
                     _controller.ChangeVisibility();
                 });
@@ -554,7 +554,7 @@ namespace Racks
             Task.Run(() =>
             {
                 Thread.Sleep(100);
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                Application.Current.Dispatcher.Invoke(() =>
                 {
                     this.Close();
                 });
@@ -730,7 +730,7 @@ namespace Racks
         private void ExitApp(object sender, RoutedEventArgs e)
         {
             TrayIcon.Visibility = Visibility.Hidden;
-            Racks.Util.LifecycleAnimations.RunQuitAnimation(() => System.Windows.Application.Current.Shutdown());
+            Racks.Util.LifecycleAnimations.RunQuitAnimation(() => Application.Current.Shutdown());
         }
 
         private void Settings_Button_Click(object sender, RoutedEventArgs e)
@@ -755,7 +755,7 @@ namespace Racks
             if (msg == _taskbarRestartMessage)
             {
                 // always recreate on UI thread
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                Application.Current.Dispatcher.Invoke(() =>
                 {
                     RegisterTrayIcon();
                     if (!_controller.isInitializingInstances)
@@ -864,7 +864,7 @@ namespace Racks
         {
             if (_dummyWindowPending) return;
             _dummyWindowPending = true;
-            System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+            Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 try { _controller.CheckFrameWindowsLive(); }
                 finally { _dummyWindowPending = false; }

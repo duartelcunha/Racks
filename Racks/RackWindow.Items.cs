@@ -134,7 +134,7 @@ namespace Racks
                     Task.Run(() =>
                     {
                         Thread.Sleep(5);
-                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                        Application.Current.Dispatcher.Invoke(() =>
                         {
                             var effect = DragDrop.DoDragDrop(listView, data, DragDropEffects.Copy | DragDropEffects.Link | DragDropEffects.Move);
                             // Same desktop-rack duplicate reconciliation as the tile drag path.

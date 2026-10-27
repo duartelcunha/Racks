@@ -1,6 +1,5 @@
 using System.IO;
-using System.Reflection;
-using Racks.Application.AutoRoute;
+using Racks.UseCases.AutoRoute;
 using Racks.Infrastructure.FileSystem;
 using Racks.Infrastructure.Logging;
 using Racks.Infrastructure.Shell;
@@ -71,9 +70,11 @@ public sealed class AutoRouteServiceTests : IDisposable
         return rack;
     }
 
-    // The setter refuses an unusable pattern, so a test that needs one (defence in depth for old data) sets the field.
-    private static void ForceRegex(Instance rack, string pattern)
-        => typeof(Instance).GetField("_autoRouteRegex", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(rack, pattern);
+    // The setter keeps any text (a saved rule is never lost), so an unusable rule can simply be assigned.
+    private static void SetRule(Instance rack, string pattern)
+    {
+        using (rack.SuspendPersistence()) rack.AutoRouteRegex = pattern;
+    }
 
     private string Drop(string name, string content = "data")
     {
@@ -153,7 +154,7 @@ public sealed class AutoRouteServiceTests : IDisposable
     public void An_invalid_rule_skips_its_rack_and_is_recorded_once_for_the_rack_not_once_per_file()
     {
         var bad = AddRack("Bad", @"\.pdf$");
-        ForceRegex(bad, "([unclosed");
+        SetRule(bad, "([unclosed");
         var good = AddRack("Good", @"\.pdf$");
 
         for (int i = 0; i < 3; i++)
@@ -164,27 +165,63 @@ public sealed class AutoRouteServiceTests : IDisposable
         Assert.Equal("rack:Bad", ruleRecord.Source);
         Assert.Equal("Skipped", ruleRecord.Status);
         Assert.Equal(3, Records("Move").Count());   // the moves are the broker's own records
+        Assert.Equal("([unclosed", bad.AutoRouteRegex);   // the stored text is never touched
     }
 
     [Fact]
-    public void A_catastrophic_rule_times_out_is_bounded_and_recorded_once()
+    public void A_catastrophic_rule_makes_its_rack_inactive_is_bounded_and_recorded_once()
     {
         var evil = AddRack("Evil", @"x");
-        ForceRegex(evil, "(a+)+$");
-        string name1 = new string('a', 45) + "!.txt", name2 = new string('a', 46) + "!.txt";
-        string p1 = Drop(name1), p2 = Drop(name2);
+        SetRule(evil, "(a+)+$");
+        var good = AddRack("Good", @"!\.txt$");
+        string p1 = Drop(new string('a', 45) + "!.txt"), p2 = Drop(new string('a', 46) + "!.txt");
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var d1 = _service.Process(p1);
         var d2 = _service.Process(p2);
         sw.Stop();
 
-        Assert.Equal(RoutingOutcome.NoMatch, d1.Outcome);
-        Assert.Equal(RoutingOutcome.NoMatch, d2.Outcome);
-        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), "each match is bounded by the regex timeout");
-        Assert.True(File.Exists(p1) && File.Exists(p2));
+        Assert.Equal("Good", d1.TargetRack);   // the slow rack is skipped, the next rule still works
+        Assert.Equal("Good", d2.TargetRack);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(10), "each probe and match is bounded by the regex timeout");
         var record = Assert.Single(Records(AutoRouteService.AuditKind));
         Assert.Equal("rack:Evil", record.Source);
+        Assert.Contains("slow", record.Detail);
+        Assert.Equal("(a+)+$", evil.AutoRouteRegex);   // the stored text is never touched
+        Assert.NotNull(good);
+    }
+
+    // Passes the canary inputs but blows up on one particular name: the rack goes inactive at the first timeout.
+    [Fact]
+    public void A_rule_that_times_out_on_a_real_name_goes_inactive_with_one_record()
+    {
+        var sneaky = AddRack("Sneaky", @"x");
+        SetRule(sneaky, "^(x+x+)+y$");
+        string slowName = new string('x', 45) + "!";
+        string p1 = Drop(slowName + ".txt");
+        string p2 = Drop(new string('x', 44) + "!.txt");
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Assert.Equal(RoutingOutcome.NoMatch, _service.Process(p1).Outcome);
+        long afterFirst = sw.ElapsedMilliseconds;
+        Assert.Equal(RoutingOutcome.NoMatch, _service.Process(p2).Outcome);   // inactive now: no second 250 ms wait
+        sw.Stop();
+
+        Assert.True(sw.ElapsedMilliseconds - afterFirst < 200, "the second file doesn't run the slow rule again");
+        var record = Assert.Single(Records(AutoRouteService.AuditKind));
+        Assert.Equal("rack:Sneaky", record.Source);
+        Assert.True(File.Exists(p1) && File.Exists(p2));
+    }
+
+    [Fact]
+    public void Editing_an_inactive_rule_activates_the_rack_again()
+    {
+        var rack = AddRack("R", @"x");
+        SetRule(rack, "([unclosed");
+        Assert.Equal(RoutingOutcome.NoMatch, _service.Process(Drop("a.pdf")).Outcome);
+
+        SetRule(rack, @"\.pdf$");
+        Assert.Equal(RoutingOutcome.Routed, _service.Process(Drop("b.pdf")).Outcome);
     }
 
     [Fact]
@@ -233,13 +270,32 @@ public sealed class AutoRouteServiceTests : IDisposable
         Assert.True(File.Exists(Path.Combine(rack.Folder, "report.pdf")));
     }
 
-    [Fact]
-    public void An_entry_that_vanished_before_it_was_judged_is_skipped_and_recorded()
+    [Theory]
+    [InlineData("ghost.pdf")]
+    [InlineData("ghost.pdf.crdownload")]
+    public void An_entry_that_vanished_before_it_was_judged_is_skipped_without_a_record(string name)
     {
         AddRack("All", @".*");
-        var d = _service.Process(Path.Combine(_desktop, "ghost.pdf"));
+        var d = _service.Process(Path.Combine(_desktop, name));
         Assert.Equal(RoutingOutcome.Skipped, d.Outcome);
-        Assert.Single(Records(AutoRouteService.AuditKind));
+        Assert.Contains("no longer exists", d.Reason);
+        Assert.Empty(_audit.Events);
+    }
+
+    [Fact]
+    public void A_file_with_a_partner_part_file_is_held_back_until_the_partner_is_gone()
+    {
+        var rack = AddRack("All", @"\.mp4$");
+        string src = Drop("movie.mp4", "growing");
+        string partner = Drop("movie.mp4.part", "...");
+
+        Assert.Equal(RoutingOutcome.Deferred, _service.Process(src).Outcome);
+        Assert.True(File.Exists(src));
+
+        File.Delete(partner);
+        _clock.Advance(AutoRouteService.RetryDelays[0]);
+
+        Assert.True(File.Exists(Path.Combine(rack.Folder, "movie.mp4")));
     }
 
     [Fact]
@@ -339,6 +395,10 @@ public sealed class AutoRouteServiceTests : IDisposable
         Assert.Equal(RoutingOutcome.Routed, d.Outcome);
         Assert.Contains("saving the rack failed", d.Reason);
         Assert.True(File.Exists(Path.Combine(_workspace, "a.pdf")));
+        var failure = Assert.Single(Records(AutoRouteService.AuditKind));   // its own record, besides the broker's Move
+        Assert.Equal("Failed", failure.Status);
+        Assert.Contains("saving the rack failed", failure.Detail);
+        Assert.Single(Records("Move"));
         Assert.NotNull(rack);
     }
 
@@ -356,6 +416,17 @@ public sealed class AutoRouteServiceTests : IDisposable
         Assert.Equal(RoutingOutcome.Skipped, d.Outcome);
         Assert.True(File.Exists(src));
         Assert.Single(Records(AutoRouteService.AuditKind));
+    }
+
+    [Fact]
+    public void A_batch_routes_every_file_and_the_folder_check_does_not_outlive_it()
+    {
+        var rack = AddRack("Pdfs", @"\.pdf$");
+        _service.ProcessBatch([Drop("a.pdf"), Drop("b.pdf"), Drop("c.pdf")]);
+        Assert.Equal(3, Directory.GetFiles(rack.Folder).Length);
+
+        Directory.Delete(rack.Folder, recursive: true);   // gone after the batch: the next file must notice
+        Assert.Equal(RoutingOutcome.NoMatch, _service.Process(Drop("d.pdf")).Outcome);
     }
 
     [Fact]

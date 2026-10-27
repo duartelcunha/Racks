@@ -8,7 +8,7 @@ using Racks.Infrastructure.Shell;
 using Racks.Rack;
 using Racks.Util;
 
-namespace Racks.Application.AutoRoute;
+namespace Racks.UseCases.AutoRoute;
 
 /// <summary>What the service needs from the app, so it has no WPF or registry types of its own.</summary>
 /// <param name="GetRacks">A snapshot of the racks, in order. The first match wins, so the order is the user's.</param>
@@ -41,6 +41,8 @@ public sealed class AutoRouteService : IDisposable
     internal const string AuditKind = "AutoRoute";
     internal const string MoveReason = "auto-route";
 
+    // What the service made of one rack's stored rule text. The text itself is never touched: a rule that
+    // can't run (not valid, too slow) just makes the rack inactive until the user edits it.
     private sealed class CompiledRule
     {
         public string? Pattern;
@@ -58,6 +60,7 @@ public sealed class AutoRouteService : IDisposable
     private readonly Dictionary<string, IDisposable> _retries = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConditionalWeakTable<Instance, CompiledRule> _rules = new();
     private readonly HashSet<string> _reportedRules = new(StringComparer.Ordinal);
+    private Dictionary<string, bool>? _folderCache;   // only while a batch runs (UI thread)
     private bool _disposed;
 
     public AutoRouteService(
@@ -86,6 +89,23 @@ public sealed class AutoRouteService : IDisposable
     /// but not returned (it is in the audit log).
     /// </summary>
     public RoutingDecision Process(string path) => Process(path, attempt: 0);
+
+    /// <summary>
+    /// Judges the paths of one debounce window. Same as calling <see cref="Process(string)"/> for each, except that
+    /// whether a rack's folder exists is asked once per rack for the whole batch, not once per file.
+    /// </summary>
+    public void ProcessBatch(IEnumerable<string> paths)
+    {
+        _folderCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            foreach (var path in paths) Process(path, attempt: 0);
+        }
+        finally
+        {
+            _folderCache = null;
+        }
+    }
 
     private RoutingDecision Process(string path, int attempt)
     {
@@ -117,6 +137,10 @@ public sealed class AutoRouteService : IDisposable
         var verdict = _policy.Evaluate(path);
         switch (verdict.Kind)
         {
+            case EligibilityKind.Gone:
+                // A temporary name that was renamed or deleted before we looked: nothing happened, nothing to record.
+                return new RoutingDecision(path, rack.Name, null, RoutingOutcome.Skipped, "Not routed: " + verdict.Reason + ".");
+
             case EligibilityKind.Skip:
                 return Record(new RoutingDecision(path, rack.Name, null, RoutingOutcome.Skipped, "Not routed: " + verdict.Reason + "."));
 
@@ -165,36 +189,52 @@ public sealed class AutoRouteService : IDisposable
             }
             catch (Exception ex)
             {
-                note = (note + " The file was moved but saving the rack failed: " + ex.Message).Trim();
+                string failure = "The file was moved but saving the rack failed: " + ex.Message;
+                note = (note + " " + failure).Trim();
+                Write(path, target, "Failed", failure);
             }
         }
         return new RoutingDecision(path, rack.Name, target, RoutingOutcome.Routed, note);
     }
 
-    // First rack with a usable rule, an existing folder and a matching name.
+    // First rack with a usable rule, a matching name and an existing folder. The (cheap) name test comes first;
+    // the folder is only looked at for a rack that already matched.
     private Instance? FindRack(string name)
     {
         foreach (var rack in _host.GetRacks())
         {
             string pattern = rack.AutoRouteRegex;
             if (string.IsNullOrWhiteSpace(pattern)) continue;
-            if (string.IsNullOrEmpty(rack.Folder) || !Directory.Exists(rack.Folder)) continue;
 
-            var re = RuleFor(rack, pattern);
-            if (re == null) continue;
+            var rule = RuleFor(rack, pattern);
+            if (rule.Regex == null) continue;
+            bool matched;
             try
             {
-                if (re.IsMatch(name)) return rack;
+                matched = rule.Regex.IsMatch(name);
             }
             catch (RegexMatchTimeoutException)
             {
-                ReportRuleOnce(rack, pattern, "timeout", $"The rule /{pattern}/ of rack \"{rack.Name}\" took too long on a file name; it is skipped for that file.");
+                // A rule that is too slow on a real name: this rack stays inactive until its text changes.
+                rule.Regex = null;
+                ReportRuleOnce(rack, pattern, "slow", $"The rule /{pattern}/ of rack \"{rack.Name}\" took too long on a file name; the rack is inactive for auto-route until the rule is edited.");
+                continue;
             }
+            if (matched && FolderExists(rack.Folder)) return rack;
         }
         return null;
     }
 
-    private Regex? RuleFor(Instance rack, string pattern)
+    private bool FolderExists(string folder)
+    {
+        if (string.IsNullOrEmpty(folder)) return false;
+        var cache = _folderCache;
+        if (cache == null) return Directory.Exists(folder);
+        if (!cache.TryGetValue(folder, out bool exists)) cache[folder] = exists = Directory.Exists(folder);
+        return exists;
+    }
+
+    private CompiledRule RuleFor(Instance rack, string pattern)
     {
         var rule = _rules.GetOrCreateValue(rack);
         if (!string.Equals(rule.Pattern, pattern, StringComparison.Ordinal))
@@ -202,9 +242,14 @@ public sealed class AutoRouteService : IDisposable
             rule.Pattern = pattern;
             rule.Regex = SafeRegex.TryCompile(pattern, RegexOptions.IgnoreCase);
             if (rule.Regex == null)
-                ReportRuleOnce(rack, pattern, "invalid", $"The rule /{pattern}/ of rack \"{rack.Name}\" is not a valid pattern; the rack is skipped.");
+                ReportRuleOnce(rack, pattern, "invalid", $"The rule /{pattern}/ of rack \"{rack.Name}\" is not a valid pattern; the rack is inactive for auto-route until the rule is edited.");
+            else if (!SafeRegex.IsAcceptable(pattern, RegexOptions.IgnoreCase))
+            {
+                rule.Regex = null;
+                ReportRuleOnce(rack, pattern, "slow", $"The rule /{pattern}/ of rack \"{rack.Name}\" is too slow; the rack is inactive for auto-route until the rule is edited.");
+            }
         }
-        return rule.Regex;
+        return rule;
     }
 
     // One record per rack and pattern, not one per file: a bad rule would otherwise flood the log.

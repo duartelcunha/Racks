@@ -176,17 +176,19 @@ public class Instance : INotifyPropertyChanged
         }
     }
 
-    // Regex matched against file names appearing on the user's Desktop. A match moves the file into
-    // this rack (AutoRouteService). Empty disables routing. Like the font and color setters, a value that
-    // cannot be used (does not compile, or is too slow on the SafeRegex canary inputs) is ignored and the
-    // previous pattern stays; that covers the registry load, an import and the menu alike (INV-ROUTE-1).
+    // Regex matched against file names appearing on the user's Desktop. A match moves the file into this
+    // rack (AutoRouteService). Empty disables routing. The text is stored exactly as given, also when it was
+    // loaded from the registry or imported: a rule must never be lost because a check failed at load time
+    // (a busy machine can make the slow-pattern probe time out on a fine pattern). Whether it can run is
+    // decided where it is used (AutoRouteService makes a rack with an invalid or too-slow rule inactive and
+    // records it once) and where it is edited (the rule dialog refuses to save such a pattern). INV-ROUTE-1.
     public string AutoRouteRegex
     {
         get => _autoRouteRegex;
         set
         {
             value ??= "";
-            if (_autoRouteRegex != value && (value.Length == 0 || SafeRegex.IsAcceptable(value, System.Text.RegularExpressions.RegexOptions.IgnoreCase)))
+            if (_autoRouteRegex != value)
             {
                 _autoRouteRegex = value;
                 OnPropertyChanged(nameof(AutoRouteRegex), _autoRouteRegex);

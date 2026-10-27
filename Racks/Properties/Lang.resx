@@ -627,4 +627,10 @@
   <data name="Crash.Toast.Body" xml:space="preserve">
     <value>Racks kept running. Details were saved to crash.log in %AppData%\Racks. Please include it if you report a bug.</value>
   </data>
+  <data name="AutoRoute.Invalid.Title" xml:space="preserve">
+    <value>Auto-route rule not saved</value>
+  </data>
+  <data name="AutoRoute.Invalid.Message" xml:space="preserve">
+    <value>That pattern can't be used: it is not a valid regular expression, or it takes too long to check a file name. The previous rule was kept. Try a simpler pattern.</value>
+  </data>
 </root>

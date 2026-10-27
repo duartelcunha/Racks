@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Racks.Application.AutoRoute;
+using Racks.UseCases.AutoRoute;
 using Racks.Core.Abstractions;
 
 namespace Racks.Util
 {
     // Watches the user's Desktop for new files and hands each path to the auto-route use case, once the burst
     // of events has settled. The decisions (which rack, may it move, the move itself) live in
-    // Racks.Application.AutoRoute; this class only keeps the watcher alive and the events tidy.
+    // Racks.UseCases.AutoRoute; this class only keeps the watcher alive and the events tidy.
     //
     // Everything below runs on the UI thread: the watcher's events are posted there first. That is what lets
     // the Dispatcher-based scheduler (a DispatcherTimer must be created on the UI thread) and the racks list
@@ -27,13 +27,17 @@ namespace Racks.Util
         // The default 8 KB buffer overflows when hundreds of files land at once (same value as FileWatcherService).
         private const int WatcherBufferBytes = 64 * 1024;
 
-        private readonly Action<string> _route;
+        private readonly Action<IReadOnlyList<string>> _routeBatch;
         private readonly string _desktop;
         private readonly IDelayScheduler _scheduler;
         private readonly Action<Action> _post;
         private readonly Func<string, FileSystemWatcher> _watcherFactory;
 
         private readonly HashSet<string> _pending = new(StringComparer.OrdinalIgnoreCase);
+        // Names that were on the Desktop while the watcher was healthy (plus every arrival since). After a watcher
+        // error only names NOT in here count as new: the files the user keeps on the Desktop are never swept up,
+        // exactly as before P4, when only Created/Renamed events routed anything. Null until a start succeeded.
+        private HashSet<string>? _known;
         private IDisposable? _flushTimer;
         private IDisposable? _restartTimer;
         private FileSystemWatcher? _watcher;
@@ -41,15 +45,15 @@ namespace Racks.Util
         private bool _disposed;
 
         public DesktopRouter(AutoRouteService service)
-            : this(p => service.Process(p), Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            : this(service.ProcessBatch, Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
                    new DispatcherDelayScheduler(), PostToUiThread, NewWatcher)
         {
         }
 
-        internal DesktopRouter(Action<string> route, string desktopFolder, IDelayScheduler scheduler,
+        internal DesktopRouter(Action<IReadOnlyList<string>> routeBatch, string desktopFolder, IDelayScheduler scheduler,
                                Action<Action> post, Func<string, FileSystemWatcher> watcherFactory)
         {
-            _route = route;
+            _routeBatch = routeBatch;
             _desktop = desktopFolder;
             _scheduler = scheduler;
             _post = post;
@@ -72,7 +76,7 @@ namespace Racks.Util
 
         private static FileSystemWatcher NewWatcher(string folder) => new(folder)
         {
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
+            NotifyFilter = NotifyFilters.FileName,   // only Created/Renamed are handled; Changed would just fill the buffer
             IncludeSubdirectories = false,
             InternalBufferSize = WatcherBufferBytes,
         };
@@ -86,6 +90,23 @@ namespace Racks.Util
             try { watcher.EnableRaisingEvents = true; }
             catch { DetachAndDispose(watcher); throw; }
             _watcher = watcher;
+            // Taken after the watcher is on, so a file that lands in between is in the snapshot AND raises an event
+            // (routed once: the event wins, the snapshot only ever suppresses a rescan).
+            _known ??= TakeSnapshot();
+        }
+
+        private HashSet<string> TakeSnapshot()
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(_desktop)) names.Add(Path.GetFileName(file));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"DesktopRouter snapshot failed: {ex.Message}");
+            }
+            return names;
         }
 
         private void StopWatcher()
@@ -113,6 +134,7 @@ namespace Racks.Util
         {
             if (_disposed) return;
             _errorStreak = 0;   // a real event: the watcher is alive
+            if (!string.IsNullOrEmpty(path)) _known?.Add(Path.GetFileName(path));
             Add(path);
         }
 
@@ -127,14 +149,10 @@ namespace Racks.Util
         {
             _flushTimer = null;
             if (_disposed || _pending.Count == 0) return;
-            var snapshot = new List<string>(_pending);
+            var batch = new List<string>(_pending);
             _pending.Clear();
-            foreach (var path in snapshot)
-            {
-                if (_disposed) return;
-                try { _route(path); }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Auto-route failed for a path: {ex.Message}"); }
-            }
+            try { _routeBatch(batch); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Auto-route failed for a batch: {ex.Message}"); }
         }
 
         // The watcher raised Error: its buffer overflowed (events were lost) or the Desktop went away, after which
@@ -167,12 +185,16 @@ namespace Racks.Util
             Rescan();
         }
 
-        // The watcher only reports files (FileName filter), so the rescan does too.
+        // Looks at the Desktop once after a restart. Only a file whose name was not there before counts as new: it
+        // arrived while the watcher was down. A restart that follows a start which never succeeded has no snapshot
+        // yet, so it takes one and routes nothing. The watcher only reports files (FileName filter), so this does too.
         private void Rescan()
         {
             try
             {
-                foreach (var file in Directory.EnumerateFiles(_desktop)) Add(file);
+                if (_known == null) { _known = TakeSnapshot(); return; }
+                foreach (var file in Directory.EnumerateFiles(_desktop))
+                    if (_known.Add(Path.GetFileName(file))) Add(file);
             }
             catch (Exception ex)
             {

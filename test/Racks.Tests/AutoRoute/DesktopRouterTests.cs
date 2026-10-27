@@ -1,5 +1,5 @@
 using System.IO;
-using Racks.Application.AutoRoute;
+using Racks.UseCases.AutoRoute;
 using Racks.Infrastructure.FileSystem;
 using Racks.Infrastructure.Shell;
 using Racks.Tests.Fakes;
@@ -42,7 +42,7 @@ public sealed class DesktopRouterTests : IDisposable
     }
 
     private DesktopRouter NewRouter()
-        => new(p => _routed.Add(p), _desktop, _clock, a => a(), Factory);
+        => new(batch => _routed.AddRange(batch), _desktop, _clock, a => a(), Factory);
 
     private static readonly TimeSpan Debounce = DesktopRouter.DebounceWindow;
     private static readonly TimeSpan Restart = DesktopRouter.RestartDelay;
@@ -106,26 +106,55 @@ public sealed class DesktopRouterTests : IDisposable
     }
 
     [Fact]
-    public void An_exception_from_one_path_does_not_stop_the_others()
+    public void A_failing_batch_does_not_stop_the_next_window()
     {
-        var seen = new List<string>();
-        using var router = new DesktopRouter(p => { seen.Add(p); if (p.EndsWith("a.pdf")) throw new IOException("boom"); },
+        int calls = 0;
+        using var router = new DesktopRouter(batch => { calls++; if (calls == 1) throw new IOException("boom"); _routed.AddRange(batch); },
             _desktop, _clock, a => a(), Factory);
         router.Enqueue(Path.Combine(_desktop, "a.pdf"));
+        _clock.Advance(Debounce);
         router.Enqueue(Path.Combine(_desktop, "b.pdf"));
         _clock.Advance(Debounce);
-        Assert.Equal(2, seen.Count);
+        Assert.Equal([Path.Combine(_desktop, "b.pdf")], _routed);
+    }
+
+    [Fact]
+    public void One_window_is_one_batch()
+    {
+        var batches = new List<int>();
+        using var router = new DesktopRouter(batch => batches.Add(batch.Count), _desktop, _clock, a => a(), Factory);
+        router.Enqueue(Path.Combine(_desktop, "a.pdf"));
+        router.Enqueue(Path.Combine(_desktop, "b.pdf"));
+        router.Enqueue(Path.Combine(_desktop, "c.pdf"));
+        _clock.Advance(Debounce);
+        Assert.Equal([3], batches);
+    }
+
+    [Fact]
+    public void The_watcher_listens_for_names_only()
+    {
+        // Created/Renamed are handled; Changed never is, so it must not be asked for (it would only fill the buffer).
+        var filter = DesktopRouterNotifyFilterForTest();
+        Assert.Equal(NotifyFilters.FileName, filter);
+    }
+
+    private static NotifyFilters DesktopRouterNotifyFilterForTest()
+    {
+        var m = typeof(DesktopRouter).GetMethod("NewWatcher", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        using var w = (FileSystemWatcher)m.Invoke(null, [Path.GetTempPath()])!;
+        return w.NotifyFilter;
     }
 
     // ---- watcher errors --------------------------------------------------------------------
 
+    // Files the user keeps on the Desktop on purpose are not "new" because the watcher was rebuilt: before P4 only
+    // Created/Renamed events routed anything, and a sweep after an error would move all of them.
     [Fact]
-    public void An_error_rebuilds_the_watcher_once_and_looks_at_the_desktop_once()
+    public void After_an_error_files_that_were_already_on_the_desktop_are_left_alone()
     {
         File.WriteAllText(Path.Combine(_desktop, "one.txt"), "1");
         File.WriteAllText(Path.Combine(_desktop, "two.txt"), "2");
-        Directory.CreateDirectory(Path.Combine(_desktop, "folder"));   // the watcher reports files only, so does the rescan
-        using var router = NewRouter();
+        using var router = NewRouter();   // snapshot: one.txt, two.txt
 
         router.HandleWatcherError();
         router.HandleWatcherError();   // a burst of errors joins the restart that is already waiting
@@ -134,13 +163,75 @@ public sealed class DesktopRouterTests : IDisposable
 
         _clock.Advance(Restart);
         Assert.Equal(2, _factoryCalls);   // rebuilt, once
-        Assert.Empty(_routed);            // the rescan goes through the same debounce
-
         _clock.Advance(Debounce);
-        Assert.Equal(
-            [Path.Combine(_desktop, "one.txt"), Path.Combine(_desktop, "two.txt")],
-            _routed.OrderBy(p => p, StringComparer.OrdinalIgnoreCase));
+
+        Assert.Empty(_routed);
         Assert.Equal(0, _clock.PendingCount);   // nothing left running: no loop
+    }
+
+    [Fact]
+    public void A_file_created_during_the_outage_is_routed_once_after_the_restart()
+    {
+        File.WriteAllText(Path.Combine(_desktop, "old.txt"), "old");
+        Directory.CreateDirectory(Path.Combine(_desktop, "folder"));   // the watcher reports files only, so does the rescan
+        using var router = NewRouter();
+
+        router.HandleWatcherError();
+        File.WriteAllText(Path.Combine(_desktop, "missed.pdf"), "arrived while the watcher was down");
+        _clock.Advance(Restart);
+        _clock.Advance(Debounce);
+
+        Assert.Equal([Path.Combine(_desktop, "missed.pdf")], _routed);
+
+        // A later error must not route it again: it is known now.
+        _routed.Clear();
+        router.HandleWatcherError();
+        _clock.Advance(Restart * 2);
+        _clock.Advance(Debounce);
+        Assert.Empty(_routed);
+    }
+
+    [Fact]
+    public void A_file_that_arrived_by_event_is_known_and_not_swept_up_by_a_later_rescan()
+    {
+        using var router = NewRouter();
+        string p = Path.Combine(_desktop, "kept.pdf");
+        File.WriteAllText(p, "skipped earlier, stays on the Desktop");
+        router.Enqueue(p);
+        _clock.Advance(Debounce);
+        _routed.Clear();
+
+        router.HandleWatcherError();
+        _clock.Advance(Restart);
+        _clock.Advance(Debounce);
+
+        Assert.Empty(_routed);
+    }
+
+    [Fact]
+    public void A_start_failure_routes_nothing_on_recovery_and_only_takes_the_snapshot()
+    {
+        File.WriteAllText(Path.Combine(_desktop, "already-there.pdf"), "x");
+        int attempts = 0;
+        _factoryOverride = folder =>
+        {
+            if (++attempts < 2) throw new IOException("the Desktop is not reachable yet");
+            var w = new FileSystemWatcher(folder);
+            _watchers.Add(w);
+            return w;
+        };
+
+        using var router = NewRouter();   // first start fails inside the constructor
+        _clock.Advance(Restart);          // second start works
+        _clock.Advance(Debounce);
+        Assert.Equal(2, attempts);
+        Assert.Empty(_routed);            // no snapshot existed, so nothing counts as new
+
+        // From here on it behaves like any healthy router.
+        File.WriteAllText(Path.Combine(_desktop, "after.pdf"), "x");
+        router.Enqueue(Path.Combine(_desktop, "after.pdf"));
+        _clock.Advance(Debounce);
+        Assert.Equal([Path.Combine(_desktop, "after.pdf")], _routed);
     }
 
     [Fact]
@@ -261,7 +352,7 @@ public sealed class DesktopRouterTests : IDisposable
         using var service = new AutoRouteService(
             new AutoRouteHost(() => [rack], _ => { }, () => Path.Combine(_root, "ws")),
             _clock, broker: new FileOperationBroker(audit), shell: new ShellOperationGateway(new ShellBackend()), audit: audit);
-        using var router = new DesktopRouter(p => service.Process(p), _desktop, _clock, a => a(), Factory);
+        using var router = new DesktopRouter(service.ProcessBatch, _desktop, _clock, a => a(), Factory);
 
         string partial = Path.Combine(_desktop, "report.pdf.crdownload");
         File.WriteAllText(partial, "half");

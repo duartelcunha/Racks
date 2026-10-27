@@ -611,7 +611,7 @@ namespace Racks
                 {
                     try
                     {
-                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                        Application.Current.Dispatcher.Invoke(() =>
                         {
                             thumbnail = GetThumbnail(path, iconSize);
                         });
@@ -620,7 +620,7 @@ namespace Racks
                             var overlay = Racks.Services.ThumbnailCache.GetShortcutOverlay();
                             if (overlay != null)
                             {
-                                thumbnail = System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                                thumbnail = Application.Current.Dispatcher.Invoke(() =>
                                 {
                                     var visual = new DrawingVisual();
                                     using (var dc = visual.RenderOpen())
@@ -684,7 +684,7 @@ namespace Racks
                 {
                     try
                     {
-                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                        Application.Current.Dispatcher.Invoke(() =>
                         {
                             thumbnail = GetThumbnail(path, iconSize);
                         });
@@ -718,7 +718,7 @@ namespace Racks
                         ms.Seek(0, SeekOrigin.Begin);
 
                         BitmapImage bitmapImage = null;
-                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                        Application.Current.Dispatcher.Invoke(() =>
                         {
                             bitmapImage = new BitmapImage();
                             bitmapImage.BeginInit();

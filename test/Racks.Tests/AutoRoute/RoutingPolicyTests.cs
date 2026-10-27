@@ -1,5 +1,5 @@
 using System.IO;
-using Racks.Application.AutoRoute;
+using Racks.UseCases.AutoRoute;
 using Racks.Tests.Fakes;
 using Racks.Util;
 
@@ -85,11 +85,12 @@ public sealed class RoutingPolicyTests : IDisposable
     }
 
     [Fact]
-    public void A_missing_entry_is_skipped()
+    public void A_missing_entry_is_gone_and_a_missing_temporary_name_too()
     {
         var verdict = new RoutingPolicy().Evaluate(Path.Combine(_root, "gone.pdf"));
-        Assert.Equal(EligibilityKind.Skip, verdict.Kind);
+        Assert.Equal(EligibilityKind.Gone, verdict.Kind);
         Assert.Contains("no longer exists", verdict.Reason);
+        Assert.Equal(EligibilityKind.Gone, new RoutingPolicy().Evaluate(Path.Combine(_root, "gone.pdf.crdownload")).Kind);
     }
 
     [Fact]
@@ -137,18 +138,19 @@ public sealed class RoutingPolicyTests : IDisposable
         Assert.Equal(EligibilityKind.Skip, new RoutingPolicy().Evaluate(link).Kind);
     }
 
-    // A OneDrive / cloud placeholder on a redirected Desktop is a reparse point that is NOT a link. It carries
-    // a real user file and must still be routed, and must not be opened (opening could download it).
+    // A file that is fully on this PC but synced (a reparse point that is not a link, no recall flag) is routable
+    // and is never opened for the probe. A real one can't be created in a test, so the probes are replaced.
     [Fact]
-    public void A_cloud_placeholder_reparse_point_is_not_skipped_and_is_never_opened()
+    public void A_fully_local_synced_file_is_not_skipped_and_is_never_opened()
     {
         var policy = new RoutingPolicy
         {
             GetAttributes = _ => FileAttributes.Archive | FileAttributes.ReparsePoint,
             IsLink = _ => false,
-            IsInUse = _ => throw new InvalidOperationException("a placeholder must not be opened"),
+            Exists = _ => false,
+            IsInUse = _ => throw new InvalidOperationException("a synced file must not be opened"),
         };
-        Assert.Equal(EligibilityKind.Eligible, policy.Evaluate(@"C:\Users\x\OneDrive\Desktop\cloud.docx").Kind);
+        Assert.Equal(EligibilityKind.Eligible, policy.Evaluate(@"C:\Users\x\OneDrive\Desktop\local.docx").Kind);
     }
 
     [Fact]
@@ -162,18 +164,71 @@ public sealed class RoutingPolicyTests : IDisposable
         Assert.Equal(EligibilityKind.Skip, policy.Evaluate(@"C:\desk\l.docx").Kind);
     }
 
-    [Theory]
-    [InlineData(0x00040000)]   // RECALL_ON_DATA_ACCESS
-    [InlineData(0x00400000)]   // RECALL_ON_OPEN
-    [InlineData(0x1000)]       // OFFLINE
-    public void A_file_flagged_for_recall_is_eligible_without_being_opened(int flag)
+    // IsLink could not tell (the item can't be read): it must not be mistaken for a cloud file. Fail closed.
+    [Fact]
+    public void A_reparse_point_whose_kind_cannot_be_read_is_skipped()
     {
         var policy = new RoutingPolicy
         {
-            GetAttributes = _ => (FileAttributes)flag,
+            GetAttributes = _ => FileAttributes.Archive | FileAttributes.ReparsePoint,
+            IsLink = _ => null,
             IsInUse = _ => throw new InvalidOperationException("must not be opened"),
         };
-        Assert.Equal(EligibilityKind.Eligible, policy.Evaluate(@"C:\desk\recall.docx").Kind);
+        var verdict = policy.Evaluate(@"C:\desk\unknown.docx");
+        Assert.Equal(EligibilityKind.Skip, verdict.Kind);
+        Assert.Contains("could not be read", verdict.Reason);
+    }
+
+    // Online-only cloud files: moving one out of the sync folder downloads it or deletes it on the other devices.
+    [Theory]
+    [InlineData(0x00040000)]   // RECALL_ON_OPEN
+    [InlineData(0x00400000)]   // RECALL_ON_DATA_ACCESS
+    [InlineData(0x1000)]       // OFFLINE
+    public void An_online_only_cloud_file_is_skipped_and_never_opened(int flag)
+    {
+        var policy = new RoutingPolicy
+        {
+            GetAttributes = _ => FileAttributes.Archive | FileAttributes.ReparsePoint | (FileAttributes)flag,
+            IsLink = _ => false,
+            IsInUse = _ => throw new InvalidOperationException("must not be opened"),
+        };
+        var verdict = policy.Evaluate(@"C:\desk\cloud.docx");
+        Assert.Equal(EligibilityKind.Skip, verdict.Kind);
+        Assert.Contains("online-only", verdict.Reason);
+    }
+
+    [Fact]
+    public void The_recall_constants_are_the_documented_attribute_values()
+    {
+        Assert.Equal(0x00040000, (int)RoutingPolicy.RecallOnOpen);
+        Assert.Equal(0x00400000, (int)RoutingPolicy.RecallOnDataAccess);
+    }
+
+    [Fact]
+    public void A_folder_flagged_online_only_is_still_a_folder_and_eligible()
+    {
+        var policy = new RoutingPolicy { GetAttributes = _ => FileAttributes.Directory | RoutingPolicy.RecallOnDataAccess };
+        Assert.Equal(EligibilityKind.Eligible, policy.Evaluate(@"C:\desk\Project").Kind);
+    }
+
+    // ---- partner files of downloads in progress --------------------------------------------
+
+    [Theory]
+    [InlineData(".part")]
+    [InlineData(".crdownload")]
+    public void A_file_with_a_partner_part_file_next_to_it_is_in_use_until_the_partner_goes(string ext)
+    {
+        string path = Touch("movie.mp4");
+        string partner = path + ext;
+        File.WriteAllText(partner, "still downloading");
+        var policy = new RoutingPolicy();
+
+        var verdict = policy.Evaluate(path);
+        Assert.Equal(EligibilityKind.InUse, verdict.Kind);
+        Assert.Contains(ext, verdict.Reason);
+
+        File.Delete(partner);
+        Assert.Equal(EligibilityKind.Eligible, policy.Evaluate(path).Kind);
     }
 
     [Fact]

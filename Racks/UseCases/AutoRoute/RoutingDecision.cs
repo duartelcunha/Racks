@@ -1,4 +1,4 @@
-namespace Racks.Application.AutoRoute;
+namespace Racks.UseCases.AutoRoute;
 
 public enum RoutingOutcome
 {
