@@ -10,7 +10,8 @@ namespace Racks.Infrastructure.Update;
 /// folders directly in the temp root, never a reparse point, never one with sub-folders, and only when it holds plain files.
 /// A folder still in use stays for the next time: a locked file cannot be deleted, and a folder younger than
 /// <see cref="DefaultMinAge"/> is skipped, so the empty folder of a download that is just starting (created before its file)
-/// is never removed from under it.
+/// is never removed from under it. The same rule means the folder a successful update just used is skipped for those 10
+/// minutes by the relaunched Racks (its cleanup runs a minute after start) and removed by a later run.
 /// </summary>
 internal static class UpdateCleanupService
 {
@@ -39,6 +40,9 @@ internal static class UpdateCleanupService
                 if (now - touched < age) continue;
                 if (d.EnumerateDirectories().Any()) continue;
                 if (d.EnumerateFiles().Any(f => (f.Attributes & FileAttributes.ReparsePoint) != 0)) continue;
+                // Re-read right before deleting: the folder may have been swapped for a link since it was listed.
+                var fresh = new DirectoryInfo(d.FullName);
+                if (!fresh.Exists || (fresh.Attributes & FileAttributes.ReparsePoint) != 0) continue;
                 TryDeleteDir(d.FullName);
                 if (!Directory.Exists(d.FullName)) removed++;
             }

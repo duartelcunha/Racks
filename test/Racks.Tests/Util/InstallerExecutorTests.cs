@@ -126,17 +126,53 @@ public class InstallerExecutorTests
     }
 
     [Fact]
-    public async Task A_shutdown_that_throws_reports_a_failure_after_the_installer_started()
+    public async Task A_shutdown_that_throws_after_the_installer_started_is_still_a_launch_and_keeps_the_folder()
     {
-        // Characterization: the installer is already running, so its folder cannot be deleted; the user is told.
         using var rig = new Rig();
         rig.Http.Route(Url, rig.Bytes);
         var executor = new InstallerExecutor(new UpdateHttpClientFactory(rig.Http), rig.Launcher, new ThrowingShutdown(), rig.Root);
 
         var outcome = await executor.RunAsync(Url, rig.Manifest, "1.4.0.0", rig.Notifier.StartProgress("x"));
 
-        Assert.Equal(InstallStatus.DownloadFailed, outcome.Status);
+        Assert.Equal(InstallStatus.Launched, outcome.Status);
+        Assert.Equal("no application", outcome.Message);   // kept for the audit log only
         Assert.Single(rig.Launcher.Started);
+        Assert.Single(Directory.GetFiles(Assert.Single(rig.Dirs())));   // the installer runs from it: not deleted
+    }
+
+    [Theory]
+    [InlineData("http://github.com/duartelcunha/Racks/releases/download/v1.5.0/Racks-Setup-1.5.0.exe")]
+    [InlineData("https://evil.example/duartelcunha/Racks/releases/download/v1.5.0/Racks-Setup-1.5.0.exe")]
+    [InlineData("https://github.com/someone-else/Racks/releases/download/v1.5.0/Racks-Setup-1.5.0.exe")]
+    [InlineData("https://github.com/duartelcunha/Racks/archive/refs/heads/main.zip")]
+    [InlineData("not a url")]
+    [InlineData("")]
+    public async Task An_installer_url_off_the_trusted_release_path_is_refused_with_no_request_and_no_folder(string url)
+    {
+        using var rig = new Rig();
+        rig.Http.Route(url.Length == 0 ? "x" : url, rig.Bytes);
+
+        var outcome = await rig.Executor().RunAsync(url, rig.Manifest, "1.4.0.0", rig.Notifier.StartProgress("x"));
+
+        Assert.Equal(InstallStatus.DownloadFailed, outcome.Status);
+        Assert.Empty(rig.Http.Requests);
+        Assert.Empty(rig.Dirs());
+        Assert.Empty(rig.Launcher.Started);
+        Assert.Equal(0, rig.Shutdown.Count);
+    }
+
+    [Fact]
+    public async Task A_server_that_never_sends_headers_is_stopped_by_the_same_timeout_as_reads()
+    {
+        using var rig = new Rig();
+        rig.Http.Hang(Url);
+
+        var outcome = await rig.Run(readTimeout: TimeSpan.FromMilliseconds(100));   // no caller token: only the executor's own bound
+
+        Assert.Equal(InstallStatus.DownloadFailed, outcome.Status);
+        Assert.Equal("The server did not answer in time.", outcome.Message);
+        Assert.Empty(rig.Dirs());
+        Assert.Empty(rig.Launcher.Started);
     }
 
     private sealed class ThrowingShutdown : IAppShutdown

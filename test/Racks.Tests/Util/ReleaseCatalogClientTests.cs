@@ -172,4 +172,23 @@ public class ReleaseCatalogClientTests
         await client.GetCatalogAsync(c, ReleaseCatalogClient.ReleasesApi);
         Assert.Equal("Racks/1.4.0.0", http.UserAgents.Single());
     }
+
+    [Theory]
+    [InlineData("http://github.com/duartelcunha/Racks/releases/download/v1.5.0/Racks-Setup-1.5.0.manifest.json")]
+    [InlineData("https://evil.example/duartelcunha/Racks/releases/download/v1.5.0/Racks-Setup-1.5.0.manifest.json")]
+    [InlineData("https://github.com/someone-else/Racks/releases/download/v1.5.0/Racks-Setup-1.5.0.manifest.json")]
+    [InlineData("https://api.github.com/repos/duartelcunha/Racks/releases?per_page=30")]
+    [InlineData("not a url")]
+    [InlineData("")]
+    public async Task A_small_asset_url_off_the_trusted_release_path_is_never_requested(string url)
+    {
+        var http = new FakeHttp();
+        http.Route(url.Length == 0 ? "x" : url, new byte[10]);
+        var client = Client(http);
+        using var c = client.CreateClient("1.4.0.0");
+
+        Assert.Null(await client.GetSmallAssetAsync(c, url, UpdateManifest.MaxManifestBytes));
+
+        Assert.Empty(http.Requests);
+    }
 }

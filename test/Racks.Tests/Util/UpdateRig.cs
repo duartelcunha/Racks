@@ -67,7 +67,8 @@ internal sealed class FakeShutdown : IAppShutdown
 {
     public int Count;
     public System.Collections.Concurrent.ConcurrentQueue<int> Threads { get; } = new();
-    public void Shutdown() { Threads.Enqueue(Environment.CurrentManagedThreadId); Interlocked.Increment(ref Count); }
+    public Exception? Throws;
+    public void Shutdown() { Threads.Enqueue(Environment.CurrentManagedThreadId); Interlocked.Increment(ref Count); if (Throws != null) throw Throws; }
 }
 
 // Answers by exact URL. Anything not registered is a 404 that is also recorded, so a test can assert

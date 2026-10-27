@@ -35,16 +35,23 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
     código partilhado com `tools/RacksSigner`) para assinatura, tag, "mais novo", tamanho e hash.
   - `ReleaseCatalogClient`: só lê o URL do feed (`ReleasesApi`, a única definição; qualquer outro URL
     é recusado antes de qualquer pedido), a resposta tem tecto de 2 MiB, manifesto e `.sig` ficam em
-    1024 bytes, e cada pedido tem timeout (feed 30 s, assets 20 s) e token de cancelamento.
+    1024 bytes, e cada pedido tem timeout (feed 30 s, assets 20 s) e token de cancelamento. O fetch de
+    assets pequenos volta a validar o URL contra a allowlist (defesa em profundidade: fora dela, null e
+    nenhum pedido).
   - `InstallerExecutor`: descarrega para uma pasta nova, aleatória e só do utilizador
     (`FileMode.CreateNew`, `FileShare.None`), aborta ao primeiro byte além do tamanho assinado, cada
-    leitura tem timeout (30 s), reabre o ficheiro só para leitura (nega escritores e apagadores),
+    leitura (e a espera pelos cabeçalhos) tem timeout (30 s), volta a recusar um URL fora da allowlist
+    antes de criar a pasta, reabre o ficheiro só para leitura (nega escritores e apagadores),
     verifica tamanho e SHA-256 POR ESSE handle (`UpdateVerifier.VerifyInstaller`), lança o instalador
     enquanto o handle está aberto e só depois o liberta; qualquer falha apaga a pasta (a única que
     fica é a do instalador a correr, que o `UpdateCleanupService` remove mais tarde, nunca uma pasta
-    com menos de 10 minutos nem com um ficheiro aberto).
+    com menos de 10 minutos nem com um ficheiro aberto; a pasta do update acabado de usar fica por isso
+    10 minutos). Se o encerramento da app falhar DEPOIS de o instalador arrancar, conta como arranque
+    (a pasta fica, sem toast de falha; fica no `audit.log`).
   - `UpdateService`: orquestra; só oferece o que verificou, uma instalação de cada vez, o oferecido
-    (`_pending`) protegido por lock e gasto quando o instalador arranca; os toasts só mostram a versão
+    (`_pending`) protegido por lock, gasto quando o instalador arranca e retirado por qualquer
+    verificação que falhe (offline, feed inválido, URL recusado, nada mais novo): um toast antigo não
+    instala uma oferta que a última verificação não confirmou; os toasts só mostram a versão
     do manifesto verificado (`UpdateMessages`), nunca texto da API, e um release que não verifica nunca
     é nomeado nem ligado. Uma build sem a chave não contacta o GitHub e só responde a uma verificação
     pedida pelo utilizador, com texto neutro. Toda a falha ou recusa fica em `audit.log`

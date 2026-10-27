@@ -84,6 +84,7 @@ internal sealed class UpdateService
 
             if (newestVersion == null)
             {
+                SetPending(null);   // nothing newer than this build is listed any more: an older toast offers nothing
                 if (showToastIfNoUpdate)
                     Notify(() => _notifier.Show(UpdateMessages.UpToDateHeader, UpdateMessages.UpToDateBody));
                 return;
@@ -114,6 +115,9 @@ internal sealed class UpdateService
             // A check the user asked for must never fail silently (being offline on the first click used to show nothing).
             // The automatic startup check stays quiet on screen, but the reason is in the audit log.
             Debug.WriteLine($"Update error: {e.Message}");
+            // A check that failed (offline, bad feed, anything) withdraws the earlier offer: an old toast must not install an
+            // offer that this check could not confirm.
+            SetPending(null);
             UpdateAudit.Write(_audit, UpdateAudit.CheckFailedKind, url, e.Message, "Failed", $"exception={e.GetType().Name}");
             if (showToastIfNoUpdate)
                 Notify(() => _notifier.Show(UpdateMessages.CheckFailedHeader, e.Message));
@@ -195,7 +199,9 @@ internal sealed class UpdateService
             case InstallStatus.Launched:
                 // The offer is used up; the app is shutting down.
                 lock (_gate) { if (ReferenceEquals(_pending, pending)) _pending = null; }
-                UpdateAudit.Write(_audit, UpdateAudit.InstallStartedKind, installerUrl, "The verified installer was started.", "Succeeded", $"version={pending.Manifest.Version}");
+                // outcome.Message is only set when the shutdown call failed after the start: still a launch, recorded, not a failure.
+                UpdateAudit.Write(_audit, UpdateAudit.InstallStartedKind, installerUrl, "The verified installer was started.", "Succeeded",
+                    outcome.Message.Length == 0 ? $"version={pending.Manifest.Version}" : $"version={pending.Manifest.Version}; shutdown failed: {outcome.Message}");
                 break;
             case InstallStatus.VerificationFailed:
                 UpdateAudit.Write(_audit, UpdateAudit.InstallRefusedKind, installerUrl, UpdateVerifier.Describe(outcome.Check), "Rejected", $"reason={outcome.Check}");

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using Racks.UseCases.Updates;
 
 namespace Racks.Infrastructure.Update;
 
@@ -68,10 +69,12 @@ internal sealed class ReleaseCatalogClient
 
     /// <summary>
     /// A small asset (manifest, signature) with a hard size cap and a timeout. Null on any failure: an HTTP error, a larger
-    /// body, a network error or a timeout. The caller has already checked the URL against the trusted release path.
+    /// body, a network error or a timeout. The URL must be on the trusted release path (checked here too), otherwise null and no request.
     /// </summary>
     public async Task<byte[]?> GetSmallAssetAsync(HttpClient http, string url, int maxBytes, CancellationToken ct = default)
     {
+        // Defense in depth: the use case checked the URL already; nothing off the trusted release path is ever requested.
+        if (!ReleaseManifestValidator.IsTrustedDownloadUrl(url)) return null;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(_assetTimeout);
         try

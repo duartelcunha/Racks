@@ -461,6 +461,88 @@ public class UpdateServiceTests
         Assert.Equal("🚀 Racks 1.5.0 is available", UpdateMessages.OfferHeader(UpdateManifest.ForInstaller("1.5.0", new byte[32], 1)));
     }
 
+    // ---- an old toast cannot install an offer the latest check could not confirm ----------------------------
+
+    [Fact]
+    public async Task A_later_check_that_fails_to_connect_withdraws_an_earlier_offer()
+    {
+        using var rig = await Offered();
+        Assert.NotNull(rig.Service.Pending);
+        rig.Http.Route(ReleaseCatalogClient.ReleasesApi, _ => throw new HttpRequestException("offline"));
+
+        await rig.Service.CheckAsync(ReleaseCatalogClient.ReleasesApi, showToastIfNoUpdate: false);
+
+        Assert.Null(rig.Service.Pending);
+        await rig.Service.InstallAsync();   // the old toast's Install button
+        Assert.Empty(rig.Launcher.Started);
+        Assert.Equal(("Update blocked", Blocked + "Check for updates again."), rig.Notifier.Plain.Last());
+        Assert.DoesNotContain(rig.Http.Requests, r => r == rig.InstallerAsset);
+    }
+
+    [Fact]
+    public async Task A_later_check_with_an_unusable_feed_or_url_withdraws_an_earlier_offer()
+    {
+        foreach (var breakIt in new Action<UpdateRig>[]
+        {
+            r => r.Http.Route(ReleaseCatalogClient.ReleasesApi, System.Text.Encoding.UTF8.GetBytes("<html>")),
+            r => r.Http.Route(ReleaseCatalogClient.ReleasesApi, _ => new HttpResponseMessage(HttpStatusCode.Forbidden)),
+        })
+        {
+            using var rig = await Offered();
+            breakIt(rig);
+            await rig.Service.CheckAsync(ReleaseCatalogClient.ReleasesApi, false);
+            Assert.Null(rig.Service.Pending);
+        }
+
+        using var rig2 = await Offered();
+        await rig2.Service.CheckAsync("https://evil.example/", false);
+        Assert.Null(rig2.Service.Pending);
+    }
+
+    [Fact]
+    public async Task A_later_check_that_finds_nothing_newer_withdraws_an_earlier_offer()
+    {
+        using var rig = await Offered();
+        rig.Http.Route(ReleaseCatalogClient.ReleasesApi, System.Text.Encoding.UTF8.GetBytes("[]"));
+
+        await rig.Service.CheckAsync(ReleaseCatalogClient.ReleasesApi, false);
+
+        Assert.Null(rig.Service.Pending);
+    }
+
+    [Fact]
+    public async Task A_cancelled_check_leaves_the_earlier_offer_alone()
+    {
+        using var rig = await Offered();
+        rig.Http.Hang(ReleaseCatalogClient.ReleasesApi);
+        using var cts = new CancellationTokenSource();
+        cts.CancelAfter(50);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => rig.Service.CheckAsync(ReleaseCatalogClient.ReleasesApi, false, cts.Token));
+
+        Assert.NotNull(rig.Service.Pending);
+    }
+
+    // ---- a shutdown that fails after the installer started --------------------------------------------------
+
+    [Fact]
+    public async Task A_shutdown_that_throws_after_the_start_is_a_launch_not_a_failed_update()
+    {
+        using var rig = await Offered();
+        rig.Shutdown.Throws = new InvalidOperationException("no application");
+
+        await rig.Service.InstallAsync();
+
+        Assert.Single(rig.Launcher.Started);
+        Assert.Null(rig.Service.Pending);                                    // the offer is used up
+        Assert.DoesNotContain(rig.Notifier.Plain, m => m.Header == "Update failed");
+        Assert.Empty(rig.Notifier.Plain);                                    // no toast at all
+        Assert.Single(Directory.GetFiles(Assert.Single(rig.Downloads())));   // the installer's folder stays
+        var e = Assert.Single(Events(rig));
+        Assert.Equal((UpdateAudit.InstallStartedKind, "Succeeded"), (e.Kind, e.Status));
+        Assert.Contains("shutdown failed: no application", e.Detail);
+    }
+
     // ---- the audit helper ---------------------------------------------------------------------------------
 
     [Theory]

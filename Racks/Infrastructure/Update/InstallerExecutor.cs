@@ -62,6 +62,10 @@ internal sealed class InstallerExecutor
     public async Task<InstallOutcome> RunAsync(string installerUrl, UpdateManifest manifest, string userAgentVersion,
                                                IUpdateProgress progress, CancellationToken ct = default)
     {
+        // Defense in depth: the use case checked this URL already; nothing off the trusted release path is ever requested.
+        if (!ReleaseManifestValidator.IsTrustedDownloadUrl(installerUrl))
+            return new InstallOutcome(InstallStatus.DownloadFailed, UpdateCheck.Ok, "The installer address is not allowed.");
+
         string dir = "";
         FileStream? locked = null;
         try
@@ -71,7 +75,7 @@ internal sealed class InstallerExecutor
             bool tooBig = false;
 
             using (var http = _http.Create(userAgentVersion))
-            using (var response = await http.GetAsync(installerUrl, HttpCompletionOption.ResponseHeadersRead, ct))
+            using (var response = await GetHeadersAsync(http, installerUrl, ct))
             {
                 response.EnsureSuccessStatusCode();
                 long totalBytes = manifest.Size;
@@ -132,7 +136,17 @@ internal sealed class InstallerExecutor
             // Orderly shutdown instead of Environment.Exit: Exit skipped OnExit, which releases the single-instance mutex (the
             // relaunched Racks could be refused) and restores state. The installer force-closes anything still running, so a
             // stuck window cannot block the update. The folder stays: the installer runs from it.
-            _shutdown.Shutdown();
+            try
+            {
+                _shutdown.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                // The installer is already running and will close this instance itself: that is a launch, not a failed update, and
+                // its folder must not be deleted. The message only goes to the audit log.
+                Debug.WriteLine($"Shutdown after launch failed: {ex.Message}");
+                return new InstallOutcome(InstallStatus.Launched, UpdateCheck.Ok, ex.Message);
+            }
             return InstallOutcome.Launched();
         }
         catch (Exception ex)
@@ -152,6 +166,22 @@ internal sealed class InstallerExecutor
             locked = null;
             UpdateCleanupService.TryDeleteDir(dir);
             return new InstallOutcome(InstallStatus.VerificationFailed, why, "");
+        }
+    }
+
+    // The response headers get the same bound as a read (not HttpClient's implicit 100 s). The timer is gone once the headers
+    // are in, so it cannot cut the body; the caller's token still wins.
+    private async Task<HttpResponseMessage> GetHeadersAsync(HttpClient http, string url, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(_readTimeout);
+        try
+        {
+            return await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new TimeoutException("The server did not answer in time.");
         }
     }
 
