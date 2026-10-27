@@ -28,7 +28,7 @@ public class ArchitectureRatchetTests
     public void RackWindow_parts_do_not_grow()
     {
         var parts = Directory.EnumerateFiles(Path.Combine(Root, "Racks"), "RackWindow*.cs")
-            .ToDictionary(Path.GetFileName, f => File.ReadAllLines(f).Length);
+            .ToDictionary(f => Path.GetFileName(f)!, f => File.ReadAllLines(f).Length);
         Assert.True(parts.Count > 1, "expected RackWindow.xaml.cs plus partial files");
 
         var biggest = parts.MaxBy(p => p.Value);
