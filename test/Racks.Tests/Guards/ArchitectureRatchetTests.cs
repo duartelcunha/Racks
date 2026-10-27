@@ -73,6 +73,15 @@ public class ArchitectureRatchetTests
         var parts = Directory.EnumerateFiles(Path.Combine(Root, "Racks"), "App*.cs").Select(Path.GetFileName).ToList();
         Assert.Equal(new[] { "App.xaml.cs" }, parts);
 
+        // The class must not hide under another file name (any folder under Racks/, generated obj/bin output excluded).
+        var elsewhere = Directory.EnumerateFiles(Path.Combine(Root, "Racks"), "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                     && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
+                     && Path.GetFileName(f) != "App.xaml.cs")
+            .Where(f => Regex.IsMatch(File.ReadAllText(f), @"partial\s+class\s+App"))
+            .Select(Path.GetFileName).ToList();
+        Assert.Empty(elsewhere);
+
         int lines = File.ReadAllLines(Path.Combine(Root, "Racks", "App.xaml.cs")).Length;
         Assert.True(lines <= Baseline["appLines"],
             $"App.xaml.cs has {lines} lines, baseline is {Baseline["appLines"]}. Put the logic in a class under Racks/UseCases/Startup instead.");

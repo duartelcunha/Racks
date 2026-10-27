@@ -21,7 +21,7 @@ may reference those interfaces (dependency inversion), never the use-case logic.
 | Infrastructure | Everything that touches Windows: filesystem, shell, registry, HTTP, process, logging | most of `Util/` (`Safe*`, `Shell*`, `Interop`, `RegistryHelper`, `Updater`, `JunctionHelper`, ...), `Services/` | `Racks/Infrastructure/{FileSystem,Shell,Registry,Update,Logging}/` |
 | Shared | Small pure helpers used by every layer | `SafeRegex`, `SafeWpfValues`, path and name validation | `Racks/Infrastructure/` until a split is needed |
 
-There is no DI container. `Infrastructure/Startup/AppComposition` (called from the `App` constructor) wires the startup services by hand; the legacy static
+There is no DI container. `Infrastructure/Startup/AppComposition` (called from the `App` constructor) wires the startup services by hand. It is the composition root, the one deliberate exception to "Infrastructure does not know use cases" (kept there rather than next to `App`, so `App.xaml.cs` stays a thin lifecycle shell); the legacy static
 `MainWindow._controller` is being retired step by step (see ratchets below).
 
 ## The rules that matter
@@ -68,7 +68,7 @@ numbers in `Guards/baseline.json` may only go down.
   and `UseCases/Display/DisplayChangeDebouncer` (one reposition pass per burst). Composition is manual, no container; the static
   `MainWindow._controller` stays for the rack windows. Tests use `ManualRepeatingScheduler`, `InMemoryRegistryRoot` and fakes for the
   hook, hit test, hotkey API and host; none touches the real Desktop, shell, hotkeys or `HKCU\SOFTWARE\Racks`.
-- **App and startup (P8).** `App.xaml.cs` (39 lines, ratchet `appLines`) only builds the services in its constructor and delegates
+- **App and startup (P8).** `App.xaml.cs` (ratchet `appLines`) only builds the services in its constructor and delegates
   `OnStartup`/`OnExit`. `UseCases/Startup/AppBootstrapService` holds the ONE ordered list of startup steps per mode (a test reads and
   runs it with a recording host; no test reads source text any more). Normal: culture preview, WPF language, regex default timeout,
   `SafeSvg.Apply`, registry migration, dark mode, single-instance name (a second Racks shuts down here), binding trace level,
@@ -79,7 +79,7 @@ numbers in `Guards/baseline.json` may only go down.
   settings store, report), `SingleInstanceGuard` (`Local\Racks-SingleInstance-2C9D`, enabled only in release builds, handle factory
   injected), `ProcessConfiguration`, and `UseCases/Crash/CrashReportingService` (UI-thread exceptions always handled, unobserved
   task exceptions observed, `crash.log` entries in the format `CrashLogTests` pins, one toast per session, silent when running as the
-  uninstaller). The WPF/Windows side is `Infrastructure/Startup` (`AppStartupHost`, `ThreadWatchdog`, `MutexHandle`,
+  uninstaller). The crash events are attached by `Infrastructure/Startup/CrashHooks` first thing in the `App` constructor (before anything else there can throw). The WPF/Windows side is `Infrastructure/Startup` (`AppStartupHost`, `ThreadWatchdog`, `MutexHandle`,
   `TaskDispatcherDelayScheduler`, `AppComposition`).
 - **Persistence.** `Core/InstanceController` asks the settings repository for the racks under
   `HKCU\SOFTWARE\Racks\Instances\<name>` and runs the post pass (Desktop-rack detection, the two one-shot migrations,

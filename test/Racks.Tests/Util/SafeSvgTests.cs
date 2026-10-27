@@ -114,12 +114,34 @@ public class SafeSvgTests
         // StartupUri only after OnStartup returns, so the hardening has to come first in every mode that can open a file.
         foreach (var mode in Enum.GetValues<Racks.UseCases.Startup.StartupMode>())
         {
-            var steps = StartupHarness.Create().Bootstrap.StepNames(mode);
+            using var harness = StartupHarness.Create();
+            var steps = harness.Bootstrap.StepNames(mode);
             int svg = steps.ToList().IndexOf(Racks.UseCases.Startup.StartupSteps.ApplySafeSvg);
             int window = steps.ToList().IndexOf(Racks.UseCases.Startup.StartupSteps.SetStartupUri);
             Assert.True(svg >= 0, $"{mode} must apply the SVG settings");
             if (window >= 0) Assert.True(svg < window, $"{mode}: SafeSvg.Apply must run before StartupUri is set");
         }
+    }
+
+    [Fact]
+    public void The_real_startup_host_applies_the_svg_settings()
+    {
+        // ApplySafeSvg does not use the application, so none is needed to run the real host step.
+        var host = new Racks.Infrastructure.Startup.AppStartupHost(null!, () => { });
+        try
+        {
+            SvgDocument.ResolveExternalImages = ExternalType.Local | ExternalType.Remote;
+            SvgDocument.ResolveExternalElements = ExternalType.Local;
+            SvgDocument.DisableDtdProcessing = false;
+
+            host.ApplySafeSvg();
+
+            Assert.Equal(ExternalType.None, SvgDocument.ResolveExternalImages);
+            Assert.Equal(ExternalType.None, SvgDocument.ResolveExternalElements);
+            Assert.True(SvgDocument.DisableDtdProcessing);
+            Assert.True(SafeSvg.IsApplied);
+        }
+        finally { SafeSvg.Apply(); }
     }
 
     private static int CenterPixel(SvgDocument doc)

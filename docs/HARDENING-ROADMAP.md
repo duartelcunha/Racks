@@ -270,7 +270,7 @@ which tests were added.
 
 ### P8 in short (what changed)
 
-- `App.xaml.cs` went from 293 to 39 lines (ratchet `appLines` 39, and "it is one file"). It builds the services in its constructor
+- `App.xaml.cs` went from 293 to 38 lines (ratchet `appLines` 38, and "it is one file"). It builds the services in its constructor
   (`Infrastructure/Startup/AppComposition`, no container) and delegates `OnStartup`/`OnExit`.
 - New: `UseCases/Startup/` (`AppBootstrapService` = the single ordered step list per mode, `StartupMigrationService`, `UninstallMode`
   + `RackTitles`, `SingleInstanceGuard`, `ProcessConfiguration`), `UseCases/Crash/CrashReportingService`, and in
@@ -289,6 +289,13 @@ which tests were added.
   (argument parsing, injected watchdog, titles from a throwaway rack registry, report). No test starts a real mutex.
 - Not done on purpose: the real app was not started (`Test-Racks.ps1` and the dev-tools e2e were not run), so the real startup path
   (mutex, toast activation, startup animation, uninstall runs) is covered by the unit tests of the order and the logic only.
+
+### Follow-up recorded by the P8 review (not implemented)
+
+- **Startup failure after the single-instance name is taken.** If any step after `AcquireSingleInstance` throws, the dispatcher
+  hook marks the exception handled, WPF skips `StartupUri`, and with `ShutdownMode=OnExplicitShutdown` the process stays alive
+  with no window while still holding the mutex, so every relaunch is refused. Same behavior as before the refactor. A fix would
+  catch in `AppBootstrapService.Run`, log, and shut down (releasing the name).
 
 ### Follow-ups recorded by the P2 review (not implemented)
 

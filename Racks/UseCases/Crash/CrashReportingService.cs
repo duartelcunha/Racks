@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Application = System.Windows.Application;
 
 namespace Racks.UseCases.Crash;
 
@@ -49,17 +48,6 @@ public sealed class CrashReportingService
         _runningForUninstaller = runningForUninstaller;
         _now = now ?? (() => DateTime.Now);
         _trace = trace ?? (m => Debug.WriteLine(m));
-    }
-
-    /// <summary>Wires the three process-wide hooks. Call it from the App constructor, before OnStartup does anything.</summary>
-    public void Attach(Application app)
-    {
-        app.DispatcherUnhandledException += (_, e) => e.Handled = HandleDispatcherException(e.Exception);
-        AppDomain.CurrentDomain.UnhandledException += (_, e) => HandleDomainException(e.ExceptionObject);
-        TaskScheduler.UnobservedTaskException += (_, e) =>
-        {
-            if (HandleUnobservedTaskException(e.Exception)) e.SetObserved();
-        };
     }
 
     /// <summary>Logs a UI-thread exception. Always true: mark it handled.</summary>

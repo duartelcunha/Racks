@@ -14,7 +14,7 @@ public sealed class AppBootstrapServiceTests
     ];
 
     [Fact]
-    public void The_normal_startup_order_is_the_one_the_app_always_had()
+    public void The_normal_startup_order_is_the_documented_order()
     {
         using var h = StartupHarness.Create();
         Assert.Equal(NormalOrder, h.Bootstrap.StepNames(StartupMode.Normal));

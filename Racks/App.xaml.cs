@@ -1,6 +1,5 @@
 using System.Windows;
 using Racks.Infrastructure.Startup;
-using Racks.UseCases.Startup;
 using Application = System.Windows.Application;
 
 namespace Racks
@@ -11,26 +10,26 @@ namespace Racks
     /// </summary>
     public partial class App : Application
     {
-        private readonly AppBootstrapService _bootstrap;
+        private readonly AppServices _services;
         private StartupEventArgs? _startupArgs;
 
         public App()
         {
-            // Crash handlers are wired in the constructor so they are active before OnStartup does anything.
-            var services = AppComposition.Create(this, RaiseBaseStartup);
-            services.Crash.Attach(this);
-            _bootstrap = services.Bootstrap;
+            // The crash hooks come first, so they are attached before anything below can throw. The uninstaller flag is
+            // read when a crash happens, by which time the services exist.
+            CrashHooks.Attach(this, AppComposition.CreateCrashService(() => _services?.Uninstall.IsRunningForUninstaller ?? false));
+            _services = AppComposition.Create(this, RaiseBaseStartup);
         }
 
         protected override void OnStartup(StartupEventArgs e)
         {
             _startupArgs = e;
-            _bootstrap.Run(e.Args);
+            _services.Bootstrap.Run(e.Args);
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
-            _bootstrap.Exit();
+            _services.Bootstrap.Exit();
             base.OnExit(e);
         }
 

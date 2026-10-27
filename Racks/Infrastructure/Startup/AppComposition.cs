@@ -9,11 +9,23 @@ using Application = System.Windows.Application;
 namespace Racks.Infrastructure.Startup;
 
 /// <summary>The services <c>App</c> keeps for its lifetime.</summary>
-internal sealed record AppServices(CrashReportingService Crash, AppBootstrapService Bootstrap);
+internal sealed record AppServices(AppBootstrapService Bootstrap, UninstallMode Uninstall);
 
-/// <summary>Builds the startup services by hand (no DI container). Nothing here runs until the app calls them.</summary>
+/// <summary>
+/// Builds the startup services by hand (no DI container). This is the composition root: the one place in Infrastructure that
+/// is allowed to know the use cases and wire them to their Windows implementations. Nothing here runs until the app calls it.
+/// </summary>
 internal static class AppComposition
 {
+    /// <summary>The crash reporter. It is built and attached first, so it only needs the uninstaller flag as a function.</summary>
+    public static CrashReportingService CreateCrashService(Func<bool> runningForUninstaller) => new(
+        () => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            InstanceController.appName),
+        (dir, entry) => CrashLog.Append(dir, entry),
+        ShowCrashToast,
+        runningForUninstaller);
+
     public static AppServices Create(Application app, Action raiseBaseStartup)
     {
         var uninstall = new UninstallMode(
@@ -21,14 +33,6 @@ internal static class AppComposition
             Environment.Exit,
             titles => UninstallCleanup.Run(CleanupPaths.ForCurrentUser(), titles, touchShell: true),
             () => Instance.Store);
-
-        var crash = new CrashReportingService(
-            () => Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                InstanceController.appName),
-            (dir, entry) => CrashLog.Append(dir, entry),
-            ShowCrashToast,
-            () => uninstall.IsRunningForUninstaller);
 
         var migrations = new StartupMigrationService(
             MigrationMarkers.Default,
@@ -48,7 +52,7 @@ internal static class AppComposition
             uninstall,
             new SingleInstanceGuard(singleInstance, name => new MutexHandle(name)),
             migrations);
-        return new AppServices(crash, bootstrap);
+        return new AppServices(bootstrap, uninstall);
     }
 
     private static void ShowCrashToast() =>
