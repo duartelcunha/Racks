@@ -33,3 +33,26 @@ public sealed class DispatcherDelayScheduler : IDelayScheduler
         public void Dispose() => timer.Stop();
     }
 }
+
+/// <summary>Runs an action again and again at a fixed interval until the result is disposed. Exists so polling logic can be tested without waiting.</summary>
+public interface IRepeatingScheduler
+{
+    IDisposable Every(TimeSpan interval, Action tick);
+}
+
+/// <summary>Production repeating scheduler: one <see cref="System.Windows.Threading.DispatcherTimer"/>, so ticks run on the UI thread (create it on the UI thread).</summary>
+public sealed class DispatcherRepeatingScheduler : IRepeatingScheduler
+{
+    public IDisposable Every(TimeSpan interval, Action tick)
+    {
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = interval };
+        timer.Tick += (_, _) => tick();
+        timer.Start();
+        return new Stopper(timer);
+    }
+
+    private sealed class Stopper(System.Windows.Threading.DispatcherTimer timer) : IDisposable
+    {
+        public void Dispose() => timer.Stop();
+    }
+}
