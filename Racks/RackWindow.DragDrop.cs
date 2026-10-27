@@ -161,7 +161,7 @@ namespace Racks
                         Debug.WriteLine("Drag-out: desktop copy not confirmed complete; keeping sandbox original.");
                         return; // keep the rack's claim and the original - no data loss
                     }
-                    if (!Util.SafeDelete.ToRecycleBin(workspaceFullPath))
+                    if (!Infrastructure.FileSystem.FileOperationBroker.Default.DeleteToRecycleBin(workspaceFullPath, "drag-out: recycle workspace original").Succeeded)
                         Debug.WriteLine("Drag-out: could not recycle sandbox original; leaving it in place.");
                 }
                 else if (!movedAway)
@@ -172,7 +172,7 @@ namespace Racks
                     if (!DroppedOnDesktop(dropPt)) return;
                     if (File.Exists(desktopTarget) || Directory.Exists(desktopTarget)) return; // name clash: bail safely
 
-                    if (Util.SafeMove.TryMove(workspaceFullPath, desktopTarget, out _) != Util.SafeMove.Result.Moved)
+                    if (!Infrastructure.FileSystem.FileOperationBroker.Default.Move(workspaceFullPath, desktopTarget, "drag-out: workspace to desktop").Completed)
                         return;
                 }
 
@@ -458,8 +458,8 @@ namespace Racks
                             }
                             else
                             {
-                                var moveResult = SafeMove.TryMove(file, destinationPath, out string moveReason);
-                                if (moveResult == SafeMove.Result.Moved)
+                                var moveResult = Infrastructure.FileSystem.FileOperationBroker.Default.Move(file, destinationPath, "drop into desktop rack");
+                                if (moveResult.Completed)
                                 {
                                     Util.Interop.NotifyShellMove(file, destinationPath, isDirectory: srcIsDir);
                                     ReassignDesktopFileToThisRack(destinationPath);
@@ -467,8 +467,8 @@ namespace Racks
                                 }
                                 else
                                 {
-                                    Debug.WriteLine($"SafeMove {moveResult}: {moveReason}");
-                                    if (!string.IsNullOrEmpty(moveReason)) dropMessages.Add(moveReason);
+                                    Debug.WriteLine($"File move {moveResult.Status}: {moveResult.Reason}");
+                                    if (!string.IsNullOrEmpty(moveResult.Reason)) dropMessages.Add(moveResult.Reason);
                                 }
                             }
                             continue;
@@ -482,16 +482,16 @@ namespace Racks
                             }
                             else
                             {
-                                var moveResult = SafeMove.TryMove(file, destinationPath, out string moveReason);
-                                if (moveResult == SafeMove.Result.Moved)
+                                var moveResult = Infrastructure.FileSystem.FileOperationBroker.Default.Move(file, destinationPath, "drop into rack");
+                                if (moveResult.Completed)
                                 {
                                     Util.Interop.NotifyShellMove(file, destinationPath, isDirectory: srcIsDir);
                                     droppedPaths.Add(destinationPath);
                                 }
                                 else
                                 {
-                                    Debug.WriteLine($"SafeMove {moveResult}: {moveReason}");
-                                    if (!string.IsNullOrEmpty(moveReason)) dropMessages.Add(moveReason);
+                                    Debug.WriteLine($"File move {moveResult.Status}: {moveResult.Reason}");
+                                    if (!string.IsNullOrEmpty(moveResult.Reason)) dropMessages.Add(moveResult.Reason);
                                     continue;
                                 }
                             }
@@ -526,7 +526,7 @@ namespace Racks
                     Util.Interop.NotifyShellUpdateDir(parent);
                 }
 
-                // Surface any guard-rail messages from SafeMove in a single dialog
+                // Surface any guard-rail messages from the file broker in a single dialog
                 // so the user knows why a drop didn't take. Marshalled to the UI
                 // thread because Window_Drop runs continuation work via Task.Run.
                 if (dropMessages.Count > 0)
@@ -576,18 +576,19 @@ namespace Racks
                 {
                     string dest = Path.Combine(sandbox, Path.GetFileName(firstDroppedFile));
                     bool srcIsDir = Directory.Exists(firstDroppedFile);
-                    var moveResult = SafeMove.TryMove(firstDroppedFile, dest, out string moveReason);
-                    if (moveResult == SafeMove.Result.Moved)
+                    var moveResult = Infrastructure.FileSystem.FileOperationBroker.Default.Move(firstDroppedFile, dest, "drop into new rack");
+                    string moveReason = moveResult.Reason;
+                    if (moveResult.Completed)
                     {
                         Util.Interop.NotifyShellMove(firstDroppedFile, dest, isDirectory: srcIsDir);
                         Util.Interop.NotifyShellUpdateDir(Path.GetDirectoryName(firstDroppedFile)!);
                     }
                     else
                     {
-                        // SafeMove blocked the move (special folder, collision, etc.).
+                        // The broker blocked the move (special folder, collision, etc.).
                         // Fall back to a shortcut so the user's gesture still produced
                         // *something* useful in the new rack, and surface the reason.
-                        Debug.WriteLine($"Bootstrap SafeMove {moveResult}: {moveReason}");
+                        Debug.WriteLine($"Bootstrap move {moveResult.Status}: {moveReason}");
                         CreateShortcut(firstDroppedFile, sandbox);
                         if (!string.IsNullOrEmpty(moveReason))
                         {

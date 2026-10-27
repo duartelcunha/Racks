@@ -50,7 +50,7 @@ namespace Racks.Core
                     // If something already sits at the original spot, don't clobber it.
                     if (File.Exists(m.OriginalPath) || Directory.Exists(m.OriginalPath)) continue;
 
-                    if (Racks.Util.SafeMove.TryMove(m.NewPath, m.OriginalPath, out _) == Racks.Util.SafeMove.Result.Moved)
+                    if (Racks.Infrastructure.FileSystem.FileOperationBroker.Default.Move(m.NewPath, m.OriginalPath, "magic organize: undo").Completed)
                     {
                         Racks.Util.Interop.NotifyShellMove(m.NewPath, m.OriginalPath, Directory.Exists(m.OriginalPath));
                         restored++;

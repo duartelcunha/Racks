@@ -1,4 +1,5 @@
 using System.IO;
+using Racks.Infrastructure.FileSystem;
 using Racks.Util;
 
 namespace Racks.Rack;
@@ -33,6 +34,6 @@ public static class WorkspaceReturn
             if (attempt > 1000) return null;
             target = Path.Combine(desktopDir, UninstallCleanup.CandidateName(fileName, isDir, attempt));
         }
-        return SafeMove.TryMove(from, target, out _) == SafeMove.Result.Moved ? target : null;
+        return FileOperationBroker.Default.Move(from, target, "return from workspace").Completed ? target : null;
     }
 }

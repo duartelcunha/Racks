@@ -24,9 +24,11 @@ There is no DI container. `App.OnStartup` wires services by hand; the legacy sta
 
 ## The rules that matter
 
-1. **Destructive file operations go through one gateway** (`FileOperationBroker`, built in phase P1; today
-   `SafeMove` and `SafeDelete`). It canonicalizes, rejects protected roots, validates names, never follows reparse
-   points blindly and writes an audit record.
+1. **Destructive file operations go through one gateway** (`Infrastructure/FileSystem/FileOperationBroker`, a
+   facade over the internal `SafeMove` and `SafeDelete`). It validates names and paths (`PathPolicy`),
+   canonicalizes, rejects protected roots, never follows reparse points blindly and writes one audit record per
+   call (`%AppData%\Racks\audit.log`). `Guards/FileMutationGuardTests` fails on raw `File`/`Directory` mutations
+   outside it, except those listed in `Guards/fs-allowlist.json` (the list only shrinks; P2 shrinks it).
 2. **The registry is read and written through a typed schema + repository** (phase P6). A bad value is rejected,
    logged with field, raw value, reason and fallback, and never applied.
 3. **Presentation does not touch the registry, mutate files, call shell notifications or the updater.**
@@ -45,21 +47,23 @@ numbers in `Guards/baseline.json` may only go down.
 - **Persistence.** `Core/InstanceController` loads/saves racks under `HKCU\SOFTWARE\Racks\Instances\<name>`;
   `Core/Instance` writes through on every property change; global switches and migration markers live under
   `HKCU\SOFTWARE\Racks`. Layout export/import is `Util/RackLayoutIO`.
-- **Moving files.** `Util/SafeMove` (canonicalization, protected roots, cross-volume copy-then-delete),
-  `Util/SafeDelete` (reparse-point-aware tree delete, Recycle Bin), `Rack/WorkspaceReturn` (back to Desktop),
+- **Moving files.** `Infrastructure/FileSystem/FileOperationBroker` over the internal primitives `Util/SafeMove`
+  (canonicalization, protected roots, cross-volume copy-then-delete) and `Util/SafeDelete` (reparse-point-aware
+  tree delete, Recycle Bin), `Rack/WorkspaceReturn` (back to Desktop),
   `Util/UninstallCleanup` (returns user files on uninstall, rename-only).
 - **Auto-route.** `Util/DesktopRouter` watches the Desktop and routes new files into racks by regex
   (`Util/SafeRegex` bounds every regex with a timeout).
 - **Updates.** `Util/Updater` (flow), `Util/UpdateManifest` (pure signature/hash/size checks), `Util/UpdateTrust`
   (embedded public key). `tools/RacksSigner` links the last two by path.
-- **Diagnostics.** `Util/CrashLog` (`%AppData%\Racks\crash.log`, rotated), `Services/DiagnosticCounters`.
+- **Diagnostics.** `Util/CrashLog` (`%AppData%\Racks\crash.log`, rotated), `Infrastructure/Logging` (`audit.log`: one
+  JSON line per file operation, same rotation, local only), `Services/DiagnosticCounters`.
 
 ## Paths that must not move
 
 - `Racks/Util/UpdateManifest.cs`, `Racks/Util/UpdateTrust.cs`: `tools/RacksSigner/RacksSigner.csproj` and
   `tools/install-signer.ps1` / `tools/release-sign.ps1` reference them by path.
 - `HKCU\SOFTWARE\Racks\MainHwnd` and the `WM_RACKS_*` window messages: used by `tools/*E2ERunner.ps1`.
-- `Guards/baseline.json` is copied to the test output; keep its keys stable (add, don't rename).
+- `Guards/baseline.json` and `Guards/fs-allowlist.json` are copied to the test output; keep their keys stable (add, don't rename).
 - The `OnStartup` order in `App.xaml.cs`: `SafeSvg.Apply()` before `StartupUri`; `DesktopIconManager.Initialize()`
   before any `RackWindow` exists.
 

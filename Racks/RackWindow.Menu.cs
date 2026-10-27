@@ -671,7 +671,7 @@ namespace Racks
                         foreach (string file in System.IO.Directory.GetFileSystemEntries(Instance.Folder))
                         {
                             string dest = System.IO.Path.Combine(deskPath, System.IO.Path.GetFileName(file));
-                            if (Util.SafeMove.TryMove(file, dest, out _) == Util.SafeMove.Result.Moved)
+                            if (Infrastructure.FileSystem.FileOperationBroker.Default.Move(file, dest, "remove rack: return to desktop").Completed)
                                 returnedToDesktop.Add(dest);
                         }
                         try { System.IO.Directory.Delete(Instance.Folder, false); } catch { }
