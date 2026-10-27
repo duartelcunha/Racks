@@ -155,6 +155,8 @@ Colors, fonts, opacity, shadow, gradient or pure glass, per rack. Right-click â€
 
 Get `Racks-Setup-<version>.exe` from the [latest release](https://github.com/duartelcunha/Racks/releases/latest). No admin rights needed. Right-click the tray icon to make your first rack.
 
+Code signing: see the [code signing policy](docs/CODE-SIGNING-POLICY.md). Free code signing provided by SignPath.io, certificate by SignPath Foundation (once the project is accepted; releases are not yet Authenticode-signed).
+
 **Requirements:** 64-bit Windows 10 version 2004 (build 19041) or later, including Windows 11. The installer carries the .NET runtime, so there is nothing else to install. (The app is built for that minimum; the installer itself does not check the Windows version.)
 
 <br />

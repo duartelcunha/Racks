@@ -21,7 +21,7 @@ lacuna conhecida (ver o risco indicado); **Aberto** = não aplicado (nenhum nest
 | ID | Regra numa linha | Código que a impõe | Testes que a fixam | Estado |
 |---|---|---|---|---|
 | INV-UPDATE-1 | Nada descarregado corre sem manifesto assinado + versão + URL + tamanho + SHA-256; falha sempre fechada | `UseCases/Updates/*`, `Infrastructure/Update/*`, `Util/UpdateManifest.cs`, `Util/UpdateTrust.cs` | `UpdateSignatureTests`, `UpdaterCheckBehaviorTests`, `UpdaterInstallBehaviorTests`, `InstallerExecutorTests`, `ReleaseCatalogClientTests`, `UpdateServiceTests`, `ReleaseGateTests` | Aplicado (R-19, R-20) |
-| INV-RELEASE-1 | O CI nunca assina nem publica; o dono assina com um signer fixado | `.github/workflows/release.yml`, `tools/install-signer.ps1`, `tools/release-sign.ps1` | `ReleaseScriptTests`, `ReleaseGateTests` | Aplicado |
+| INV-RELEASE-1 | O CI nunca publica nem assina o manifesto das atualizações (só Authenticode, opcional, via SignPath); o dono assina e publica com um signer fixado | `.github/workflows/release.yml`, `.signpath/`, `.github/CODEOWNERS`, `tools/install-signer.ps1`, `tools/release-sign.ps1` | `ReleaseScriptTests`, `ReleaseWorkflowSigningTests`, `ReleaseGateTests` | Aplicado |
 | INV-EXEC-1 | Executável em pasta gravável: pasta nova, nome aleatório, verificado pelo handle antes de lançar | `Infrastructure/Update/InstallerExecutor`, `UpdateCleanupService` | `UpdaterTempDirTests`, `UpdaterInstallBehaviorTests`, `InstallerExecutorTests` | Aplicado |
 | INV-IMPORT-1 | Layout importado: allowlist de nomes, tipos, caminhos locais, nome de rack seguro | `UseCases/Layout/LayoutValidator` + `LayoutSecurityPolicy` (allowlist de `RackSettingsSchema`) | `RackLayoutImportValidationTests`, `LayoutValidatorTests` | Aplicado |
 | INV-IMPORT-2 | Replace destrutivo é atómico: snapshot, escrita, verificação, rollback conferido, ficheiro de recuperação | `UseCases/Layout/LayoutImportExecutor`, `LayoutRecovery`, `Infrastructure/Layout/RecoveryFolder` | `LayoutImportExecutorTests`, `LayoutReviewFixTests`, `LayoutRegistryImportTests` | Aplicado (R-26) |
@@ -278,8 +278,16 @@ máquina de um só utilizador; são robustez / cumprir a promessa "nada se perde
   mantido aberto até ao arranque do instalador (*teste: `UpdaterTempDirTests`,
   `UpdaterInstallBehaviorTests`*). A limpeza (`UpdateCleanupService`) só apaga pastas com o nome exato,
   sem reparse points, com mais de 10 minutos e sem ficheiro aberto.
-- **INV-RELEASE-1** O CI nunca assina nem publica: só cria um release em rascunho. Actions fixadas
-  por SHA completo, permissões por job (`build` lê, só `draft` escreve), `persist-credentials:
+- **INV-RELEASE-1** O CI nunca publica e nunca assina o manifesto das atualizações: só cria um
+  release em rascunho. Pode, se o interruptor `SIGNPATH_ENABLED` estiver ligado, obter uma assinatura
+  Authenticode (certificado da SignPath Foundation, aprovação manual do dono em cada pedido, só
+  tags `vX.Y.Z`, runners do GitHub) para `Racks.exe` e para o instalador, antes do zip e do
+  `SHA256SUMS.txt`; uma verificação `Get-AuthenticodeSignature` (estado `Valid`, emissor SignPath
+  Foundation) falha o build se faltar. O updater não verifica Authenticode: a âncora de confiança das
+  atualizações continua a ser o manifesto assinado com a chave que só existe na máquina do dono, e
+  assinar o manifesto e publicar continuam só aí. Actions fixadas
+  por SHA completo (a da SignPath incluída), permissões por job (`build` lê, incluindo `actions:
+  read` para a SignPath, só `draft` escreve), `persist-credentials:
   false`, dados do evento só via `env`, ferramentas de build (Inno Setup) com versão e SHA-256
   fixos. Assinar e publicar é feito pelo dono com `tools/release-sign.ps1`. *(revisão:
   `docs/RELEASING.md`)* A máquina com a chave nunca compila nem corre código de uma working tree:
@@ -504,7 +512,7 @@ hardening ou são o custo de uma escolha documentada. A coluna "Origem" diz onde
 | R-16 | **O drag-out do Desktop confia em `CopyLooksComplete`** (`RackWindow.DragDrop`, método privado, tamanho/contagem) e não tem teste direto. | Baixa | Extrair para uma classe própria e testá-la como o `RackFolderRemoval`. | INV-DATALOSS-1 |
 | R-17 | **Reciclagem desligada ou pequena.** Num disco fixo com a Reciclagem desligada, ou pequena demais para o item, o Windows apaga definitivamente e o resultado é `Succeeded`; não se sabe de antemão. Por isso só se recicla depois de a cópia estar confirmada. | Baixa (aceite) | Nenhuma além de manter a ordem "confirmar a cópia, depois reciclar". | INV-FS-1 |
 | R-18 | **Redirects do download.** O URL do asset do GitHub responde com 302 para outro host; a allowlist vale para o URL da API, e o host final só é coberto pela assinatura + tamanho + SHA-256. Decisão consciente: impor o host final partiria transferências legítimas. | Info (aceite) | Nenhuma. | INV-UPDATE-1 |
-| R-19 | **O instalador não tem assinatura Authenticode e o updater não verifica editor.** O Windows SmartScreen avisa na primeira execução. A proveniência vem só do manifesto assinado (ECDSA P-256) com a chave do dono. | Média | Quando houver certificado (ver "Code-signing"): assinar o instalador e acrescentar uma verificação Authenticode + editor no updater, como segunda camada. Não é preciso para a segurança atual. | INV-UPDATE-1 |
+| R-19 | **Até à primeira release assinada pela SignPath, o instalador não tem assinatura Authenticode; e o updater nunca verifica editor.** O Windows SmartScreen avisa na primeira execução. A proveniência vem só do manifesto assinado (ECDSA P-256) com a chave do dono. | Média | O passo de assinatura já está no CI, desligado (ver "Code-signing" e R-30); falta a aprovação da SignPath. Uma verificação Authenticode + editor no updater seria uma segunda camada e não é preciso para a segurança atual. | INV-UPDATE-1 |
 | R-20 | **Resíduos do updater.** Instalações ≤ 1.4.0 têm o updater antigo (sem assinaturas) até atualizarem; a chave privada no Credential Manager é legível por qualquer processo do mesmo utilizador na máquina que assina; a assinatura só vale o que vale a revisão do dono (assinar sem rever um commit malicioso produz um instalador assinado). | Média (aceite) | O processo de `docs/RELEASING.md` (tag assinada, signer fixado, confirmação depois da lista de alterações); manter a máquina de assinatura limpa. | H1; QA 2026-10 F2/F3 |
 | R-21 | **Testes que ainda leem texto de código-fonte** (scanners, não testes de comportamento): `SafeSvgTests` (contra `SvgDocument.Open/FromSvg`), `SafeWpfValuesTests` (contra `new FontFamily(`), `UninstallCleanupTests.Nothing_outside_SafeMove_deletes_folders_recursively`, os quatro guards e `ReleaseScriptTests` (docs/scripts). São guardas de bordo, não substituem comportamento; contornam-se com um nome diferente. | Baixa | Manter só como guardas; qualquer regra nova nasce como teste de comportamento. | CONTRIBUTING |
 | R-22 | **O que fica fora do broker e dos guards:** Win32/COM (`HardlinkHelper`, `JunctionHelper`/`mklink`, `ShellLinkHelper`, `SHFileOperation` em `SafeDelete`), os verbos do menu de shell corridos pelo Explorer, o drag-out com Move (o Explorer, como alvo do drop, move ou apaga o ficheiro por si: `RackWindow.DragDrop.cs`, `RackWindow.Items.cs`), o `reg.exe` do "exportar definições" (`SettingsWindow.xaml.cs`, `/y` sobrescreve o ficheiro escolhido), `Process.Start`, e o código de `tools/`. Foram revistos à mão; um novo de qualquer destes tipos tem de ser revisto à mão. | Média (processo) | Revisão obrigatória de qualquer `[DllImport]`, COM ou `Process` novo; ver CONTRIBUTING. | Cabeçalhos dos guards |
@@ -515,6 +523,7 @@ hardening ou são o custo de uma escolha documentada. A coluna "Origem" diz onde
 | R-27 | **Dívida de arquitetura, não de segurança:** `MainWindow._controller` continua um `static` público (20 usos; `InstanceController.RefreshMirror` é o único fora da apresentação) e `RackWindow*` (cerca de 5900 linhas em partials) ainda é grande. As catraias impedem que cresçam. | Info | Passar dependências por construtor, rack a rack, descendo `controllerUsages`. | `ArchitectureRatchetTests` |
 | R-28 | **Verificação manual pendente.** Nas fases P5 a P12 ninguém correu a app real, `test/Test-Racks.ps1` nem `tools/dev-tools.ps1 e2e` (matam o Racks em execução e mexem no Desktop real); o arranque, o tray, os hotkeys, o hook do rato, as caixas de diálogo e o instalador só estão cobertos pela lógica por trás deles. | Média (processo) | A lista de verificação manual do dono em `docs/HARDENING-ROADMAP.md`, antes de fundir a cadeia de PRs. | Roadmap |
 | R-29 | **Duas exceções ao acesso tipado ao registo:** `InstanceController.MigrateLegacyRegistry` (`Core/InstanceController.cs`) faz uma cópia em bruto da árvore da chave legada `DeskFrame`, e `Core/DefaultStyleReset.Run(RegistryKey)` só é chamado a partir do `RackSettingsRepository`. Nenhum é apresentação, por isso os guards não os veem. | Baixa | Mover a migração legada para `Infrastructure/Registry` (atrás de `IRackRegistry`), com teste sobre o registo descartável. | INV-REG-1 |
+| R-30 | **Assinatura Authenticode na CI (SignPath).** O token de API da SignPath é um secret do GitHub que o `release.yml` lê (só nos passos da SignPath, ligados por `SIGNPATH_ENABLED`); quem consiga alterar o workflow numa tag ou roubar o token pode submeter pedidos à SignPath, mas cada pedido precisa da aprovação manual do dono na SignPath (o que ele aprova é o commit e a tag que a SignPath mostra) e a SignPath só aceita builds de runners do GitHub deste repositório. A assinatura é do Windows: não substitui o manifesto das atualizações, que continua só na máquina do dono. A ação da SignPath é código de terceiros com acesso ao token: fixada por SHA. O que a SignPath aceita como tag (`refs/tags/v*`) e o nome exato do emissor ainda não foram confirmados (`docs/RELEASING.md`). | Média (aceite) | Aprovar um pedido só depois de conferir repositório, tag e commit; revisão de qualquer alteração a `.signpath/` e `.github/workflows/` (CODEOWNERS; só um ruleset a torna obrigatória); rodar o token se for exposto. | INV-RELEASE-1; `ReleaseWorkflowSigningTests` |
 
 ## Achados
 
@@ -577,20 +586,22 @@ delete-protection num menu de shell real), que exige conduzir a app à mão.
    `Util/UpdateTrust.cs`; a chave privada está só no Credential Manager do dono. Em cima disso confere versão,
    URL, tamanho e SHA-256 (INV-UPDATE-1). É isto que garante a proveniência e a integridade do instalador, e
    falha sempre fechada. Está fechado e testado.
-2. **O que o código NÃO faz (Authenticode do instalador).** O instalador `Racks-Setup-<v>.exe` não está
-   assinado com um certificado de editor, e nada no updater (nem no instalador) chama `WinVerifyTrust`,
-   `Get-AuthenticodeSignature` ou compara um editor: a única verificação Authenticode do repositório é a do
-   Inno Setup no CI (`release.yml`, editor "Pyrsys B.V."). Consequência: o SmartScreen avisa na primeira
-   execução ("Windows protected your PC") e o utilizador que descarrega o instalador à mão só tem o
-   `SHA256SUMS.txt` para conferir. Está registado como R-19.
+2. **O que o código NÃO faz (Authenticode no updater).** Até à primeira release assinada pela SignPath, o
+   instalador `Racks-Setup-<v>.exe` não está assinado com um certificado de editor. Nada no updater (nem no
+   instalador) chama `WinVerifyTrust`, `Get-AuthenticodeSignature` ou compara um editor; as verificações
+   Authenticode do repositório são as do CI (`release.yml`): Inno Setup (editor "Pyrsys B.V.") e, com o
+   interruptor da SignPath ligado, `Racks.exe` e o instalador (editor "SignPath Foundation"). Consequência
+   enquanto não houver release assinada: o SmartScreen avisa na primeira execução ("Windows protected your PC")
+   e o utilizador que descarrega o instalador à mão só tem o `SHA256SUMS.txt` para conferir. Está registado
+   como R-19. A 1.5.0 fica retida até a SignPath aprovar (decisão do dono, `docs/RELEASING.md`).
 
-Authenticode seria uma segunda camada (sobretudo SmartScreen), não uma correção; INV-UPDATE-1 está fechada sem ela.
-Opções concretas, **nenhuma decidida**:
-- **SignPath Foundation** (recomendado): OV **grátis** para projetos open-source. O Racks
-  qualifica (MIT, repo público, já tem releases). Assinatura via CI (GitHub Actions), chave num
-  HSM deles. Aplicar em signpath.org. Quando estiver ativo: adicionar o passo de assinatura no CI
-  + uma verificação Authenticode+publisher adicional no updater (que teria de entrar no `UpdateVerifier`,
-  e por isso em `tools/RacksSigner`, que partilha esse código).
+Authenticode é uma segunda camada (sobretudo SmartScreen), não uma correção; INV-UPDATE-1 está fechada sem ela.
+Decidido (2026-10-27): **SignPath Foundation**, OV **grátis** para projetos open-source (o Racks qualifica: MIT,
+repo público). Assinatura via CI (GitHub Actions), chave num HSM deles, cada pedido aprovado à mão pelo dono. O
+passo de assinatura já está no CI, desligado por defeito (`SIGNPATH_ENABLED`); falta a candidatura em
+signpath.org e a configuração (`docs/RELEASING.md`, `docs/CODE-SIGNING-POLICY.md`). O updater continua sem
+verificar Authenticode: se um dia o fizer, a verificação de editor terá de entrar no `UpdateVerifier`, e por isso
+em `tools/RacksSigner`, que partilha esse código. Outra opção, não escolhida:
 - **Azure Artifact Signing** (ex-Trusted Signing): ~10 USD/mês, mas para **indivíduos** só EUA/Canadá;
   na UE só organizações. Um solo dev em PT precisaria de registar empresa. Menos indicado.
 

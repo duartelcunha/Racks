@@ -1,0 +1,5 @@
+# Whatever decides what gets signed and released is reviewed by the owner.
+# SignPath asks for this on .signpath/ and the workflows (docs/CODE-SIGNING-POLICY.md).
+/.signpath/ @duartelcunha
+/.github/workflows/ @duartelcunha
+/.github/CODEOWNERS @duartelcunha

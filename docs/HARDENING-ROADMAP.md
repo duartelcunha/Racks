@@ -26,6 +26,20 @@ the repository. Sections: [Where we are](#where-we-are), [The plan in one page](
   (trailing spaces in `RackWindow.DragDrop.cs`), fixed in P0.
 - **End of P13:** `dotnet test Racks.sln -c Release` = **1874 tests, 0 failed; the skipped count varies by machine (1 to 14: symlink rights, second drive, short names, SendTo, ReleaseGate)**; build 0 warnings.
 
+## Next: SignPath (Authenticode) and the 1.5.0 hold
+
+- **Decision (owner, 2026-10-27):** 1.5.0 is **held** until the SignPath Foundation approves Racks and signs it, so it is the
+  first release with an Authenticode signature. **Do not create the tag `v1.5.0` before that.**
+- **Code (branch `chore/signpath-signing`):** `release.yml` can get `Racks.exe` and the installer signed by SignPath
+  before zipping and checksumming, only when the repository variable `SIGNPATH_ENABLED` is `true` (off by default, so the
+  workflow is unchanged until then); `.signpath/` has the reviewed policy and artifact-configuration copies;
+  `docs/CODE-SIGNING-POLICY.md` is the policy page the Foundation asks for; guard test `ReleaseWorkflowSigningTests`.
+- **Owner steps, in order:** apply at signpath.org; create the project, policy and artifact configurations; add the
+  secret and variables; set `SIGNPATH_ENABLED=true`; tag; approve the two signing requests; run `release-sign.ps1`. Details
+  and the list of things not yet confirmed against the SignPath documentation: `docs/RELEASING.md`, section
+  "Authenticode signing (SignPath)".
+- The update signature (manifest, owner's machine) is unchanged and remains what the updater trusts.
+
 ## The plan in one page
 
 (The original plan lived outside the repository; this is everything of it that still matters.)

@@ -1,10 +1,15 @@
 name: release
 
 # Push a tag like v1.2.0 to build the installer and upload it to a DRAFT GitHub release.
-# CI never signs and never publishes: the owner checks the draft against this run, signs it with
-# the key that only exists on their machine, and publishes it (tools/release-sign.ps1,
+# CI never signs updates and never publishes: the owner checks the draft against this run, signs it
+# with the key that only exists on their machine, and publishes it (tools/release-sign.ps1,
 # docs/RELEASING.md). The updater ignores any release without that signature.
 # The tag must match <Version> in Racks/Racks.csproj.
+#
+# Optional Authenticode signing (off unless the repository variable SIGNPATH_ENABLED is 'true'):
+# Racks.exe and the installer are signed by SignPath Foundation, each request approved by hand
+# in SignPath, before they are zipped and checksummed (docs/CODE-SIGNING-POLICY.md, docs/RELEASING.md).
+# This signs the files for Windows only; the update signature above is still the owner's.
 #
 # Hardening: third-party code is pinned by full commit SHA (Dependabot keeps the pins fresh),
 # no job gets more permission than it needs, the checkout does not keep the token, and nothing
@@ -25,6 +30,9 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: read
+      # Read-only. Only the SignPath steps use it: the action downloads the unsigned artifact with the
+      # job token and the docs ask for actions: read + contents: read.
+      actions: read
     outputs:
       version: ${{ steps.ver.outputs.version }}
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
@@ -107,10 +115,128 @@ jobs:
           "iscc=$iscc" >> $env:GITHUB_OUTPUT
 
       - name: Build installer
+        if: ${{ vars.SIGNPATH_ENABLED != 'true' }}
         shell: pwsh
         env:
           ISCC: ${{ steps.inno.outputs.iscc }}
         run: ./build-installer.ps1 -IsccPath $env:ISCC
+
+      # ---- Authenticode signing through SignPath Foundation (only with SIGNPATH_ENABLED == 'true') ----
+      # Replaces the "Build installer" step above: publish, sign Racks.exe, build the installer from the
+      # signed exe, sign the installer, verify both. Every step below is skipped when the switch is off.
+      # A signing request waits for the owner to approve it in SignPath (up to 2 hours each).
+
+      - name: Publish the app (for signing)
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./publish.ps1 -SelfContained
+          if (-not (Test-Path publish/Racks.exe)) { throw "publish/Racks.exe was not produced" }
+
+      - name: Upload unsigned Racks.exe
+        id: unsigned-exe
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: unsigned-racks-exe-${{ steps.ver.outputs.version }}
+          path: publish/Racks.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign Racks.exe (SignPath, manual approval)
+        id: sign-exe
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_EXE_ARTIFACT_CONFIG_SLUG }}
+          github-artifact-id: ${{ steps.unsigned-exe.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: signed/exe
+
+      - name: Put the signed Racks.exe in publish/
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $signed = 'signed/exe/Racks.exe'
+          if (-not (Test-Path $signed)) { throw "SignPath returned no Racks.exe in signed/exe" }
+          Copy-Item $signed publish/Racks.exe -Force
+
+      - name: Build installer from the signed app
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        shell: pwsh
+        env:
+          ISCC: ${{ steps.inno.outputs.iscc }}
+        run: ./build-installer.ps1 -IsccPath $env:ISCC -SkipPublish
+
+      - name: Stage the installer for signing
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force signing-input | Out-Null
+          Copy-Item "installer/Output/Racks-Setup-$env:VERSION.exe" signing-input/Racks-Setup.exe -Force
+
+      - name: Upload unsigned installer
+        id: unsigned-setup
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: unsigned-racks-setup-${{ steps.ver.outputs.version }}
+          path: signing-input/Racks-Setup.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign the installer (SignPath, manual approval)
+        id: sign-setup
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_SETUP_ARTIFACT_CONFIG_SLUG }}
+          github-artifact-id: ${{ steps.unsigned-setup.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: signed/setup
+
+      - name: Put the signed installer in installer/Output
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $signed = 'signed/setup/Racks-Setup.exe'
+          if (-not (Test-Path $signed)) { throw "SignPath returned no Racks-Setup.exe in signed/setup" }
+          Copy-Item $signed "installer/Output/Racks-Setup-$env:VERSION.exe" -Force
+
+      - name: Verify the Authenticode signatures (SignPath Foundation)
+        if: ${{ vars.SIGNPATH_ENABLED == 'true' }}
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          # Nothing unsigned or signed by someone else gets past this point: the zip, SHA256SUMS.txt and
+          # the draft are built after it from these two files.
+          $ErrorActionPreference = 'Stop'
+          foreach ($file in @('publish/Racks.exe', "installer/Output/Racks-Setup-$env:VERSION.exe")) {
+            $sig = Get-AuthenticodeSignature -LiteralPath $file
+            if ($sig.Status -ne 'Valid' -or $null -eq $sig.SignerCertificate -or $sig.SignerCertificate.Subject -notmatch 'SignPath Foundation') {
+              throw "$file is not validly signed by SignPath Foundation: $($sig.Status) / $($sig.SignerCertificate.Subject)"
+            }
+            Write-Host "$file : $($sig.Status), $($sig.SignerCertificate.Subject)"
+          }
 
       - name: Package portable zip and checksums
         id: package

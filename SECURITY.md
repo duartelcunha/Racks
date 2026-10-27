@@ -40,6 +40,7 @@ variable, tools/); `docs/SECURITY-INVARIANTS.md` lists what each one sees and mi
 
 ## A note on code signing
 
-The Racks installer is not Authenticode code-signed (Racks does not check an Authenticode signature either), so Windows SmartScreen
-may warn on first run. What protects updates is the separate update signature above: it covers the version, the file name, the size and
-the SHA-256 of the installer. The source is public and can be built from scratch.
+The Racks installer is not yet Authenticode code-signed (Racks does not check an Authenticode signature either), so Windows SmartScreen
+may warn on first run. We are setting up free signing from SignPath Foundation; see the [code signing policy](docs/CODE-SIGNING-POLICY.md).
+What protects updates is the separate update signature above, and it stays that way after Authenticode arrives: it covers the version,
+the file name, the size and the SHA-256 of the installer. The source is public and can be built from scratch.

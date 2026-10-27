@@ -1,0 +1,21 @@
+# SignPath pipeline policy for the Racks release signing policy ("release-signing" in project "racks").
+# Reviewed copy kept in the repository: the owner pastes or links it in SignPath (docs/RELEASING.md,
+# section "Authenticode signing (SignPath)"). Changes here need the owner's review (.github/CODEOWNERS).
+#
+# What this restricts: the signed build must come from a workflow whose jobs all ran on GitHub-hosted
+# runners (SignPath's requirement for open source projects).
+#
+# Ref restriction: Racks signs only release tags v*, and .github/workflows/release.yml is triggered only by
+# a push of a tag v* (a guard test checks that). The SignPath signing policy must also allow only
+# refs/tags/v* ("Allowed branch names"); that setting lives in SignPath, not in this file.
+#
+# TODO(owner): the current SignPath docs spell the runner key two ways (`require_github_hosted` in the
+# example, `required_github_hosted` in the table of docs.signpath.io/trusted-build-systems/github).
+# This file uses the spelling of the example. Check which one SignPath accepts when you create the
+# pipeline policy, and fix this copy (and the guard test) if it differs.
+github-build-policies:
+  version: '1.0'
+  # A re-run of a tag build is the same commit, so it is allowed (an approval can time out; see RELEASING.md).
+  disallow_reruns: false
+  runners:
+    require_github_hosted: true

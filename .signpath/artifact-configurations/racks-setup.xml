@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "racks-setup": the GitHub artifact is a ZIP (actions/upload-artifact)
+  that holds only the Inno Setup installer, staged under the fixed name Racks-Setup.exe by
+  .github/workflows/release.yml (so no wildcard is needed). Reviewed copy; the owner pastes it into
+  SignPath (docs/RELEASING.md). Syntax: https://docs.signpath.io/artifact-configuration/syntax
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="Racks-Setup.exe">
+      <authenticode-sign/>
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
