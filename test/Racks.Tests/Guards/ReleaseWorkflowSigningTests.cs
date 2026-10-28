@@ -171,14 +171,14 @@ public class ReleaseWorkflowSigningTests
     }
 
     [Fact]
-    public void The_workflow_only_runs_for_release_tags_and_the_policy_files_say_what_gets_signed()
+    public void The_workflow_only_runs_by_hand_and_the_policy_files_say_what_gets_signed()
     {
         string w = Workflow();
         string on = w.Substring(w.IndexOf("on:", StringComparison.Ordinal), w.IndexOf("permissions:", StringComparison.Ordinal) - w.IndexOf("on:", StringComparison.Ordinal));
-        Assert.Contains("tags: [ 'v*' ]", on);
+        Assert.Contains("workflow_dispatch", on);
+        Assert.DoesNotContain("push", on);
         Assert.DoesNotContain("branches", on);
         Assert.DoesNotContain("pull_request", on);
-        Assert.DoesNotContain("workflow_dispatch", on);
         Assert.DoesNotContain("schedule", on);
 
         string policy = Read(".signpath", "policies", "racks", "release-signing.yml");

@@ -44,7 +44,7 @@ public sealed class CleanupReport
 /// <summary>
 /// Runs when Racks is uninstalled. Gives the user's files back instead of deleting them.
 ///
-/// Safety rules (see docs/SECURITY-INVARIANTS.md, INV-UNINSTALL-1):
+/// Safety rules (INV-UNINSTALL-1):
 /// 1. Nothing that holds data which exists nowhere else is ever deleted. Only links (junctions,
 ///    symlinks, an extra name of a multi-linked file), empty folders and Racks' own files go.
 /// 2. Nothing on the Desktop is overwritten. Name clashes get " (from Racks)", " (from Racks 2)"...

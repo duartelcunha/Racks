@@ -160,7 +160,7 @@ foreach ($signed in @($manifestName, $sigName)) {
 
 $runs = Invoke-Gh run list --repo $Repo --workflow release.yml --limit 100 --json 'databaseId,headSha,headBranch,event,status,conclusion,url' | ConvertFrom-Json
 $run = @($runs | Where-Object {
-        $_.headSha -eq $localCommit -and $_.headBranch -eq $tag -and $_.event -eq 'push' -and
+        $_.headSha -eq $localCommit -and $_.headBranch -eq $tag -and $_.event -eq 'workflow_dispatch' -and
         $_.status -eq 'completed' -and $_.conclusion -eq 'success'
     }) | Select-Object -First 1
 if (-not $run) { throw "No successful release.yml run for $tag at $localCommit." }

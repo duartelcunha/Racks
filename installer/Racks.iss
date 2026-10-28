@@ -39,7 +39,7 @@ DefaultGroupName={#AppName}
 ; Per-user install — no admin prompt, no UAC. Matches VS Code / Slack model.
 ; Per-user ONLY: there is deliberately no PrivilegesRequiredOverridesAllowed. Admin ("all users")
 ; mode was never supported (HKCU registry, per-user paths) and made the uninstaller run binaries
-; from user-writable folders with admin rights (docs/SECURITY-INVARIANTS.md L2).
+; from user-writable folders with admin rights.
 PrivilegesRequired=lowest
 ; Suppress every page that asks the user a question.
 DisableWelcomePage=yes
@@ -104,7 +104,7 @@ Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExeName} /F"; Flags: runhid
 [UninstallDelete]
 ; %AppData%\Racks\VirtualFrames holds files users moved into racks. Never delete it wholesale:
 ; "Racks.exe --uninstall-cleanup" (see [Code]) returns those files to the Desktop first, and these
-; entries only remove what is left if it is empty. INV-UNINSTALL-1 in docs/SECURITY-INVARIANTS.md.
+; entries only remove what is left if it is empty. (INV-UNINSTALL-1)
 Type: files; Name: "{userappdata}\{#AppName}\crash.log*"
 ; audit.log (file operations, with file names) exists whenever the app has run, so without this the
 ; dirifempty line below for {userappdata}\Racks could never succeed. Removed like crash.log, after the cleanup above.

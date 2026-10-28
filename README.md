@@ -9,8 +9,6 @@
 <sub>Lives in your tray. Drop files into racks on your wallpaper instead of onto your desktop. No cloud, no account.</sub>
 
 <p>
-  <a href="https://github.com/duartelcunha/Racks/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/duartelcunha/Racks/build.yml?style=for-the-badge&label=Build" alt="Build" /></a>
-  &nbsp;
   <a href="https://github.com/duartelcunha/Racks/releases/latest"><img src="https://img.shields.io/github/v/release/duartelcunha/Racks?style=for-the-badge&label=Download&color=1AAE9F" alt="Download" /></a>
   &nbsp;
   <a href="https://github.com/duartelcunha/Racks/stargazers"><img src="https://img.shields.io/github/stars/duartelcunha/Racks?style=for-the-badge&color=f5a623" alt="Stars" /></a>
@@ -26,12 +24,12 @@
 
 <img src="docs/screenshots/hero.gif" alt="Files dragged from a folder into two racks, leaving a clean desktop" width="100%" />
 
-<sub>Two drags and the clutter is gone. 
+<sub>Two drags and the clutter is gone.</sub>
 
 <br />
 <br />
 
-<a href="https://github.com/duartelcunha/Racks/releases/latest"><b>⬇️ Download for Windows</b></a>
+<a href="https://github.com/duartelcunha/Racks/releases/latest"><b>Download for Windows</b></a>
 
 </div>
 
@@ -103,12 +101,12 @@ Colors, fonts, opacity, shadow, gradient or pure glass, per rack. Right-click �
 
 <br />
 
-- 🪄 **Magic Organizer.** Groups your desktop files into suggested racks, on your PC. Nothing moves until you confirm; undo right after.
-- 🤖 **Auto-routing.** A rack with a name pattern (regex) catches new matching files from the desktop.
-- 🔄 **Live refresh.** Racks follow changes made in Explorer.
-- 🖥️ **Multi-monitor.** Racks come back to the main screen when a monitor is unplugged.
-- ✈️ **Portable layouts.** Export and import your racks as one JSON file (files not included).
-- 🔍 **Open in File Explorer** from any item's right-click menu.
+- **Magic Organizer.** Groups your desktop files into suggested racks, on your PC. Nothing moves until you confirm; undo right after.
+- **Auto-routing.** A rack with a name pattern (regex) catches new matching files from the desktop.
+- **Live refresh.** Racks follow changes made in Explorer.
+- **Multi-monitor.** Racks come back to the main screen when a monitor is unplugged.
+- **Portable layouts.** Export and import your racks as one JSON file (files not included).
+- **Open in File Explorer** from any item's right-click menu.
 
 </details>
 
@@ -155,7 +153,7 @@ Colors, fonts, opacity, shadow, gradient or pure glass, per rack. Right-click �
 
 Get `Racks-Setup-<version>.exe` from the [latest release](https://github.com/duartelcunha/Racks/releases/latest). No admin rights needed. Right-click the tray icon to make your first rack.
 
-Code signing: see the [code signing policy](docs/CODE-SIGNING-POLICY.md). Free code signing provided by SignPath.io, certificate by SignPath Foundation (once the project is accepted; releases are not yet Authenticode-signed).
+Releases are not yet Authenticode-signed. Free code signing from the SignPath Foundation is in progress; see the [code signing policy](docs/CODE-SIGNING-POLICY.md).
 
 **Requirements:** 64-bit Windows 10 version 2004 (build 19041) or later, including Windows 11. The installer carries the .NET runtime, so there is nothing else to install. (The app is built for that minimum; the installer itself does not check the Windows version.)
 
@@ -169,23 +167,16 @@ Needs the **.NET 10 SDK** (and **Inno Setup 6** for the installer).
 dotnet run --project Racks/Racks.csproj   # run from source
 dotnet test Racks.sln -c Release          # the whole suite (real NTFS in temp folders, no real Desktop)
 dotnet format whitespace --verify-no-changes
-dotnet build Racks.sln -c Release         # 0 warnings expected
+dotnet build Racks.sln -c Release         # 0 warnings expected (checks run locally, see CONTRIBUTING.md)
 .\build-installer.ps1                   # -> installer\Output\Racks-Setup-<version>.exe
 ```
 
 The full list of checks to run before a pull request is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-Design notes: [`ABOUT.md`](ABOUT.md). How the code is laid out: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Security rules, what is enforced and what is still open: [`docs/SECURITY-INVARIANTS.md`](docs/SECURITY-INVARIANTS.md) and [`SECURITY.md`](SECURITY.md). Hardening history, merge order and how to resume: [`docs/HARDENING-ROADMAP.md`](docs/HARDENING-ROADMAP.md). Releasing: [`docs/RELEASING.md`](docs/RELEASING.md). README media: [`docs/media/studio`](docs/media/studio/README.md).
+More: [how the code is laid out](docs/ARCHITECTURE.md), [security policy](SECURITY.md), [releasing](docs/RELEASING.md), [changelog](CHANGELOG.md), and how the README media is made ([`docs/media/studio`](docs/media/studio/README.md)).
 
 <br />
 
 ## License
 
 MIT, see [`LICENSE.txt`](LICENSE.txt). Third-party notices: [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
-
-<div align="center">
-<br />
-
-If Racks tidies up your workflow, a ⭐ helps other people find it.
-
-</div>
