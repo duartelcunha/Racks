@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     The signing key lives on the owner's machine, so that machine must never build or run code
-    straight from a working tree that a stolen GitHub token could have changed. This script is the
+    straight from a working tree that a compromised GitHub account could have changed. This script is the
     only step that builds anything for signing, and it does so from one commit you trust:
 
       0. The running copy of this script must be tools/install-signer.ps1 at that commit.

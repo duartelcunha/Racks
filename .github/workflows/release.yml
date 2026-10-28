@@ -1,6 +1,7 @@
 name: release
 
-# Push a tag like v1.2.0 to build the installer and upload it to a DRAFT GitHub release.
+# Run by hand, choosing the tag (for example v1.2.0) as the ref, to build the installer and upload it
+# to a DRAFT GitHub release.
 # CI never signs updates and never publishes: the owner checks the draft against this run, signs it
 # with the key that only exists on their machine, and publishes it (tools/release-sign.ps1,
 # docs/RELEASING.md). The updater ignores any release without that signature.
@@ -11,12 +12,11 @@ name: release
 # in SignPath, before they are zipped and checksummed (docs/CODE-SIGNING-POLICY.md, docs/RELEASING.md).
 # This signs the files for Windows only; the update signature above is still the owner's.
 #
-# Hardening: third-party code is pinned by full commit SHA (Dependabot keeps the pins fresh),
+# Hardening: third-party code is pinned by full commit SHA (update the pins by hand and read the diff),
 # no job gets more permission than it needs, the checkout does not keep the token, and nothing
 # from the event (tag name) is pasted into a script: it goes through env.
 on:
-  push:
-    tags: [ 'v*' ]
+  workflow_dispatch:
 
 permissions: {}
 

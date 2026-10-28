@@ -5,9 +5,8 @@ always-on-desktop windows ("racks"), and moves, links and lists real files on th
 the network: it is **data loss and surprises in the filesystem, the shell and the registry**. The layout below
 exists to keep every dangerous operation in a few places that are reviewed and, where a test can see them, fenced.
 
-This file describes the code as it is at the end of the hardening plan (P13). The security rules are in
-[`SECURITY-INVARIANTS.md`](SECURITY-INVARIANTS.md); the history, the open work and how to resume are in
-[`HARDENING-ROADMAP.md`](HARDENING-ROADMAP.md).
+What the app guards against is summarized in [`SECURITY.md`](../SECURITY.md); the rules for changing this code are in
+[`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ## Layers
 
@@ -57,7 +56,7 @@ was not worth the churn; the guards (below) fence the ones that matter. Do not a
    under `HKCU\SOFTWARE\Racks`) go through `Infrastructure/Registry/AppSettings` and `MigrationMarkers`. Per-rack values and
    the 32 global style defaults go through `RackSettingsRepository`, driven by one table, `RackSettingsSchema`. A bad value
    is never applied: the documented default is used and the field, raw value, reason and fallback are written to
-   `audit.log`. One named exception touches the registry directly: `DefaultStyleReset.Run(RegistryKey)` (called only from `RackSettingsRepository`, risk R-29).
+   `audit.log`. One named exception touches the registry directly: `DefaultStyleReset.Run(RegistryKey)` (called only from `RackSettingsRepository`).
 3. **Presentation does not touch the registry, call shell notifications or reach the updater, and does not mutate files except through the broker** (the rack windows call `FileOperationBroker.Default`; `RackWindow.DragDrop.cs` also has 2 allowlisted `CreateDirectory` calls for Racks-owned sandbox folders). Shell change
    notifications, desktop-icon hiding/arranging and the workspace folder go through
    `Infrastructure/Shell/ShellOperationGateway.Default`. The shell context menu, window geometry/style Win32 calls,
@@ -78,12 +77,13 @@ All in `test/Racks.Tests/Guards/`. The three JSON files are copied to the test o
 |---|---|---|---|
 | `FileMutationGuardTests` + `fs-allowlist.json` | exact count of raw file mutations per file (more or fewer fails); `SafeMove.`/`SafeDelete.` only inside `Infrastructure/FileSystem/` | **11 files, 36 calls** (`DesktopIconManager` 7, `UninstallCleanup` 8, `JunctionHelper` 5, `CrashLog` 3, `LayoutFileWriter` 3, `RackWindow.DragDrop` 2, `RackMirror` 2, `RecoveryFolder` 2, `UpdateCleanupService` 2, `ShortcutFactory` 1, `InstallerExecutor` 1); Racks-owned state, the user-chosen export target (`LayoutFileWriter`) or a non-destructive copy | calls through a variable, Win32/COM, processes, shell verbs, reflection, `tools/` |
 | `PresentationBoundaryTests` | zero references in presentation files to `NotifyShell*`, `SHChangeNotify`, `DesktopIcons.`, `DesktopIconPositioner`, `DesktopIconManager`; `MainWindow.xaml.cs` has no file, registry, updater, hook, hotkey or cursor code and at most one `DispatcherTimer` | **0** (no baseline file) | new `[DllImport]`/COM in presentation, `Process.Start`, files outside the presentation list |
-| `RegistryAccessGuardTests` + `registry-presentation-allowlist.json` | exact count of registry references per presentation file | **0** (empty list since P6) | `reg.exe`/PowerShell processes, reflection, helpers outside presentation |
+| `RegistryAccessGuardTests` + `registry-presentation-allowlist.json` | exact count of registry references per presentation file | **0** (empty list) | `reg.exe`/PowerShell processes, reflection, helpers outside presentation |
 | `ArchitectureRatchetTests` + `baseline.json` | size ratchets | `rackWindowLines` **561**, `rackWindowPartMaxLines` **911**, `rackWindowTotalLines` **5925**, `mainWindowLines` **404** (one file), `mainWindowMethodMaxLines` **59**, `appLines` **38** (one file), `controllerUsages` **20**, `xamlLiterals` **119** | quality or coupling; only lines and counts |
 
 Other tests that are not size ratchets but fence the shape: `ReleaseScriptTests` (release scripts and the snippets of
 `docs/RELEASING.md`), `LocalizationTests` (every translation key exists in `Lang.resx`), `CollapsedHeightTests`,
-`QuickFinderStyleTests`. `SECURITY-INVARIANTS.md` has the full list of what each guard sees and misses.
+`QuickFinderStyleTests`. The guards are text scanners: they do not see Win32/COM calls, calls through a variable or `tools/`,
+so review those by hand.
 
 ## Startup sequence
 
@@ -110,8 +110,7 @@ and runs it with a recording host; `AppBootstrapServiceTests`). A step returning
 - **Order that is pinned by tests:** `ApplySafeSvg` and the regex timeout before anything can parse a file; the workspace
   folder before `StartupUri` (so before any `RackWindow` exists); uninstall modes end before any UI.
 - **Exit:** `AppBootstrapService.Exit()` brings back the desktop icons Racks hid, then releases the single-instance name.
-  Known gap: a startup failure after the name was taken leaves a windowless process that holds it (R-13 in
-  `SECURITY-INVARIANTS.md`).
+  Known gap: a startup failure after the name was taken leaves a windowless process that holds it.
 
 ## Where things live
 

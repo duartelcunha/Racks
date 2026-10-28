@@ -1,10 +1,7 @@
 name: build
 
+# Manual only: the checks run locally before every pull request (CONTRIBUTING.md).
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 permissions:
