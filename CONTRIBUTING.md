@@ -71,7 +71,7 @@ Strings live in `Racks/Properties/Lang.resx` (English) and one `Lang.<culture>.r
 2. Run `dotnet build`. `Racks/Properties/Lang.Designer.cs` is regenerated and `Lang.Area_Thing` now exists
    (dots become underscores).
 3. Use it from XAML as `{x:Static prop:Lang.Area_Thing}` or from C# as `Lang.Area_Thing`.
-4. Commit `Lang.resx` and `Lang.Designer.cs` together. CI fails if the Designer file is out of date.
+4. Commit `Lang.resx` and `Lang.Designer.cs` together. Run the local Designer diff check listed above; the manual build workflow also checks it when explicitly started.
 
 **Add a new language:** copy `Lang.resx` to `Lang.<culture>.resx` (for example `Lang.ja-JP.resx`),
 translate the values, keep the `name` attributes unchanged, and build. `dotnet test` checks that every
