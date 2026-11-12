@@ -41,7 +41,7 @@
     <!-- Shell folder/file pickers and shell objects (RackWindow.*.cs, dialogs). -->
     <PackageReference Include="Microsoft-WindowsAPICodePack-Shell" Version="1.1.5" />
     <!-- Local, offline file categorisation for Magic Organize (Core/AutoOrganizer.cs). Pulls Newtonsoft.Json transitively. -->
-    <PackageReference Include="Microsoft.ML" Version="5.0.1" />
+    <PackageReference Include="Microsoft.ML" Version="6.0.0" />
     <!-- Toast notifications and toast activation (Infrastructure/Startup, Infrastructure/Update/ToastUpdateNotifier.cs, Views/HotkeyConflictToast.cs). -->
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
     <!-- Virtual desktop queries and change events (Core/Instance.cs, RackWindow.*.cs, RackSettingsDialog). Pulls Microsoft.CodeAnalysis transitively. -->
